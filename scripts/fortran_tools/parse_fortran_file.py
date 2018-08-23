@@ -709,7 +709,7 @@ def parse_program(pobj, statements, logger=None):
         while len(statements) > 0:
             statement = statements.pop(0)
             # End program
-            pmatch = endprogram_re.match(statements)
+            pmatch = endprogram_re.match(statement)
             if pmatch is not None:
                 prog_name = pmatch.group(1)
                 pobj.leave_region('PROGRAM', region_name=prog_name)

@@ -315,7 +315,8 @@ class VariableProperty(object):
 ###############################################################################
 
 class Var(object):
-    """ A class to hold a metadata variable
+    """ A class to hold a metadata or code variable.
+    Var objects should be treated as immutable.
     >>> Var.get_prop('standard_name') #doctest: +ELLIPSIS
     <__main__.VariableProperty object at 0x...>
     >>> Var.get_prop('standard')
@@ -375,6 +376,11 @@ class Var(object):
                                      optional_in=True, default_in=False),
                     VariableProperty('allocatable', bool,
                                      optional_in=True, default_in=False),
+                    VariableProperty('vertical_coord', str, optional_in=True,
+                                     valid_values_in=['vertical_index',
+                                                      'vertical_level_dimension',
+                                                      'vertical_layer_dimension'],
+                                     default_in='vertical_index'),
                     VariableProperty('persistence', str, optional_in=True,
                                      valid_values_in=['timestep', 'run'],
                                      default_in='timestep')]
@@ -502,24 +508,37 @@ class Var(object):
         # End if
         if ((sstd_name == ostd_name) and kind_eq and
             (sunits == ounits) and (stype == otype) and (srank == orank)):
-            return True
-        elif logger is not None:
-            if sstd_name != ostd_name:
-                logger.info("standard_name: '{}' != '{}'".format(sstd_name, ostd_name))
-            elif not kind_eq:
-                logger.info("kind: '{}' != '{}'".format(skind, okind))
-            elif sunits != ounits:
-                logger.info("units: '{}' != '{}'".format(sunits, ounits))
-            elif stype != otype:
-                logger.info("type: '{}' != '{}'".format(stype, otype))
-            elif srank != orank:
-                logger.info("rank: '{}' != '{}'".format(srank, orank))
-            else:
-                logger.error('Why are these variables not compatible?')
-            # End if
-            return False
+            return True, None
         else:
-            return False
+            logger_str = None
+            error_str = None
+            if sstd_name != ostd_name:
+                logger_str = "standard_name: '{}' != '{}'".format(sstd_name, ostd_name)
+                reason = 'standard_name'
+            elif not kind_eq:
+                logger_str = "kind: '{}' != '{}'".format(skind, okind)
+                reason = 'kind'
+            elif sunits != ounits:
+                logger_str = "units: '{}' != '{}'".format(sunits, ounits)
+                reason = 'units'
+            elif stype != otype:
+                logger_str = "type: '{}' != '{}'".format(stype, otype)
+                reason = 'type'
+            elif srank != orank:
+                logger_str = "rank: '{}' != '{}'".format(srank, orank)
+                reason = 'rank'
+            else:
+                error_str = 'Why are these variables not compatible?'
+                reason = 'UNKNOWN'
+            # End if
+            if logger is not None:
+                if error_str is not None:
+                    logger.error('{}'.format(error_str))
+                elif logger_str is not None:
+                    logger.info('{}'.format(logger_str))
+                # End if (no else)
+            # End if
+            return False, reason
         # End if
 
     @classmethod
@@ -530,6 +549,34 @@ class Var(object):
             return Var.__spec_propdict[name]
         else:
             return None
+
+    def clone(self, name, source_name=None, source_type=None, context=None, internal=True):
+        """Create a clone of this Var object with local_name, <name>.
+        The optional <source_name>, <source_type>, and <context> inputs
+        allow the clone to appear to be coming from a designated source,
+        by default, the source and type are the same as this Var (self).
+        <internal> is an indication that the clone is generated and owned by
+        the CCPP framework, not by the host model or any scheme.
+        """
+        cprop_dict = {}
+        for prop in self._prop_dict.keys():
+            if prop == 'local_name':
+                cprop_dict[prop] = name
+            else:
+                cprop_dict[prop] = self._prop_dict[prop]
+            # End if
+        # End for
+        if source_name is None:
+            source_name = self.source.name
+        # End if
+        if source_type is None:
+            source_type = self.source.type
+        # End if
+        if context is None:
+            context = self._context
+        # End if
+        psource = ParseSource(source_name, source_type, context)
+        return Var(cprop_dict, psource, internal=internal)
 
     def get_prop_value(self, name):
         if name in self._prop_dict:
@@ -570,6 +617,27 @@ class Var(object):
         # End if
         return newdims
 
+    def get_dim_stdnames(self):
+        "Return a set of all the dimension standard names for this Var"
+        dimset = set()
+        for dim in self.get_dimensions():
+            for name in dim.split(':'):
+                # Weed out the integers
+                try:
+                    ival = int(name)
+                except ValueError as ve:
+                    # Not an integer, add it
+                    dimset.add(name)
+                # End try
+            # End for
+        # End for
+        return dimset
+
+    def get_rank(self):
+        "Return the variable's rank (zero for scalar)"
+        dims = self.get_dimensions(loop_subst=False)
+        return len(dims)
+
     def write_def(self, outfile, indent, dict, allocatable=False, loop_subst=False):
         '''Write the definition line for the variable.'''
         vtype = self.get_prop_value('type')
@@ -592,7 +660,7 @@ class Var(object):
                         if None in dvars:
                             for dim in dstdnames:
                                 if dict.find_variable(dim) is None:
-                                    raise CCPPError("No variable found for '{}'".format(dim))
+                                    raise CCPPError("No variable found for dimension '{}' in {}".format(dim, name))
                                 # End if
                             # End for
                         # End if
@@ -686,24 +754,6 @@ class Var(object):
         # End if
         return hstr + dimstr
 
-    def print_debug(self):
-        '''Print the data retrieval line for the variable.'''
-        str='''Contents of {local_name} (* = mandatory for compatibility):
-        standard_name = {standard_name} *
-        long_name     = {long_name}
-        units         = {units} *
-        local_name    = {local_name}
-        type          = {type} *
-        dimensions    = {dimensions} *
-        kind          = {kind} *
-        intent        = {intent}
-        optional      = {optional}
-        '''
-        if self._context is not None:
-            str = str + '\n        context       = {}'.format(self._context)
-        # End if
-        return str.format(**self._prop_dict)
-
     def __str__(self):
         '''Print representation or string for Var objects'''
         return "<Var {standard_name}: {local_name}>".format(**self._prop_dict)
@@ -749,6 +799,40 @@ class VarSpec(object):
             rdims = Var.loop_subst_dims(dims)
         else:
             rdims = dims
+        # End if
+        return rdims
+
+    def __repr__(self):
+        if self._dims is not None:
+            return "{}({})".format(self._name, ', '.join(self._dims))
+        else:
+            return self._name
+        # End if
+
+###############################################################################
+
+class VarSpec(object):
+    """A class to hold a standard_name description of a variable.
+    A scalar variable is just a standard name while an array also
+    contains a comma-separated list of dimension standard names in parentheses.
+    """
+
+    def __init__(self, var, loop_subst=False):
+        self._name = var.get_prop_value('standard_name')
+        self._dims = var.get_dimensions(loop_subst=loop_subst)
+        if len(self._dims) == 0:
+            self._dims = None
+        # End if
+
+    @property
+    def name(self):
+        return self._name
+
+    def get_dimensions(self, loop_subst=False):
+        if loop_subst:
+            rdims = Var.loop_subst_dims(self._dims)
+        else:
+            rdims = self._dims
         # End if
         return rdims
 
@@ -820,14 +904,130 @@ class VarDDT(Var):
         '''
         pass
 
-    def print_debug(self):
-        for var in self._var_ref_list:
-            var.print(debug)
-        # End for
-
     def __repr__(self):
         '''Print representation or string for VarDDT objects'''
         return "<{}>".format('%'.join([x.__repr__() for x in self._var_ref_list]))
+
+###############################################################################
+
+__ccpp_registry_parse_source__ = ParseSource('VarDictionary', 'REGISTRY',
+                                             ParseContext())
+
+# Dictionary of standard CCPP variables
+CCPP_STANDARD_VARS = {
+    # Variable representing the constant integer, 1
+    'ccpp_constant_one' :
+    Var({'local_name' : 'ccpp_one', 'constant' : 'True',
+         'standard_name' : 'ccpp_constant_one',
+         'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
+        __ccpp_registry_parse_source__),
+    'ccpp_error_flag' :
+    Var({'local_name' : 'errflg', 'standard_name' : 'ccpp_error_flag',
+         'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
+        __ccpp_registry_parse_source__),
+    'ccpp_error_message' :
+    Var({'local_name' : 'errmsg', 'standard_name' : 'ccpp_error_message',
+         'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
+        __ccpp_registry_parse_source__),
+    'horizontal_loop_extent' :
+    Var({'local_name' : 'horz_loop_ext',
+         'standard_name' : 'horizontal_loop_extent', 'units' : '1',
+         'dimensions' : '()', 'type' : 'integer'},
+        __ccpp_registry_parse_source__),
+    'horizontal_loop_begin' :
+    Var({'local_name' : 'horz_col_beg',
+         'standard_name' : 'horizontal_loop_begin', 'units' : '1',
+         'dimensions' : '()', 'type' : 'integer'},
+        __ccpp_registry_parse_source__),
+    'horizontal_loop_end' :
+    Var({'local_name' : 'horz_col_end',
+         'standard_name' : 'horizontal_loop_end', 'units' : '1',
+         'dimensions' : '()', 'type' : 'integer'},
+        __ccpp_registry_parse_source__)
+}
+
+# List of constant variables which are universally available
+CCPP_CONSTANT_VARS = {'ccpp_constant_one' :
+                      CCPP_STANDARD_VARS['ccpp_constant_one']}
+
+###############################################################################
+
+class VarLoopSubst(object):
+    """A class to handle required loop substitutions where the host model
+    (or a suite part) does not provide a loop-like variable used by a
+    suite part or scheme"""
+
+    def __init__(self, missing_stdname, required_stdnames, set_action):
+        self._missing_stdname = missing_stdname
+        if isinstance(required_stdnames, Var):
+            self._required_stdnames = (required_stdnames,)
+        else:
+            # Make sure required_stdnames is iterable
+            try:
+                _ = (v for v in required_stdnames)
+                self._required_stdnames = required_stdnames
+            except TypeError as te:
+                raise ParseInternalError("required_stdnames must be a tuple or a list")
+            # End try
+        # End if
+        self._set_action = set_action
+
+    def find_subst(self, dict, any_scope=False):
+        """Attempt to find or create a Var for <_missing_stdname> and add it
+        to <dict>.
+        If any_scope is True, consult parent dictionaries.
+        Also, verify that the required variable(s) is(are) in <dict>
+        If successful, return Var, otherwise, throw a CCPPError.
+        """
+        # A template for 'missing' should be in the standard variable list
+        if self._missing_stdname in CCPP_STANDARD_VARS:
+            var = CCPP_STANDARD_VARS[self._missing_stdname]
+            dict.add_variable(var, gen_unique=True)
+        else:
+            var = None
+        # End if
+        if var is None:
+            raise CCPPError('Unable to find or create missing loop variable, {}'.format(self._missing_stdname))
+        # End if
+        for stdname in self._required_stdnames:
+            if dict.find_variable(stdname, any_scope=any_scope) is None:
+                raise CCPPError("{} is required to set value for {} but is not in dictionary".format(stdname, self._missing_stdname))
+            # End if
+        # End for
+        return var
+
+    def write_action(self, dict, any_scope=False):
+        """Return a string setting the correct values for our
+        replacement variable"""
+        action_dict = {}
+        for stdname in self._required_stdnames:
+            var = dict.find_variable(stdname, any_scope=any_scope)
+            if var is None:
+                raise CCPPError("Required variable, {}, not found".format(stdname))
+            # End if
+            action_dict[stdname] = var.get_prop_value('local_name')
+        # End for
+        var = dict.find_variable(self._missing_stdname)
+        if var is None:
+            raise CCPPError("Required variable, {}, not found".format(self._missing_stdname))
+        # End if
+        action_dict[self._missing_stdname] = var.get_prop_value('local_name')
+        return self._set_action.format(**action_dict)
+
+CCPP_VAR_LOOP_SUBSTS = { 'horizontal_loop_extent' :
+                         VarLoopSubst('horizontal_loop_extent',
+                                      ('horizontal_loop_begin',
+                                       'horizontal_loop_end'),
+                                      '{horizontal_loop_extent} = {horizontal_loop_end} - {horizontal_loop_begin} + 1'),
+                         'horizontal_loop_begin' :
+                         VarLoopSubst('horizontal_loop_begin',
+                                      ('ccpp_constant_one',),
+                                      '{horizontal_loop_begin} = 1'),
+                         'horizontal_loop_end' :
+                         VarLoopSubst('horizontal_loop_end',
+                                      ('horizontal_loop_extent',),
+                                      '{horizontal_loop_end} = {horizontal_loop_extent}')
+}
 
 ###############################################################################
 
@@ -853,6 +1053,10 @@ class VarDictionary(OrderedDict):
 
     >>> VarDictionary('who', variables=[Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()))]).prop_list('local_name')
     ['foo']
+    >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()))]).new_internal_variable_name()
+    'who_var2'
+    >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()))]).new_internal_variable_name('bar')
+    'bar_who_var1'
     >>> VarDictionary('glitch', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()))).add_variable(Var({'local_name' : 'bar', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname2', 'DDT', ParseContext()))) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid Duplicate standard name, 'hi_mom', at <standard input>:
@@ -861,19 +1065,9 @@ class VarDictionary(OrderedDict):
     # Loop variables
     __ccpp_loop_vars__ = ['horizontal_loop_begin', 'horizontal_loop_end',
                           'thread_block_number', 'horizontal_loop_extent']
-    # Loop substitutions
-    __ccpp_loop_subst__ = {'horizontal_loop_extent' :
-                           ('horizontal_loop_begin', 'horizontal_loop_end'),
-                           'thread_block_begin:thread_block_end' :
-                           'thread_block_number'}
+
     # Dimension substitutions
     __ccpp_dim_subst__ = {'horizontal_loop_extent' : 'horizontal_dimension'}
-
-    # Variable representing the constant integer, 1
-    __var_one = Var({'local_name' : 'ccpp_one', 'constant' : 'True',
-                     'standard_name' : 'ccpp_constant_one',
-                     'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
-                    ParseSource('VarDictionary', 'REGISTRY', ParseContext()))
 
     def __init__(self, name, variables=None, parent_dict=None, logger=None):
         "Unlike dict, VarDictionary only takes a Var or Var list"
@@ -952,27 +1146,48 @@ class VarDictionary(OrderedDict):
         # End for
         return vlist
 
-    def add_variable(self, newvar, exists_ok=False):
-        """Add a variable if it does not conflict with existing entries"""
+    def add_variable(self, newvar, exists_ok=False, gen_unique=False):
+        """Add a variable if it does not conflict with existing entries
+        If exists_ok is True, attempting to add an identical copy is okay.
+        If gen_unique is True, a new local_name will be created if a
+        local_name collision is detected."""
         standard_name = newvar.get_prop_value('standard_name')
         if (standard_name in self) and (not exists_ok):
             # We already have a matching variable, error!
             if self._logger is not None:
                 self._logger.error("Attempt to add duplicate variable, {} from {}".format(standard_name, newvar.source.name))
             # End if
-            raise ParseSyntaxError("Duplicate standard name in {}".format(self.name),
+            raise ParseSyntaxError("(duplicate) standard name in {}".format(self.name),
                                    token=standard_name, context=newvar._context)
         # End if
-        cvar = self.find_variable(standard_name)
-        if (cvar is not None) and (not cvar.compatible(newvar, self._logger)):
-            if self._logger is not None:
-                self._logger.error("Attempt to add incompatible variable, {} from {}".format(standard_name, newvar.source.name))
+        cvar = self.find_variable(standard_name, any_scope=False)
+        if cvar is not None:
+            compat, reason = cvar.compatible(newvar, self._logger)
+            if not compat:
+                if self._logger is not None:
+                    self._logger.error("Attempt to add incompatible variable, {} from {}".format(standard_name, newvar.source.name))
+                # End if
+                nlname = newvar.get_prop_value('local_name')
+                clname = cvar.get_prop_value('local_name')
+                cstr = context_string(cvar.context, with_comma=True)
+                errstr = "new variable, {}, incompatible {} between {}{} and"
+                raise ParseSyntaxError(errstr.format(nlname, reason, clname, cstr),
+                                       token=standard_name,
+                                       context=newvar.source.context)
             # End if
-            errstr = "standard name, incompatible with {}"
-            raise ParseSyntaxError(errstr.format(cvar.context),
-                                   token=standard_name,
-                                   context=newvar.source.context)
         # End if
+        lname = newvar.get_prop_value('local_name')
+        lvar = self.find_local_name(lname)
+        if lvar is not None:
+            if gen_unique:
+                new_lname = self.new_internal_variable_name(lname)
+                newvar = newvar.clone(new_lname)
+            else:
+                errstr = ' {}: already registered{}'
+                cstr = context_string(lvar.source.context, with_comma=True)
+                raise ParseSyntaxError(errstr.format(lname, cstr),
+                                       token='local_name',
+                                       context=newvar.source.context)
         # If we make it to here without an exception, add the variable
         self[standard_name] = newvar
 
@@ -984,19 +1199,26 @@ class VarDictionary(OrderedDict):
             del self[standard_name]
         # End if
 
-    def find_variable(self, standard_name, any_scope=True, loop_subst=False):
-        """Return the variable matching <standard_name> or None
-        If any_scope is True, search parent scopes if not in current scope.
+    def find_variable(self, standard_name, any_scope=True, clone=None):
+        """Attempt to return the variable matching <standard_name>.
+        If <any_scope> is True, search parent scopes if not in current scope.
+        If the variable is not found and <clone> is not None, add a clone of
+        <clone> to this dictionary.
+        If the variable is not found and <clone> is None, return None.
         """
-        if standard_name in self:
+        if standard_name in CCPP_CONSTANT_VARS:
+            var = CCPP_CONSTANT_VARS[standard_name]
+        elif standard_name in self:
             var = self[standard_name]
         elif any_scope and (self._parent_dict is not None):
             var = self._parent_dict.find_variable(standard_name, any_scope)
         else:
             var = None
         # End if
-        if (var is None) and loop_subst:
-            var = self.find_loop_subst(standard_name, any_scope=any_scope)
+        if (var is None) and (clone is not None):
+            lname = clone.get_prop_value['local_name']
+            new_name = self.new_internal_variable_name(lname)
+            new_var = clone.clone(new_name)
         # End if
         return var
 
@@ -1010,7 +1232,7 @@ class VarDictionary(OrderedDict):
         '''
         plist = list()
         for standard_name in self.keys():
-            var = self.find_variable(standard_name, any_scope=False, loop_subst=False)
+            var = self.find_variable(standard_name, any_scope=False)
             if self.include_var_in_list(var, std_vars=std_vars, loop_vars=loop_vars, consts=consts):
                 plist.append(self[standard_name].get_prop_value(prop_name))
             # End if
@@ -1021,11 +1243,39 @@ class VarDictionary(OrderedDict):
                           std_vars=True, loop_vars=True, consts=True):
         "Write out the declarations for this dictionary's variables"
         for standard_name in self.keys():
-            var = self.find_variable(standard_name, any_scope=False, loop_subst=False)
+            var = self.find_variable(standard_name, any_scope=False)
             if self.include_var_in_list(var, std_vars=std_vars, loop_vars=loop_vars, consts=consts):
                 self[standard_name].write_def(outfile, indent, self)
             # End if
         # End for
+
+    def set_subst_value(self, local_name, stdname):
+        "Return code to set <local_name> value"
+        subst_str = None
+        if stdname == 'horizontal_loop_extent':
+            bvar = self.find_variable('horizontal_loop_begin', any_scope=False)
+            evar = self.find_variable('horizontal_loop_end', any_scope=False)
+            if bvar and evar:
+                bname = bvar.get_prop_value('local_name')
+                ename = evar.get_prop_value('local_name')
+                subst_str = '{} = {} - {} + 1'.format(local_name, ename, bname)
+            else:
+                raise ParseInternalError("Unable to create value for {}".format(local_name))
+            # End if
+        elif stdname == 'horizontal_loop_begin':
+            subst_str = '{} = 1'.format(local_name)
+        elif stdname == 'horizontal_loop_end':
+            evar = self.find_variable('horizontal_loop_extent', any_scope=False)
+            if evar:
+                ename = evar.get_prop_value('local_name')
+                subst_str = '{} = {}'.format(local_name, ename)
+            else:
+                raise ParseInternalError("Unable to create value for {}".format(local_name))
+            # End if
+        else:
+            raise ParseInternalError("Unknown loop subst standard name, '{}'".format(stdname))
+        # End if
+        return subst_str
 
     def merge(self, other_dict):
         "Add new entries from <other_dict>"
@@ -1075,7 +1325,7 @@ class VarDictionary(OrderedDict):
         (<standard_name>_begin, <standard_name>_end), if those variables are
         in the dictionary.
         If <standard_name>_extent *is* present, return that variable as a
-        range, (__var_one, <standard_name>_extent)
+        range, ('ccpp_constant_one', <standard_name>_extent)
         In other cases, return None
         """
         loop_var = VarDictionary.loop_subst_match(standard_name)
@@ -1085,7 +1335,8 @@ class VarDictionary(OrderedDict):
             dict_var = self.find_variable(standard_name,
                                           any_scope=any_scope, loop_subst=False)
             if dict_var is not None:
-                my_var = (VarDictionary.__var_one, dict_var)
+                var_one = CCPP_STANDARD_VARS['ccpp_constant_one']
+                my_var = (var_one, dict_var)
                 if self._logger is not None:
                     logger_str = "loop_subst: found {}{}".format(standard_name, context_string(context))
                 # End if
@@ -1135,6 +1386,45 @@ class VarDictionary(OrderedDict):
             my_var = None
         # End if
         return my_var
+
+    def find_local_name(self, local_name):
+        """Return the variable in this dictionary with local_name,
+        <local_name>, or None"""
+        lvar = None
+        for var in self.variable_list():
+            tname = var.get_prop_value('local_name')
+            if tname == local_name:
+                lvar
+                break
+            # End if
+        # End for
+        return lvar
+
+    def new_internal_variable_name(self, prefix=None, max_len=63):
+        """Find a new local variable name for this dictionary.
+        The new name begins with <prefix>_<self.name> or with <self.name>
+        (where <self.name> is this VarDictionary's name) if <prefix> is None.
+        The new variable name is kept to a maximum length of <max_len>.
+        """
+        index = 0
+        if prefix is None:
+            var_prefix = '{}_var'.format(self.name)
+        else:
+            var_prefix = '{}_{}_var'.format(prefix, self.name)
+        # End if
+        varlist = [x for x in self.prop_list('local_name') if var_prefix in x]
+        newvar = None
+        while newvar is None:
+            index = index + 1
+            newvar = '{}{}'.format(var_prefix, index)
+            if len(newvar) > max_len:
+                var_prefix = var_prefix[:-1]
+                newvar = None
+            elif newvar in varlist:
+                newvar = None
+            # End if
+        # End while
+        return newvar
 
 ###############################################################################
 if __name__ == "__main__":

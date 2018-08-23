@@ -10,6 +10,7 @@ __all__ = [
     'check_fortran_ref',
     'check_fortran_type',
     'context_string',
+    'find_schema_version',
     'FORTRAN_DP_RE',
     'FORTRAN_ID',
     'FORTRAN_SCALAR_REF',
@@ -21,11 +22,13 @@ __all__ = [
     'ParseObject',
     'PreprocStack',
     'register_fortran_ddt_name',
+    'read_xml_file',
     'registered_fortran_ddt_name',
     'setLogLevel',
     'setLogToFile',
     'setLogToNull',
     'setLogToStdout',
+    'validate_xml_file'
 ]
 
 from parse_source   import ParseContext, ParseSource

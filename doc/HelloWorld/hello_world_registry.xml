@@ -1,0 +1,243 @@
+<model name="CAM" version="1.0">
+
+  <!-- Constants (parameters) -->
+
+  <constant local_name="pcols" standard_name="horizontal_dimension">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>ppgrid</module>
+  </constant>
+
+  <constant local_name="pver"  standard_name="vertical_layer_dimension">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>ppgrid</module>
+  </constant>
+
+  <constant local_name="pverp" standard_name="vertical_level_dimension">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>ppgrid</module>
+  </constant>
+
+  <constant local_name="pcnst" standard_name="number_of_tracers">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>constituents</module>
+  </constant>
+
+  <constant local_name="ix_qv"
+            standard_name="index_of_water_vapor_specific_humidity">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>constituents</module>
+  </constant>
+
+  <constant local_name="ix_qc"
+            standard_name="index_of_cloud_liquid_water_mixing_ratio">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>constituents</module>
+  </constant>
+
+  <constant local_name="ix_qr"
+            standard_name="index_of_rain_water_mixing_ratio">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>constituents</module>
+  </constant>
+
+  <constant local_name="CPDAIR"
+            standard_name="specific_heat_of_dry_air_at_constant_pressure">
+    <type kind="kind_phys" units="J kg-1 K-1">real</type>
+    <dimensions>
+    </dimensions>
+    <module>physconst</module>
+  </constant>
+
+  <constant local_name="RDAIR" standard_name="gas_constant_dry_air"
+            long_name="ideal gas constant for dry air">
+    <type kind="kind_phys" units="J kg-1 K-1">real</type>
+    <dimensions>
+    </dimensions>
+    <module>physconst</module>
+  </constant>
+
+  <constant local_name="LATVAP"
+            standard_name="latent_heat_of_vaporization_of_water_at_0c"
+            long_name="Latent heat of vaporization of water at 0C">
+    <type kind="kind_phys" units="J kg-1">real</type>
+    <dimensions>
+    </dimensions>
+    <module>physconst</module>
+  </constant>
+
+  <constant local_name="PSTD"
+            standard_name="reference_pressure_at_sea_level">
+    <type kind="kind_phys" units="Pa">real</type>
+    <dimensions>
+    </dimensions>
+    <module>physconst</module>
+  </constant>
+
+  <constant local_name="RHOFW"
+            standard_name="density_of_liquid_water_at_0c"
+            long_name="Density of liquid water at 0C">
+    <type kind="kind_phys" units="kg m-3">real</type>
+    <dimensions>
+    </dimensions>
+    <module>physconst</module>
+  </constant>
+
+  <constant local_name="GRAVIT"
+            standard_name="acceleration_of_gravity"
+            long_name="gravity">
+    <type kind="kind_phys" units="m s-2">real</type>
+    <dimensions>
+    </dimensions>
+    <module>physconst</module>
+  </constant>
+
+  <constant local_name="ZVIR"
+            standard_name="ratio_of_dry_air_to_water_vapor_gas_constants_minus_one"
+            long_name="(Rwv/Rdair) - 1.0">
+    <type kind="kind_phys" units="1">real</type>
+    <dimensions>
+    </dimensions>
+    <module>physconst</module>
+  </constant>
+
+  <!-- Model Variables -->
+
+  <variable local_name="col_start" standard_name="horizontal_loop_begin">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+  </variable>
+
+  <variable local_name="col_end" standard_name="horizontal_loop_end">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+  </variable>
+
+  <variable local_name="state"
+            standard_name="cam_state_derived_type"
+            long_name="CAM state derived type"
+            state_variable="true">
+    <ddt_type>physics_state</ddt_type>
+    <dimensions>
+    </dimensions>
+    <module>physics_types</module>
+  </variable>
+
+  <variable local_name="tend"
+            standard_name="cam_physics_tendency_derived_type"
+            long_name="CAM physics tendency derived type"
+            state_variable="false">
+    <ddt_type>physics_tend</ddt_type>
+    <dimensions>
+    </dimensions>
+    <module>physics_types</module>
+  </variable>
+
+  <variable local_name="precl"
+            standard_name="precipitation"
+            state_variable="false">
+    <type kind="kind_phys" units="m/s">real</type>
+    <dimensions>
+      horizontal_dimension
+    </dimensions>
+  </variable>
+
+  <variable local_name="vmr"
+            standard_name="concentration"
+            state_variable="false">
+    <type kind="kind_phys" units="mole mole-1">real</type>
+    <dimensions>
+      number_of_constituents
+    </dimensions>
+  </variable>
+
+  <variable local_name="timestep"
+            standard_name="time_step_for_physics"
+            long_name="Model time step"
+            state_variable="false">
+    <type kind="kind_phys" units="s">real</type>
+    <dimensions>
+    </dimensions>
+    <module>time_manager</module>
+  </variable>
+
+  <variable local_name="time"
+            standard_name="model_time"
+            long_name="Model time"
+            state_variable="false">
+    <type kind="kind_phys" units="s">real</type>
+    <dimensions>
+    </dimensions>
+    <module>time_manager</module>
+  </variable>
+
+  <variable local_name="ncnst" standard_name="number_of_constituents">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>kinetics_params</module>
+  </variable>
+
+  <variable local_name="nTotRxt" standard_name="total_number_of_chemical_reactions">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>kinetics_params</module>
+  </variable>
+
+  <variable local_name="nkRxt" standard_name="number_of_kinetics_reactions">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>kinetics_params</module>
+  </variable>
+
+  <variable local_name="njRxt" standard_name="number_of_photolysis_reactions">
+    <type kind="" units="1">integer</type>
+    <dimensions>
+    </dimensions>
+    <module>kinetics_params</module>
+  </variable>
+
+  <variable local_name="total_dens"
+            standard_name="total_number_density"
+            state_variable="false">
+    <type kind="kind_phys" units=" molecules cm-3">real</type>
+    <dimensions>
+    </dimensions>
+  </variable>
+
+  <variable local_name="errmsg"
+            standard_name="ccpp_error_message"
+            long_name="Error message for error handling in CCPP"
+            state_variable="false">
+    <type kind="len=512" units="1">character</type>
+    <dimensions>
+    </dimensions>
+  </variable>
+
+  <variable local_name="errflg"
+            standard_name="ccpp_error_flag"
+            long_name="Error flag for error handling in CCPP"
+            state_variable="false">
+    <type kind="" units="flag">integer</type>
+    <dimensions>
+    </dimensions>
+  </variable>
+
+</model>

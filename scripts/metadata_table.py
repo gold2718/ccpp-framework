@@ -354,6 +354,19 @@ class MetadataHeader(ParseSource):
                     except ParseSyntaxError as p:
                         raise p
                     # If we get this far, we have a valid property.
+                    # Special case for dimensions, turn them into ranges
+                    if pname == 'dimensions':
+                        porig = pval
+                        pval = list()
+                        for dim in porig:
+                            if ':' in dim:
+                                pval.append(dim)
+                            else:
+                                pval.append('ccpp_constant_one:{}'.format(dim))
+                            # End if
+                        # End for
+                    # End if
+                    # Add the property to our Var dictionary
                     var_props[pname] = pval
                 # End for
             # End if
@@ -372,15 +385,10 @@ class MetadataHeader(ParseSource):
         "Return an ordered list of the header's variables"
         return self._variables.variable_list()
 
-    def get_var(self, standard_name=None, intent=None):
+    def get_var(self, standard_name=None):
         if standard_name is not None:
             var = self._variables.find_variable(standard_name)
             return var
-        elif intent is not None:
-            if intent not in self._var_intents:
-                raise ParseInternalError("Illegal intent type, '{}', in {}".format(intent, self.title), context=self._pobj)
-            # End if
-            return self._var_intents[intent]
         else:
             return None
 
@@ -450,7 +458,6 @@ class MetadataHeader(ParseSource):
     def is_blank(cls, line):
         "Return True iff <line> is a valid config format blank or comment line"
         return (len(line) == 0) or (cls.__blank_line__.match(line) is not None)
-
     @classmethod
     def table_start(cls, line):
         """Return variable name if <line> is an interface metadata table header
