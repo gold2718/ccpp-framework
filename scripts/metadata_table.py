@@ -91,13 +91,14 @@ Notes on the input format:
 
 # Python library imports
 from __future__ import print_function
+import os.path
 import re
 # CCPP framework imports
-from metavar     import Var, VarDictionary
-from parse_tools import ParseObject, ParseSource, register_fortran_ddt_name
+from metavar     import Var, VarDictionary, CCPP_CONSTANT_VARS
+from parse_tools import ParseObject, ParseSource, ParseContext, context_string
 from parse_tools import ParseInternalError, ParseSyntaxError, CCPPError
-from parse_tools import FORTRAN_ID, FORTRAN_SCALAR_REF
-from parse_tools import check_fortran_ref
+from parse_tools import FORTRAN_ID, FORTRAN_SCALAR_REF, unique_standard_name
+from parse_tools import check_fortran_ref, register_fortran_ddt_name
 
 ########################################################################
 
@@ -117,7 +118,7 @@ class MetadataHeader(ParseSource):
                        "[ im ]", "standard_name = horizontal_loop_extent",    \
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
-                       "dimensions = () |  intent = in"])).get_var(standard_name='horizontal_loop_extent') #doctest: +ELLIPSIS
+                       "dimensions = () |  intent = in"])).find_variable('horizontal_loop_extent') #doctest: +ELLIPSIS
     <metavar.Var horizontal_loop_extent: im at 0x...>
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
                       ["name = foobar", "module = foo",                       \
@@ -125,7 +126,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       "  subroutine foo()"])).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       "  subroutine foo()"])).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Missing metadata header type, at foobar.txt:7
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
@@ -134,7 +135,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent').get_prop_value('local_name')
+                       ""], line_start=0)).find_variable('horizontal_loop_extent').get_prop_value('local_name')
     'im'
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
                       ["name = foobar", "type = scheme"                       \
@@ -142,7 +143,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       ""], line_start=0)).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid variable property value, 'horizontal loop extent', at foobar.txt:2
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
@@ -151,7 +152,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       ""], line_start=0)).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid property syntax, '[ccpp-arg-table]', at foobar.txt:1
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
@@ -160,7 +161,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       ""], line_start=0)).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid metadata header start, no table type, at foobar.txt:2
     >>> MetadataHeader.__var_start__.match('[ qval ]') #doctest: +ELLIPSIS
@@ -174,6 +175,8 @@ class MetadataHeader(ParseSource):
     __var_start__ = re.compile(r"^\[\s*("+FORTRAN_ID+r"|"+FORTRAN_SCALAR_REF+r")\s*\]$")
 
     __blank_line__ = re.compile(r"\s*[#;]")
+
+    __header_types__ = ['ddt', 'host', 'module', 'scheme']
 
     def __init__(self, parse_object=None,
                  title=None, type_in=None, module=None, var_dict=None,
@@ -193,8 +196,12 @@ class MetadataHeader(ParseSource):
             # End if
             if type_in is None:
                 raise ParseInternalError('MetadataHeader requires a header type')
+            elif type_in not in MetadataHeader.__header_types__:
+                raise ParseSyntaxError("metadata table type",
+                                       token=type_in,
+                                       context=self._pobj)
             else:
-                self._header_type = type
+                self._header_type = type_in
             # End if
             if module is None:
                 raise ParseInternalError('MetadataHeader requires a module name')
@@ -208,8 +215,10 @@ class MetadataHeader(ParseSource):
             for var in var_dict.variable_list(): # Let this crash if no dict
                 self._variables.add_variable(var)
             # End for
+            self._start_context = None
         else:
-            self.__init_from_file__(parse_object, logger)
+            self.__init_from_file__(logger)
+            self._start_context = ParseContext(context=self._pobj)
         # End if
         # Categorize the variables
         self._var_intents = {'in' : list(), 'out' : list(), 'inout' : list()}
@@ -220,7 +229,7 @@ class MetadataHeader(ParseSource):
             # End if
         # End for
 
-    def __init_from_file__(self, parse_object, logger):
+    def __init_from_file__(self, logger):
         # Read the table preamble, assume the caller already figured out
         #  the first line of the header using the table_start method.
         curr_line, curr_line_num = self._pobj.next_line()
@@ -235,7 +244,7 @@ class MetadataHeader(ParseSource):
                 if key == 'name':
                     self._table_title = value
                 elif key == 'type':
-                    if value not in ['module', 'scheme', 'ddt']:
+                    if value not in MetadataHeader.__header_types__:
                         raise ParseSyntaxError("metadata table type",
                                                token=value,
                                                context=self._pobj)
@@ -263,6 +272,14 @@ class MetadataHeader(ParseSource):
                                    token=curr_line, context=self._pobj)
         elif self.header_type == "ddt":
             register_fortran_ddt_name(self.title)
+        # End if
+        # We need a default module if none was listed
+        if self._module_name is None:
+            mfile = self._pobj.file_name
+            if mfile[-5:] == '.meta':
+                # Default value is a Fortran module that matches the filename
+                self._module_name = os.path.basename(mfile)[:-5]
+            # End if
         # End if
         #  Initialize our ParseSource parent
         super(MetadataHeader, self).__init__(self.title,
@@ -321,6 +338,8 @@ class MetadataHeader(ParseSource):
         if valid_line:
             var_props = {}
             var_props['local_name'] = local_name
+            # Grab context that points at beginning of definition
+            context = ParseContext(context=self.context)
         else:
             var_props = None
         # End if
@@ -354,6 +373,19 @@ class MetadataHeader(ParseSource):
                     except ParseSyntaxError as p:
                         raise p
                     # If we get this far, we have a valid property.
+                    # Special case for dimensions, turn them into ranges
+                    if pname == 'dimensions':
+                        porig = pval
+                        pval = list()
+                        for dim in porig:
+                            if ':' in dim:
+                                pval.append(dim)
+                            else:
+                                pval.append('ccpp_constant_one:{}'.format(dim))
+                            # End if
+                        # End for
+                    # End if
+                    # Add the property to our Var dictionary
                     var_props[pname] = pval
                 # End for
             # End if
@@ -362,27 +394,95 @@ class MetadataHeader(ParseSource):
             return None, curr_line
         else:
             try:
-                newvar = Var(var_props, source=self)
+                newvar = Var(var_props, source=self, context=context)
             except CCPPError as ve:
                 raise ParseSyntaxError(ve, context=self._pobj)
             return newvar, curr_line
         # End if
 
-    def variable_list(self):
+    def variable_list(self, std_vars=True, loop_vars=True, consts=True):
         "Return an ordered list of the header's variables"
-        return self._variables.variable_list()
+        return self._variables.variable_list(recursive=False,
+                                             std_vars=std_vars,
+                                             loop_vars=loop_vars, consts=consts)
 
-    def get_var(self, standard_name=None, intent=None):
-        if standard_name is not None:
-            var = self._variables.find_variable(standard_name)
-            return var
-        elif intent is not None:
-            if intent not in self._var_intents:
-                raise ParseInternalError("Illegal intent type, '{}', in {}".format(intent, self.title), context=self._pobj)
-            # End if
-            return self._var_intents[intent]
+    def find_variable(self, std_name, use_local_name=False):
+        "Find a variable in this header's dictionary"
+        var = None
+        if use_local_name:
+            var = self._variables.find_local_name(std_name)
         else:
-            return None
+            var = self._variables.find_variable(std_name, any_scope=False)
+        # End if
+        return var
+
+    def convert_dims_to_standard_names(self, var, logger=None, context=None):
+        """Convert the dimension elements in <var> to standard names by
+        by using other variables in this header.
+        """
+        std_dims = list()
+        for dim in var.get_dimensions():
+            std_dim = list()
+            if ':' not in dim:
+                # Metadata dimensions always have an explicit start
+                var_one = CCPP_CONSTANT_VARS.find_local_name('1')
+                if var_one is not None:
+                    std = var_one.get_prop_value('standard_name')
+                    std_dim.append(std)
+                # End if
+            # End if
+            for item in dim.split(':'):
+                try:
+                    int_item = int(item)
+                    dvar = CCPP_CONSTANT_VARS.find_local_name(item)
+                    if dvar is not None:
+                        # If this integer value is a CCPP standard int, use that
+                        dname = dvar.get_prop_value('standard_name')
+                    else:
+                        # Some non-standard integer value
+                        dname = item
+                    # End if
+                except ValueError as ve:
+                    # Not an integer, try to find the standard_name
+                    if len(item) == 0:
+                        # Naked colons are okay
+                        dname = ''
+                    else:
+                        dvar = self.find_variable(item, use_local_name=True)
+                        if dvar is not None:
+                            dname = dvar.get_prop_value('standard_name')
+                        else:
+                            dname = None
+                        # End if
+                    # End if
+                    if dname is None:
+                        errmsg = "Unknown dimension element, {}, in {}{}"
+                        std = var.get_prop_value('local_name')
+                        ctx = context_string(context)
+                        if logger is not None:
+                            errmsg = "WARNING: " + errmsg
+                            logger.error(errmsg.format(item, std, ctx))
+                            dname = unique_standard_name()
+                        else:
+                            raise CCPPError(errmsg.format(item, std, ctx))
+                        # End if
+                    # End if
+                # End try
+                if dname is None:
+                    std_dim = None
+                    break
+                else: # Should be okay because if not, we broke out of loop
+                    std_dim.append(dname)
+                # End if
+            # End for
+            if std_dim is None:
+                break
+            else: # Should be okay because if not, we broke out of loop
+                std_dims.append(':'.join(std_dim))
+            # End if
+        # End for
+
+        return std_dims
 
     def prop_list(self, prop_name):
         "Return list of <prop_name> values for this scheme's arguments"
@@ -431,6 +531,11 @@ class MetadataHeader(ParseSource):
             pass # Python does not guarantee much about __del__ conditions
         # End try
 
+    def start_context(self, with_comma=True, nodir=True):
+        'Return a context string for the beginning of the table'
+        return context_string(self._start_context,
+                              with_comma=with_comma, nodir=nodir)
+
     @property
     def title(self):
         'Return the name of the metadata arg_table'
@@ -464,16 +569,17 @@ class MetadataHeader(ParseSource):
 
     @classmethod
     def is_scalar_reference(cls, test_val):
-        return check_fortran_ref(test_val) is not None
+        return check_fortran_ref(test_val, None, False) is not None
 
     @classmethod
-    def parse_metadata_file(cls, filename):
+    def parse_metadata_file(cls, filename, logger):
         "Parse <filename> and return list of parsed metadata headers"
         # Read all lines of the file at once
-        mheaders = list()
+        meta_headers = list()
+        header_titles = list() # Keep track of names in file
         with open(filename, 'r') as file:
             fin_lines = file.readlines()
-            for index in xrange(len(fin_lines)):
+            for index in range(len(fin_lines)):
                 fin_lines[index] = fin_lines[index].rstrip('\n')
             # End for
         # End with
@@ -482,13 +588,22 @@ class MetadataHeader(ParseSource):
         curr_line, curr_line_num = parse_obj.curr_line()
         while curr_line is not None:
             if MetadataHeader.table_start(curr_line):
-                mheaders.append(MetadataHeader(parse_obj))
+                new_header = MetadataHeader(parse_object=parse_obj)
+                ntitle = new_header.title
+                if ntitle in header_titles:
+                    errmsg = 'Duplicate metadata header, {}, at {}:{}'
+                    ctx = curr_line_num + 1
+                    raise CCPPError(errmsg.format(ntitle, filename, ctx))
+                else:
+                    meta_headers.append(new_header)
+                    header_titles.append(ntitle)
+                # End if
                 curr_line, curr_line_num = parse_obj.curr_line()
             else:
                 curr_line, curr_line_num = parse_obj.next_line()
             # End if
         # End while
-        return mheaders
+        return meta_headers
 
 ########################################################################
 
