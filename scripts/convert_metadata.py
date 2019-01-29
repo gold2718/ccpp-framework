@@ -3,6 +3,7 @@ import os.path
 import re
 
 yes_re = re.compile(r"(?i)^\s*yes\s*$")
+required_attrs = ['standard_name', 'units', 'dimensions', 'type']
 
 ########################################################################
 
@@ -90,6 +91,20 @@ def convert_file(filename_in, filename_out):
                                 continue
                             elif attr_name == 'rank':
                                 attr_name = 'dimensions'
+                            elif attr_name == 'standard_name':
+                                # The standard name needs to be lowercase
+                                std_name = entry.lower()
+                                # Standard names cannot have dashes
+                                std_name = std_name.replace('-', '_')
+                                # Standard names cannot have periods
+                                std_name = std_name.replace('.', '_')
+                                entries[ind] = std_name
+                                entry = std_name
+                            elif attr_name == 'intent':
+                                if entry.lower() == 'none':
+                                    raise ValueError("{} has units = none in {}".format(var_name, table_name))
+                                # End if
+                            # No else needed
                             # End if
                             # Guess dimension names for arrays
                             std_name = entries[header_locs['standard_name']]
@@ -121,7 +136,7 @@ def convert_file(filename_in, filename_out):
                                 entry = entry + ")"
                             # End if
                             # Output attribute
-                            if len(entry) > 0:
+                            if (len(entry) > 0) or (attr_name in required_attrs):
                                 file.write("!!    {} = {}\n".format(attr_name, entry))
                             # End if
                         # End for (done with entry)
