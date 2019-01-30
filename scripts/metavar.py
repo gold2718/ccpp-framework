@@ -524,21 +524,26 @@ class Var(object):
     def source(self):
         return self._source
 
+    @classmethod
+    def loop_subst_dims(cls, dims):
+        newdims = list()
+        for dim in dims:
+            # loop_subst_match swallows an entire dim string, even ranges
+            ldim = VarDictionary.loop_subst_match(dim)
+            if ldim is None:
+                newdims.append(dim)
+            else:
+                newdims.append(ldim)
+            # End if
+        # End for
+        return newdims
+
     def get_dimensions(self, loop_subst=False):
         "Return the variable's dimension string"
         dimval = self.get_prop_value('dimensions')
         dims = Var.get_prop('dimensions').valid_value(dimval)
         if loop_subst:
-            newdims = list()
-            for dim in dims:
-                # loop_subst_match swallows an entire dim string, even ranges
-                ldim = VarDictionary.loop_subst_match(dim)
-                if ldim is None:
-                    newdims.append(dim)
-                else:
-                    newdims.append(ldim)
-                # End if
-            # End for
+            newdims = loop_subst_dims(dims)
         else:
             newdims = dims
         # End if
@@ -681,6 +686,40 @@ class Var(object):
     def __repr__(self):
         '''Print representation or string for Var objects'''
         return "<{standard_name}: {local_name}>".format(**self._prop_dict)
+
+###############################################################################
+
+class VarSpec(object):
+    """A class to hold a standard_name description of a variable.
+    A scalar variable is just a standard name while an array also
+    contains a comma-separated list of dimension standard names in parentheses.
+    """
+
+    def __init__(self, var, loop_subst=False):
+        self._name = var.
+        self._dims = var.get_dimensions(loop_subst=loop_subst)
+        if len(self._dims) == 0:
+            self._dims = None
+        # End if
+
+    @property
+    def name(self):
+        return self._name
+
+    def get_dimensions(self, loop_subst=False):
+        if loop_subst:
+            rdims = Var.loop_subst_dims(dims)
+        else:
+            rdims = dims
+        # End if
+        return rdims
+
+    def __repr__(self):
+        if self._dims is not None:
+            return "{}({})".format(self._name, ', '.join(self._dims))
+        else:
+            return self._name
+        # End if
 
 ###############################################################################
 
