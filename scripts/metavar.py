@@ -696,7 +696,7 @@ class VarSpec(object):
     """
 
     def __init__(self, var, loop_subst=False):
-        self._name = var.
+        self._name = var.get_prop_value('standard_name')
         self._dims = var.get_dimensions(loop_subst=loop_subst)
         if len(self._dims) == 0:
             self._dims = None

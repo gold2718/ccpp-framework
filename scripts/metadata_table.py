@@ -187,7 +187,7 @@ class MetadataHeader(ParseSource):
             # This has to be a scheme name
             self._header_type = 'SCHEME'
         # End if
-        # Tiem to initialize our ParseSource parent
+        # Time to initialize our ParseSource parent
         super(MetadataHeader, self).__init__(self._table_title,
                                              self._header_type, self._pobj)
         curr_line, curr_line_num = self._pobj.next_line()
