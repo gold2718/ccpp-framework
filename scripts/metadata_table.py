@@ -157,7 +157,7 @@ class MetadataHeader(ParseSource):
 
     _var_start = re.compile(r"^\[\s*("+FORTRAN_ID+r"|"+FORTRAN_SCALAR_REF+r")\s*\]$")
 
-    def __init__(self, parse_object, syntax=FortranMetadataSyntax, spec_name=None, logger=None):
+    def __init__(self, parse_object, spec_name, syntax=FortranMetadataSyntax, is_scheme=False, logger=None):
         self._pobj = parse_object
         self._spec_name = spec_name
         if syntax is None:
@@ -174,18 +174,19 @@ class MetadataHeader(ParseSource):
                                    token=curr_line, context=self._pobj)
         # End if
         # Figure out the header type
-        if self._spec_name is not None:
+        if self._spec_name is None:
+            raise ParseInternalError("spec_name is None", context=parse_object)
+        else:
             if self._spec_name.lower() == self._table_title.lower():
                 # This is a module or program data header
                 self._header_type = 'MODULE'
+            elif is_scheme:
+                self._header_type = 'SCHEME'
             else:
                 # This should be a derived data type
                 self._header_type = 'DDT'
                 register_fortran_ddt_name(self.title)
             # End if
-        else:
-            # This has to be a scheme name
-            self._header_type = 'SCHEME'
         # End if
         # Time to initialize our ParseSource parent
         super(MetadataHeader, self).__init__(self._table_title,
