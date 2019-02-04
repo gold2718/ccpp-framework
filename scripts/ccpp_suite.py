@@ -205,7 +205,7 @@ class Scheme(object):
         my_header = None
         for module in scheme_headers:
             for header in module:
-                func_id, trans_id, match_trans = CCPP_STATE_MACH.transition_match(header.title, transition=phase)
+                func_id, trans_id, match_trans = CCPP_STATE_MACH.function_match(header.title, transition=phase)
                 if func_id == self.name:
                     my_header = header
                     self._subroutine_name = header.title
@@ -408,18 +408,6 @@ class Group(VarDictionary):
     def phase(self):
         'Return the CCPP state transition for this group spec'
         return self._transition
-
-    def phase_match(self, scheme_name):
-        '''If scheme_name matches the group phase, return the group and
-            function ID. Otherwise, return None
-        '''
-        fid, tid, mt = CCPP_STATE_MACH.transition_match(scheme_name,
-                                                        transition=self.phase)
-        if tid is not None:
-            return self, fid
-        else:
-            return None, None
-        # End if
 
     def analyze(self, phase, suite_vars, scheme_headers, logger):
         # We need a copy of the API and host model variables for dummy args
@@ -678,7 +666,7 @@ end module {module}
                 # Parse a group
                 self._groups.append(Group(suite_item, 'run', self, self._context))
             else:
-                match_trans = CCPP_STATE_MACH.group_match(item_type)
+                match_trans = CCPP_STATE_MACH.function_match(item_type)
                 if match_trans is None:
                     raise CCPPError("Unknown CCPP suite component tag type, '{}'".format(item_type))
                 elif match_trans in self._full_phases:
@@ -704,42 +692,80 @@ end module {module}
 
     def analyze(self, host_model, scheme_headers, logger):
         '''Collect all information needed to write a suite file
-        >>> CCPP_STATE_MACH.transition_match('foo_init')
-        ('foo', 'init', 'initialize')
-        >>> CCPP_STATE_MACH.transition_match('foo_init', transition='finalize')
-        (None, None, None)
-        >>> CCPP_STATE_MACH.transition_match('FOO_INIT')
-        ('FOO', 'INIT', 'initialize')
-        >>> CCPP_STATE_MACH.transition_match('foo_initial')
-        ('foo', 'initial', 'initialize')
-        >>> CCPP_STATE_MACH.transition_match('foo_initialize')
-        ('foo', 'initialize', 'initialize')
-        >>> CCPP_STATE_MACH.transition_match('foo_initialize')[1][0:4]
+        >>> CCPP_STATE_MACH.transition_match('init')
+        'initialize'
+        >>> CCPP_STATE_MACH.transition_match('init', transition='finalize')
+
+        >>> CCPP_STATE_MACH.transition_match('INIT')
+        'initialize'
+        >>> CCPP_STATE_MACH.transition_match('initial')
+        'initialize'
+        >>> CCPP_STATE_MACH.transition_match('timestep_initial')
+        'timestep_initial'
+        >>> CCPP_STATE_MACH.transition_match('timestep_initialize')
+        'timestep_initial'
+        >>> CCPP_STATE_MACH.transition_match('timestep_init')
+        'timestep_initial'
+        >>> CCPP_STATE_MACH.transition_match('initialize')
+        'initialize'
+        >>> CCPP_STATE_MACH.transition_match('initialize')[0:4]
         'init'
-        >>> CCPP_STATE_MACH.transition_match('foo_initize')
-        (None, None, None)
-        >>> CCPP_STATE_MACH.transition_match('foo_run')
-        ('foo', 'run', 'run')
-        >>> CCPP_STATE_MACH.transition_match('foo_finalize')
-        ('foo', 'finalize', 'finalize')
-        >>> CCPP_STATE_MACH.transition_match('foo_finalize')[1][0:5]
+        >>> CCPP_STATE_MACH.transition_match('initize')
+
+        >>> CCPP_STATE_MACH.transition_match('run')
+        'run'
+        >>> CCPP_STATE_MACH.transition_match('finalize')
+        'finalize'
+        >>> CCPP_STATE_MACH.transition_match('finalize')[0:5]
         'final'
-        >>> CCPP_STATE_MACH.transition_match('foo_final')
-        ('foo', 'final', 'finalize')
-        >>> CCPP_STATE_MACH.transition_match('foo_finalize_bar')
+        >>> CCPP_STATE_MACH.transition_match('final')
+        'finalize'
+        >>> CCPP_STATE_MACH.transition_match('finalize_bar')
+
+        >>> CCPP_STATE_MACH.function_match('foo_init')
+        ('foo', 'init', 'initialize')
+        >>> CCPP_STATE_MACH.function_match('foo_init', transition='finalize')
         (None, None, None)
+        >>> CCPP_STATE_MACH.function_match('FOO_INIT')
+        ('FOO', 'INIT', 'initialize')
+        >>> CCPP_STATE_MACH.function_match('foo_initial')
+        ('foo', 'initial', 'initialize')
+        >>> CCPP_STATE_MACH.function_match('foo_initialize')
+        ('foo', 'initialize', 'initialize')
+        >>> CCPP_STATE_MACH.function_match('foo_initialize')[1][0:4]
+        'init'
+        >>> CCPP_STATE_MACH.function_match('foo_initize')
+        (None, None, None)
+        >>> CCPP_STATE_MACH.function_match('foo_timestep_initial')
+        ('foo', 'timestep_initial', 'timestep_initial')
+        >>> CCPP_STATE_MACH.function_match('foo_timestep_init')
+        ('foo', 'timestep_init', 'timestep_initial')
+        >>> CCPP_STATE_MACH.function_match('foo_timestep_initialize')
+        ('foo', 'timestep_initialize', 'timestep_initial')
+        >>> CCPP_STATE_MACH.function_match('foo_run')
+        ('foo', 'run', 'run')
+        >>> CCPP_STATE_MACH.function_match('foo_finalize')
+        ('foo', 'finalize', 'finalize')
+        >>> CCPP_STATE_MACH.function_match('foo_finalize')[1][0:5]
+        'final'
+        >>> CCPP_STATE_MACH.function_match('foo_final')
+        ('foo', 'final', 'finalize')
+        >>> CCPP_STATE_MACH.function_match('foo_finalize_bar')
+        (None, None, None)
+        >>> CCPP_STATE_MACH.function_match('foo_timestep_final')
+        ('foo', 'timestep_final', 'timestep_final')
+        >>> CCPP_STATE_MACH.function_match('foo_timestep_finalize')
+        ('foo', 'timestep_finalize', 'timestep_final')
         '''
         # Collect all the available schemes
         for header_list in scheme_headers:
             for header in header_list:
-                pgroup = None
-                for gname in self._full_groups.keys():
-                    mgroup = self._full_groups[gname]
-                    pgroup, func_id = mgroup.phase_match(header.title)
-                    if pgroup is not None:
-                        break
-                    # End if
-                # End for
+                func_id, ftrans, match_trans = CCPP_STATE_MACH.function_match(header.title)
+                if match_trans in self._full_phases:
+                    pgroup = self._full_phases[match_trans]
+                else:
+                    pgroup = None
+                # End if
                 if pgroup is not None:
                     if not pgroup.has_item(header.title):
                         sstr = Suite.__scheme_template__.format(func_id)
