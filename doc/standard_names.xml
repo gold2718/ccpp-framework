@@ -53,6 +53,11 @@
                    long_name="density of liquid water at 0C">
       <type kind="kind_phys" units="kg m-3">real</type>
     </standard_name>
+    <standard_name
+        name="ratio_of_dry_air_to_water_vapor_gas_constants_minus_one"
+        long_name="(Rwv / Rdair) - 1.0">
+      <type kind="kind_phys" units="1">real</type>
+    </standard_name>
   </section>
   <section name="coordinates">
     <standard_name name="latitude">
@@ -62,7 +67,8 @@
       <type kind="kind_phys" units="radians">real</type>
     </standard_name>
   </section>
-  <section name="state_variables">
+  <section name="state_variables"
+           comment="Note that appending '_from_previous_timestep' to standard_names in this section yields another valid standard_name">
     <standard_name name="surface_air_pressure">
       <type kind="kind_phys" units="Pa">real</type>
     </standard_name>
