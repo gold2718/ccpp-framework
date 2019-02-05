@@ -31,30 +31,30 @@ class StateMachine(object):
     'b'
     >>> StateMachine([('ab','a','b','a')]).transition_regex('ab') #doctest: +ELLIPSIS
     <_sre.SRE_Pattern object at 0x...>
-    >>> StateMachine([('ab','a','b','a')]).transition_match('foo_a', transition='ab')
+    >>> StateMachine([('ab','a','b','a')]).function_match('foo_a', transition='ab')
     ('foo', 'a', 'ab')
-    >>> StateMachine([('ab','a','b',r'ax?')]).transition_match('foo_a', transition='ab')
+    >>> StateMachine([('ab','a','b',r'ax?')]).function_match('foo_a', transition='ab')
     ('foo', 'a', 'ab')
-    >>> StateMachine([('ab','a','b',r'ax?')]).transition_match('foo_ax', transition='ab')
+    >>> StateMachine([('ab','a','b',r'ax?')]).function_match('foo_ax', transition='ab')
     ('foo', 'ax', 'ab')
-    >>> StateMachine([('ab','a','b','a')]).transition_match('foo_ab', transition='ab')
+    >>> StateMachine([('ab','a','b','a')]).function_match('foo_ab', transition='ab')
     (None, None, None)
-    >>> StateMachine([('ab','a','b','a'),('cd','c','d','c')]).transition_match('foo_c')
+    >>> StateMachine([('ab','a','b','a'),('cd','c','d','c')]).function_match('foo_c')
     ('foo', 'c', 'cd')
-    >>> StateMachine([('ab','a','b',r'ax?')]).group_match('a')
+    >>> StateMachine([('ab','a','b',r'ax?')]).transition_match('a')
     'ab'
-    >>> StateMachine([('ab','a','b',r'ax?')]).group_match('ax')
+    >>> StateMachine([('ab','a','b',r'ax?')]).transition_match('ax')
     'ab'
-    >>> StateMachine([('ab','a','b',r'ax?')]).group_match('axx')
+    >>> StateMachine([('ab','a','b',r'ax?')]).transition_match('axx')
 
-    >>> StateMachine([('ab','a','b','a')]).group_match('ab')
+    >>> StateMachine([('ab','a','b','a')]).transition_match('ab')
 
-    >>> StateMachine([('ab','a','b','a'),('cd','c','d','c')]).group_match('c')
+    >>> StateMachine([('ab','a','b','a'),('cd','c','d','c')]).transition_match('c')
     'cd'
-    >>> StateMachine([('ab','a','b','a')]).add_transition('ab','c','d','c') #doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> StateMachine((('ab','a','b','a'),)).add_transition('ab','c','d','c') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ValueError: ERROR: transition, 'ab', already exists
-    >>> StateMachine(('ab','a','b','a')) #doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> StateMachine((('ab','a','b','a'))) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ValueError: Invalid initial_data transition ('ab'), should be of the form (name, inital_state, final_state, regex).
     >>> StateMachine([('ab','a','b','a')])['cd'] = ('c','d') #doctest: +IGNORE_EXCEPTION_DETAIL
@@ -72,7 +72,9 @@ class StateMachine(object):
         # Implement the State Transition Table as a tuple and use accessors
         self.__stt__ = OrderedDict()
         if initial_data is not None:
-            for trans in initial_data:
+            # Note that we need to add states with longer regular expressions
+            # before short ones so that we match correctly.
+            for trans in sorted(initial_data, key=lambda x: len(x[3]) if len(x) > 3 else 0, reverse=True):
                 if len(trans) != 4:
                     raise ValueError("Invalid initial_data transition ({}), should be of the form (name, inital_state, final_state, regex).".format(trans))
                 else:
@@ -96,10 +98,29 @@ class StateMachine(object):
     def transition_regex(self, transition):
         return self.__stt__[transition][2]
 
-    def group_regex(self, transition):
+    def function_regex(self, transition):
         return self.__stt__[transition][3]
 
     def transition_match(self, test_str, transition=None):
+        """Return the matched transition, if found.
+        """
+        match_trans = None
+        if transition is None:
+            trans_list = self.transitions()
+        else:
+            trans_list = [transition]
+        # End if
+        for trans in trans_list:
+            regex = self.transition_regex(trans)
+            match = regex.match(test_str)
+            if match is not None:
+                match_trans = trans
+                break
+            # End if
+        # End for
+        return match_trans
+
+    def function_match(self, test_str, transition=None):
         """Return a function ID, transition identifier, and matched
         transition if found.
         If <transition> is None, look for a match in any transition,
@@ -114,7 +135,7 @@ class StateMachine(object):
         trans_id = None
         match_trans = None
         for trans in trans_list:
-            regex = self.transition_regex(trans)
+            regex = self.function_regex(trans)
             match = regex.match(test_str)
             if match is not None:
                 func_id = match.group(1)
@@ -125,20 +146,6 @@ class StateMachine(object):
         # End for
         return func_id, trans_id, match_trans
 
-    def group_match(self, test_str):
-        """Return the matched transition, if found.
-        """
-        match_trans = None
-        for trans in self.transitions():
-            regex = self.group_regex(trans)
-            match = regex.match(test_str)
-            if match is not None:
-                match_trans = trans
-                break
-            # End if
-        # End for
-        return match_trans
-
     def __getitem__(self, key):
         return self.__stt__[key]
 
@@ -148,9 +155,9 @@ class StateMachine(object):
         elif len(value) != 3:
             raise ValueError("Invalid transition ({}), should be of the form (inital_state, final_state, regex).".format(value))
         else:
-            regex = re.compile(FORTRAN_ID + r"_(" + value[2] + r")$")
-            group = re.compile(value[2] + r"$")
-            self.__stt__[key] = (value[0], value[1], regex, group)
+            regex = re.compile(value[2] + r"$")
+            function = re.compile(FORTRAN_ID + r"_(" + value[2] + r")$")
+            self.__stt__[key] = (value[0], value[1], regex, function)
         # End if
 
     def __delitem__(self, key):
