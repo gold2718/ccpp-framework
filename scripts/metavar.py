@@ -938,6 +938,14 @@ class VarDictionary(OrderedDict):
         # If we make it to here without an exception, add the variable
         self[standard_name] = newvar
 
+    def remove_variable(self, standard_name):
+        """Remove <standard_name> from the dictionary.
+        Ignore if <standard_name> is not in dict
+        """
+        if standard_name in self:
+            del self[standard_name]
+        # End if
+
     def find_variable(self, standard_name, any_scope=True, loop_subst=False):
         """Return the variable matching <standard_name> or None
         If any_scope is True, search parent scopes if not in current scope.

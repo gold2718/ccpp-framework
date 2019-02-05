@@ -74,6 +74,53 @@ COPYRIGHT = '''!
 '''
 
 ###############################################################################
+def new_suite_object(item, context):
+###############################################################################
+    "'Factory' method to create the appropriate suite object from XML"
+    new_item = None
+    if item.tag == 'subcycle':
+        new_item = self._schemes.append(Subcycle(item, context))
+    elif item.tag == 'scheme':
+        new_item = self._schemes.append(Scheme(item, context))
+    else:
+        raise CCPPError("Unknown CCPP suite element type, '{}'".format(item.tag))
+    # End if
+    return new_item
+
+###############################################################################
+
+class CallList(VarDictionary):
+    "A simple class to hold a routine's call list (dummy arguments)"
+
+    def __init__(self, name):
+        super(CallList, self).__init__(name)
+
+    def call_string(self, dict=None):
+        """Return a dummy argument string for this call list.
+        dict may be another VarDictionary object from which to retrieve
+        local_names (default is to use self).
+        """
+        arg_str = ""
+        for var in self.variable_list():
+            if dict is not None:
+                stdname = var.get_prop_value('standard_name')
+                dvar = dict.find_variable(stdname)
+                if dvar is None:
+                    raise CCPPError("Variable, '{}', not found in {}".format(stdname, dict.name))
+                else:
+                    lname = dvar.get_prop_value('local_name')
+                # End if
+            else:
+                lname = var.get_prop_value('local_name')
+            # End if
+            if len(arg_str) > 0:
+                arg_str = arg_str + ", "
+            # End if
+            arg_str = arg_str + lname
+        # End for
+        return arg_str
+
+###############################################################################
 
 class Scheme(object):
     "A single scheme in a suite (e.g., init method)"
@@ -83,120 +130,129 @@ class Scheme(object):
         self._context = context
         self._version = scheme_xml.get('version', None)
         self._lib = scheme_xml.get('lib', None)
+        # This dictionary is not part of the object but how it is used
+        self._call_list = CallList(self.name)
 
     @property
     def name(self):
         '''Return name of scheme'''
         return self._name
 
-    def ddtspec_to_str(self, ddt_spec, host_model):
-        "Properly convert a DDT field reference to a string"
-        args = list()
-        alen = len(ddt_spec)
-        index = 0
-        for var in ddt_spec:
-            ddt = index < (alen - 1)
-            argstr = self.host_arg_str(var, host_model, ddt)
-            index = index + 1
-            args.append(argstr)
-        # End for
-        return '%'.join(args)
+# XXgoldyXX: v debug only
+#    def ddtspec_to_str(self, ddt_spec, host_model):
+#        "Properly convert a DDT field reference to a string"
+#        args = list()
+#        alen = len(ddt_spec)
+#        index = 0
+#        for var in ddt_spec:
+#            ddt = index < (alen - 1)
+#            argstr = self.host_arg_str(var, host_model, ddt)
+#            index = index + 1
+#            args.append(argstr)
+#        # End for
+#        return '%'.join(args)
+#
+#    def find_host_model_var(self, hdim, host_model):
+#        "Create the correct array dimension reference for hdim"
+#        hsdims = list()
+#        for hsdim in hdim.split(':'):
+#            hsdim_var = host_model.find_variable(hsdim, loop_subst=True)
+#            if hsdim_var is None:
+#                raise CCPPError("No matching host variable for {} dimension, {}".format(self._subroutine_name, hsdim))
+#            elif isinstance(hsdim_var, tuple):
+#                # This is a dimension range (e.g., from a loop_subst)
+#                lnames = [x.get_prop_value('local_name') for x in hsdim_var]
+#                hsdims.extend(lnames)
+#            elif isinstance(hsdim_var, VarDDT):
+#                # This is a DDT reference
+#                ##XXgoldyXX: HACK! Take this out when DDTS removed from suites
+#                hsdims.append(self.ddtspec_to_str(hsdim_var._var_ref_list, host_model))
+#            else:
+#                hsdims.append(hsdim_var.get_prop_value('local_name'))
+#            # End if
+#        # End for
+#        loop_var = VarDictionary.loop_var_match(hdim)
+#        if (dimension_re.match(hdim) is not None) and (len(hsdims) == 1):
+#            # We need to specify the whole range
+#            hsdims = ['1'] + hsdims
+#        elif loop_var and (len(hsdims) == 1):
+#            # We may to specify the whole range
+#            lv_type = hdim.split('_')[-1]
+#            if lv_type == 'extent':
+#                hsdims = ['1'] + hsdims # This should print as '1:<name>_extent'
+#            elif lv_type == 'beg':
+#                hsdims.append('') # This should print as '<name>_beg:'
+#            elif lv_type == 'end':
+#                hsdims = [''] + hsdims # This should print as ':<name>_end'
+#            elif lv_type == 'number':
+#                pass # This should be a single value (not an array section)
+#            else:
+#                raise ParseInternalError("Unknown loop variable type, '{}' in '{}'".format(lv_type, hdim))
+#            # End if
+#        # End if
+#        return ':'.join(hsdims)
+#
+#    def host_arg_str(self, hvar, host_model, ddt):
+#        '''Create the proper statement of a piece of a host-model variable.
+#        If ddt is True, we can only have a single element selected
+#        '''
+#        hstr = hvar.get_prop_value('local_name')
+#        hdims = hvar.get_dimensions()
+#        dimsep = ''
+#        # Does the local name have any extra indices?
+#        match = array_ref_re.match(hstr.strip())
+#        if match is not None:
+#            tokens = [x.strip() for x in match.group(2).strip().split(',')]
+#            # There should one ':' token for each entry in hdims
+#            if tokens.count(':') != len(hdims):
+#                raise CCPPError("Invalid DDT variable spec, {}, should have {} colons".format(hstr, len(hdims)))
+#            else:
+#                hstr = match.group(1)
+#                hdims_temp = hdims
+#                hdims = list()
+#                hdim_index = 0
+#                for token in tokens:
+#                    if token == ':':
+#                        hdims.append(hdims_temp[hdim_index])
+#                        hdim_index = hdim_index + 1
+#                    else:
+#                        hdims.append(token)
+#                    # End if
+#                # End for
+#            # End if
+#        # End if
+#        if len(hdims) > 0:
+#            dimstr = '('
+#        else:
+#            dimstr = ''
+#        # End if
+#        for hdim in hdims:
+#            # We can only have a single element of a DDT when selecting
+#            # a field. Is this a thread block?
+#            if ddt and (hdim == 'thread_block_begin:thread_block_end'):
+#                hdim = 'thread_block_number'
+#            # End if
+#            if ddt and (':' in hdim):
+#                raise CCPPError("Invalid DDT dimension spec {}{}".format(hstr, hdimval))
+#            else:
+#                # Find the host model variable for each dim
+#                hsdims = self.find_host_model_var(hdim, host_model)
+#                dimstr = dimstr + dimsep + hsdims
+#                dimsep = ', '
+#            # End if
+#        # End for
+#        if len(hdims) > 0:
+#            dimstr = dimstr + ')'
+#        # End if
+#        return hstr + dimstr
+# XXgoldyXX: ^ debug only
 
-    def find_host_model_var(self, hdim, host_model):
-        "Create the correct array dimension reference for hdim"
-        hsdims = list()
-        for hsdim in hdim.split(':'):
-            hsdim_var = host_model.find_variable(hsdim, loop_subst=True)
-            if hsdim_var is None:
-                raise CCPPError("No matching host variable for {} dimension, {}".format(self._subroutine_name, hsdim))
-            elif isinstance(hsdim_var, tuple):
-                # This is a dimension range (e.g., from a loop_subst)
-                lnames = [x.get_prop_value('local_name') for x in hsdim_var]
-                hsdims.extend(lnames)
-            elif isinstance(hsdim_var, VarDDT):
-                # This is a DDT reference
-                ##XXgoldyXX: HACK! Take this out when DDTS removed from suites
-                hsdims.append(self.ddtspec_to_str(hsdim_var._var_ref_list, host_model))
-            else:
-                hsdims.append(hsdim_var.get_prop_value('local_name'))
-            # End if
-        # End for
-        loop_var = VarDictionary.loop_var_match(hdim)
-        if (dimension_re.match(hdim) is not None) and (len(hsdims) == 1):
-            # We need to specify the whole range
-            hsdims = ['1'] + hsdims
-        elif loop_var and (len(hsdims) == 1):
-            # We may to specify the whole range
-            lv_type = hdim.split('_')[-1]
-            if lv_type == 'extent':
-                hsdims = ['1'] + hsdims # This should print as '1:<name>_extent'
-            elif lv_type == 'beg':
-                hsdims.append('') # This should print as '<name>_beg:'
-            elif lv_type == 'end':
-                hsdims = [''] + hsdims # This should print as ':<name>_end'
-            elif lv_type == 'number':
-                pass # This should be a single value (not an array section)
-            else:
-                raise ParseInternalError("Unknown loop variable type, '{}' in '{}'".format(lv_type, hdim))
-            # End if
-        # End if
-        return ':'.join(hsdims)
+    @property
+    def call_list(self):
+        "Return this scheme's call list dictionary"
+        return self._call_list
 
-    def host_arg_str(self, hvar, host_model, ddt):
-        '''Create the proper statement of a piece of a host-model variable.
-        If ddt is True, we can only have a single element selected
-        '''
-        hstr = hvar.get_prop_value('local_name')
-        hdims = hvar.get_dimensions()
-        dimsep = ''
-        # Does the local name have any extra indices?
-        match = array_ref_re.match(hstr.strip())
-        if match is not None:
-            tokens = [x.strip() for x in match.group(2).strip().split(',')]
-            # There should one ':' token for each entry in hdims
-            if tokens.count(':') != len(hdims):
-                raise CCPPError("Invalid DDT variable spec, {}, should have {} colons".format(hstr, len(hdims)))
-            else:
-                hstr = match.group(1)
-                hdims_temp = hdims
-                hdims = list()
-                hdim_index = 0
-                for token in tokens:
-                    if token == ':':
-                        hdims.append(hdims_temp[hdim_index])
-                        hdim_index = hdim_index + 1
-                    else:
-                        hdims.append(token)
-                    # End if
-                # End for
-            # End if
-        # End if
-        if len(hdims) > 0:
-            dimstr = '('
-        else:
-            dimstr = ''
-        # End if
-        for hdim in hdims:
-            # We can only have a single element of a DDT when selecting
-            # a field. Is this a thread block?
-            if ddt and (hdim == 'thread_block_begin:thread_block_end'):
-                hdim = 'thread_block_number'
-            # End if
-            if ddt and (':' in hdim):
-                raise CCPPError("Invalid DDT dimension spec {}{}".format(hstr, hdimval))
-            else:
-                # Find the host model variable for each dim
-                hsdims = self.find_host_model_var(hdim, host_model)
-                dimstr = dimstr + dimsep + hsdims
-                dimsep = ', '
-            # End if
-        # End for
-        if len(hdims) > 0:
-            dimstr = dimstr + ')'
-        # End if
-        return hstr + dimstr
-
-    def analyze(self, phase, parent, scheme_headers, suite_vars, logger):
+    def analyze(self, phase, parent, scheme_headers, suite_vars, level, logger):
         # Find the host model (do we need to do this?)
         host_model = parent
         while host_model.parent is not None:
@@ -233,44 +289,49 @@ class Scheme(object):
         if my_header is None:
             raise CCPPError('Could not find subroutine, {}'.format(subroutine_name))
         else:
-            # We need to find the host model variable for each of our arguments
-            my_args = my_header.variable_list()
-            host_arglist = list()
-            for svar in my_args:
-                stdname = svar.get_prop_value('standard_name')
-                intent = svar.get_prop_value('intent').lower()
-                hvar = parent.find_variable(stdname, loop_subst=True)
-                if (intent == 'in') or (intent == 'inout'):
-                    if hvar is None:
-                        raise CCPPError("No matching host or suite variable for {} input, {}".format(self._subroutine_name, stdname))
-                elif hvar is None:
-                    # Create suite variable for intent(out)
-                    suite_vars.add_variable(svar, exists_ok=False)
-                    hvar = suite_vars.find_variable(stdname)
-                # End if (no else needed)
-                if isinstance(hvar, VarDDT):
-                    ##XXgoldyXX: HACK! Take this out when DDTS removed from suites
-                    host_arglist.append(self.ddtspec_to_str(hvar._var_ref_list, host_model))
-                elif isinstance(hvar, tuple):
-                    loop_subst = VarDictionary.loop_subst_match(stdname)
-                    if (loop_subst is not None) and (len(loop_subst) == 2):
-                        # Special case for loops
-                        lnames = [x.get_prop_value('local_name') for x in hvar]
-                        argstr = "{end} - {beg} + 1".format(beg=lnames[0], end=lnames[1])
-                        host_arglist.append(argstr)
-                    else:
-                        for var in hvar:
-                            argstr = self.host_arg_str(var, host_model, False)
-                            host_arglist.append(argstr)
-                        # End for
-                    # End if
-                else:
-                    argstr = self.host_arg_str(hvar, host_model, False)
-                    host_arglist.append(argstr)
-                # End if
+            for var in my_header.variable_list():
+                self._call_list.add_variable(var)
             # End for
-            self._arglist = host_arglist
-        # End if
+# XXgoldyXX: v debug only
+#            # We need to find the host model variable for each of our arguments
+#            my_args = my_header.variable_list()
+#            host_arglist = list()
+#            for svar in my_args:
+#                stdname = svar.get_prop_value('standard_name')
+#                intent = svar.get_prop_value('intent').lower()
+#                hvar = parent.find_variable(stdname, loop_subst=True)
+#                if (intent == 'in') or (intent == 'inout'):
+#                    if hvar is None:
+#                        raise CCPPError("No matching host or suite variable for {} input, {}".format(self._subroutine_name, stdname))
+#                elif hvar is None:
+#                    # Create suite variable for intent(out)
+#                    suite_vars.add_variable(svar, exists_ok=False)
+#                    hvar = suite_vars.find_variable(stdname)
+#                # End if (no else needed)
+#                if isinstance(hvar, VarDDT):
+#                    ##XXgoldyXX: HACK! Take this out when DDTS removed from suites
+#                    host_arglist.append(self.ddtspec_to_str(hvar._var_ref_list, host_model))
+#                elif isinstance(hvar, tuple):
+#                    loop_subst = VarDictionary.loop_subst_match(stdname)
+#                    if (loop_subst is not None) and (len(loop_subst) == 2):
+#                        # Special case for loops
+#                        lnames = [x.get_prop_value('local_name') for x in hvar]
+#                        argstr = "{end} - {beg} + 1".format(beg=lnames[0], end=lnames[1])
+#                        host_arglist.append(argstr)
+#                    else:
+#                        for var in hvar:
+#                            argstr = self.host_arg_str(var, host_model, False)
+#                            host_arglist.append(argstr)
+#                        # End for
+#                    # End if
+#                else:
+#                    argstr = self.host_arg_str(hvar, host_model, False)
+#                    host_arglist.append(argstr)
+#                # End if
+#            # End for
+#            self._arglist = host_arglist
+#        # End if
+# XXgoldyXX: ^ debug only
         return scheme_mods, list() # No loop variables for scheme
 
     def write(self, outfile, indent):
@@ -286,27 +347,28 @@ class Scheme(object):
 class Subcycle(object):
     "Class to represent a subcycled group of schemes"
 
-    __def_name_index__ = 0 # To create unique default loop index variables
-
     def __init__(self, sub_xml, context):
         self._name = sub_xml.get('name', None)
-        if self._name is None:
-            Subcycle.__def_name_index__ = Subcycle.__def_name_index__ + 1
-            self._name = "subcycle_index{}".format(Subcycle.__def_name_index__)
-        # End if
         self._loop = sub_xml.get('loop', "1")
         self._context = context
         self._schemes = list()
         for scheme in sub_xml:
-            self._schemes.append(Scheme(scheme, context))
-        # End forn
+            new_item = new_suite_item(item, context)
+            self._schemes.append(new_item)
+        # End for
+        # A null call list for compatibility
+        self._call_list = None
 
-    def analyze(self, phase, parent, scheme_headers, suite_vars, logger):
+    def analyze(self, phase, parent, scheme_headers, suite_vars, level, logger):
         loopvars = set()
-        loopvars.add('{}integer :: {}'.format(indent(2), self.name))
+        if self._name is None:
+            self._name = "subcycle_index{}".format(level)
+        # End if
+        loopvars.add('integer :: {}'.format(self.name))
+        self._call_list = CallList(self.name)
         scheme_mods = set()
         for scheme in self._schemes:
-            smods, lvars = scheme.analyze(phase, parent, scheme_headers, suite_vars, logger)
+            smods, lvars = scheme.analyze(phase, parent, scheme_headers, suite_vars, level+1, logger)
             for smod in smods:
                 scheme_mods.add(smod)
             # End for
@@ -315,6 +377,11 @@ class Subcycle(object):
             # End for
         # End for
         return scheme_mods, loopvars
+
+    @property
+    def call_list(self):
+        "Null call list for compatibility with schemes"
+        return self._call_list
 
     def write(self, outfile, indent):
         outfile.write('do {} = 1, {}'.format(self.name, self.loop), indent)
@@ -366,13 +433,13 @@ class Group(VarDictionary):
         # End if
         self._transition = transition
         self._parts = list()
+        # Initialize the dictionary of variables internal to group
         super(Group, self).__init__(self.name, parent_dict=parent)
+        # Initialize dictionary of variables passed from outside
+        self._call_list = CallList(self.name)
         for item in group_xml:
-            if item.tag == 'subcycle':
-                self.add_item(Subcycle(item, self, context))
-            else:
-                self.add_item(Scheme(item, context))
-            # End if
+            new_item = new_suite_item(item, context)
+            self.add_item(new_item)
         # End for
         # Grab a frozen copy of the context
         self._context = ParseContext(context=context)
@@ -405,6 +472,11 @@ class Group(VarDictionary):
         return schemes
 
     @property
+    def call_list(self):
+        "Return this group's call list dictionary"
+        return self._call_list
+
+    @property
     def phase(self):
         'Return the CCPP state transition for this group spec'
         return self._transition
@@ -421,16 +493,31 @@ class Group(VarDictionary):
             return None, None
         # End if
 
+    def move_to_call_list(self, standard_name):
+        '''Move a variable from the group internal dictionary to the call list.
+        This is done when the variable, <standard_name>, will be allocated by
+        the suite.
+        '''
+        gvar = self.find_variable(standard_name, any_scope=False)
+        if gvar is None:
+            raise ParseInternalError("Group {}, cannot move {}, variable not found".format(self.name, standard_name))
+        else:
+            self._call_list.add_variable(gvar, exists_ok=False)
+            self.remove_variable(standard_name)
+        # End if
+
     def analyze(self, phase, suite_vars, scheme_headers, logger):
+# XXgoldyXX: v debug only
         # We need a copy of the API and host model variables for dummy args
         self._host_vars = suite_vars.parent.variable_list(recursive=True,
                                                           loop_vars=(phase=='run'))
+# XXgoldyXX: ^ debug only
         self._phase = phase
         for item in self._parts:
             # Items can be schemes, subcycles or other objects
             # All have the same interface and return a set of module use
             # statements (lschemes) and a set of loop variables
-            lschemes, lvars = item.analyze(phase, self, scheme_headers, suite_vars, logger)
+            lschemes, lvars = item.analyze(phase, self, scheme_headers, suite_vars, 1, logger)
             # Keep track of loop variables to define
             for lvar in lvars:
                 self._loop_var_defs.add(lvar)
@@ -438,11 +525,30 @@ class Group(VarDictionary):
             for lscheme in lschemes:
                 self._local_schemes.add(lscheme)
             # End for
+            # Add each scheme's variables either to our call list (field
+            # comes from the host model) or to our internal dictionary
+            # (field is defined in the group subroutine)
+            for scheme in self.schemes():
+                for cvar in scheme.call_list:
+                    stdname = cvar.get_prop_value('standard_name')
+                    if self.find_variable(stdname) or (stdname in suite_vars):
+                        # Someone higher up knows about this
+                        self._call_list.add_variable(cvar, exists_ok=True)
+                    elif cvar.get_prop_value('intent') == 'out':
+                        self.add_variable(cvar, exists_ok=True)
+                    else:
+                        intent = cvar.get_prop_value('intent')
+                        lname = cvar.get_prop_value('local_name')
+                        raise CCPPError("{grp} {int} variable {lnam} has no source".format(grp=self.name, int=intent, lnam=lname))
+                    # End if
+                # End for
         # End for
         self._phase_check_stmts = Suite.check_suite_state(phase)
         self._set_state = Suite.set_suite_state(phase)
-        # Find any host DDT variables to create use statements
-        self._host_ddts = ddt_modules(self._host_vars)
+# XXgoldyXX: v debug only
+#        # Find any host DDT variables to create use statements
+#        self._host_ddts = ddt_modules(self._host_vars)
+# XXgoldyXX: ^ debug only
 
     def write(self, outfile, host_arglist, indent,
               suite_vars=None, allocate=False, deallocate=False):
@@ -730,11 +836,11 @@ end module {module}
         (None, None, None)
         '''
         # Collect all the available schemes
+        mgroups = self._full_groups.values()
         for header_list in scheme_headers:
             for header in header_list:
                 pgroup = None
-                for gname in self._full_groups.keys():
-                    mgroup = self._full_groups[gname]
+                for mgroup in mgroups:
                     pgroup, func_id = mgroup.phase_match(header.title)
                     if pgroup is not None:
                         break
@@ -758,6 +864,7 @@ end module {module}
         self._host_arg_list_full = host_model.argument_list()
         self._host_arg_list_noloop = host_model.argument_list(loop_vars=False)
         # First pass, create init, run, and finalize sequences
+        gvar_stdnames = {} # Standard names of group-created vars
         for item in self.groups:
             if item.name in self._full_groups:
                 phase = self._full_groups[item.name].phase
@@ -765,8 +872,29 @@ end module {module}
                 phase = 'run'
             # End if
             logger.debug("Group {}, schemes = {}".format(item.name, [x.name for x in item.schemes()]))
-            # Note that the group analyze can update this suite's vars
-            item.analyze(phase, self, scheme_headers, logger)
+            item.analyze(phase, gvar_stdnames.keys(), scheme_headers, logger)
+            # Look for group variables that need to be promoted to the suite
+            # We need to promote any variable used later to the suite, however,
+            # we do not yet know if it will be used.
+            for gvar in item.call_list:
+                stdname = gvar.get_prop_value('standard_name')
+                if stdname in gvar_stdnames:
+                    group = gvar_stdnames[stdname]
+                    # Promote variable to suite level
+                    self.add_variable(gvar)
+                    # Move to group's call list and our group list
+                    group.move_to_call_list(stdname)
+                    del gvar_stdnames[stdname]
+                # End if
+            # End for
+            # Add new group-created variables
+            gvars = item.variable_list()
+            for gvar in gvars:
+                stdname = gvar.get_prop_value('standard_name')
+                if not stdname in gvar_stdnames:
+                    gvar_stdnames[stdname] = item
+                # End if
+            # End for
         # End for
 
     def is_run_group(self, group):
@@ -859,7 +987,7 @@ private
 
     __sub_name_template__ = 'ccpp_physics'
 
-    __subhead__ = 'subroutine {subname}({host_call_list})'
+    __subhead__ = 'subroutine {subname}({api_call_list})'
 
     __subfoot__ = 'end subroutine {subname}\n'
 
@@ -912,6 +1040,22 @@ end module {module}
         if self._errflg_var is None:
             raise CCPPError('Required variable, ccpp_error_flag, not found')
         # End if
+        # We need a call list for every phase
+        self.__call_lists = {}
+        for phase in CCPP_STATE_MACH.transitions():
+            self.__call_lists[phase] = CallList('API_' + phase)
+            self.__call_lists[phase].add_variable(self.suite_name_var)
+            if phase == 'run':
+                self.__call_lists[phase].add_variable(self.suite_part_var)
+            # End if
+            for suite in self._suites:
+                for group in suite.groups:
+                    if group.phase == phase:
+                        self.__call_lists[phase].add_vars(group.call_list)
+                    # End if
+                # End for
+             # End for
+        # End for
 
     @property
     def module(self):
@@ -930,6 +1074,14 @@ end module {module}
     def interface_name(cls, phase):
         'Return the name of an API interface function'
         return "{}_{}".format(cls.__sub_name_template__, phase)
+
+    def call_list(self, phase):
+        "Return the appropriate API call list variables"
+        if phase in self.__call_lists:
+            return self.__call_lists[phase]
+        else:
+            raise ParseInternalError("Illegal phase, '{}'".format(phase))
+        # End if
 
     def write(self, output_dir):
         """Write CCPP API module"""
