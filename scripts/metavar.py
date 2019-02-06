@@ -930,7 +930,7 @@ class VarDictionary(OrderedDict):
             if self._logger is not None:
                 self._logger.error("Attempt to add incompatible variable, {} from {}".format(standard_name, newvar.source.name))
             # End if
-            errstr = "Standard name incompatible with {}"
+            errstr = "standard name, incompatible with {}"
             raise ParseSyntaxError(errstr.format(cvar.context),
                                    token=standard_name,
                                    context=newvar.source.context)

@@ -74,14 +74,14 @@ COPYRIGHT = '''!
 '''
 
 ###############################################################################
-def new_suite_object(item, context):
+def new_suite_object(item, context, logger):
 ###############################################################################
     "'Factory' method to create the appropriate suite object from XML"
     new_item = None
     if item.tag == 'subcycle':
-        new_item = self._schemes.append(Subcycle(item, context))
+        new_item = Subcycle(item, context, logger)
     elif item.tag == 'scheme':
-        new_item = self._schemes.append(Scheme(item, context))
+        new_item = Scheme(item, context, logger)
     else:
         raise CCPPError("Unknown CCPP suite element type, '{}'".format(item.tag))
     # End if
@@ -92,8 +92,17 @@ def new_suite_object(item, context):
 class CallList(VarDictionary):
     "A simple class to hold a routine's call list (dummy arguments)"
 
-    def __init__(self, name):
-        super(CallList, self).__init__(name)
+    def __init__(self, name, logger=None):
+        super(CallList, self).__init__(name, logger=logger)
+
+    def add_vars(self, call_list):
+        "Add new variables from another CallList (<call_list>)"
+        for var in call_list.variable_list():
+            stdname = var.get_prop_value('standard_name')
+            if stdname not in self:
+                self.add_variable(var)
+            # End if
+        # End for
 
     def call_string(self, dict=None):
         """Return a dummy argument string for this call list.
@@ -125,13 +134,13 @@ class CallList(VarDictionary):
 class Scheme(object):
     "A single scheme in a suite (e.g., init method)"
 
-    def __init__(self, scheme_xml, context):
+    def __init__(self, scheme_xml, context, logger):
         self._name = scheme_xml.text
         self._context = context
         self._version = scheme_xml.get('version', None)
         self._lib = scheme_xml.get('lib', None)
         # This dictionary is not part of the object but how it is used
-        self._call_list = CallList(self.name)
+        self._call_list = CallList(self.name, logger=logger)
 
     @property
     def name(self):
@@ -347,10 +356,11 @@ class Scheme(object):
 class Subcycle(object):
     "Class to represent a subcycled group of schemes"
 
-    def __init__(self, sub_xml, context):
+    def __init__(self, sub_xml, context, logger):
         self._name = sub_xml.get('name', None)
         self._loop = sub_xml.get('loop', "1")
         self._context = context
+        self._logger = logger
         self._schemes = list()
         for scheme in sub_xml:
             new_item = new_suite_item(item, context)
@@ -365,7 +375,7 @@ class Subcycle(object):
             self._name = "subcycle_index{}".format(level)
         # End if
         loopvars.add('integer :: {}'.format(self.name))
-        self._call_list = CallList(self.name)
+        self._call_list = CallList(self.name, logger=self._logger)
         scheme_mods = set()
         for scheme in self._schemes:
             smods, lvars = scheme.analyze(phase, parent, scheme_headers, suite_vars, level+1, logger)
@@ -426,7 +436,7 @@ class Group(VarDictionary):
    end subroutine {subname}
 '''
 
-    def __init__(self, group_xml, transition, parent, context):
+    def __init__(self, group_xml, transition, parent, context, logger):
         self._name = parent.name + '_' + group_xml.get('name')
         if transition not in CCPP_STATE_MACH.transitions():
             raise ParseInternalError("Bad transition argument to Group, '{}'".format(transition))
@@ -436,9 +446,9 @@ class Group(VarDictionary):
         # Initialize the dictionary of variables internal to group
         super(Group, self).__init__(self.name, parent_dict=parent)
         # Initialize dictionary of variables passed from outside
-        self._call_list = CallList(self.name)
+        self._call_list = CallList(self.name, logger=logger)
         for item in group_xml:
-            new_item = new_suite_item(item, context)
+            new_item = new_suite_object(item, context, logger)
             self.add_item(new_item)
         # End for
         # Grab a frozen copy of the context
@@ -496,9 +506,9 @@ class Group(VarDictionary):
 
     def analyze(self, phase, suite_vars, scheme_headers, logger):
 # XXgoldyXX: v debug only
-        # We need a copy of the API and host model variables for dummy args
-        self._host_vars = suite_vars.parent.variable_list(recursive=True,
-                                                          loop_vars=(phase=='run'))
+#        # We need a copy of the API and host model variables for dummy args
+#        self._host_vars = suite_vars.parent.variable_list(recursive=True,
+#                                                          loop_vars=(phase=='run'))
 # XXgoldyXX: ^ debug only
         self._phase = phase
         for item in self._parts:
@@ -517,7 +527,7 @@ class Group(VarDictionary):
             # comes from the host model) or to our internal dictionary
             # (field is defined in the group subroutine)
             for scheme in self.schemes():
-                for cvar in scheme.call_list:
+                for cvar in scheme.call_list.variable_list():
                     stdname = cvar.get_prop_value('standard_name')
                     if self.find_variable(stdname) or (stdname in suite_vars):
                         # Someone higher up knows about this
@@ -729,7 +739,7 @@ end module {module}
 
     def new_group(self, group_string, transition):
         gxml = ET.fromstring(group_string)
-        group = Group(gxml, transition, self, self._context)
+        group = Group(gxml, transition, self, self._context, self._logger)
         self._full_groups[group.name] = group
         self._full_phases[group.phase] = group
         return group
@@ -758,10 +768,10 @@ end module {module}
         self._timestep_final_group = self.new_group(Suite.__timestep_final_group__,
                                                     "timestep_final")
         # Set up some groupings for later efficiency
-        self._beg_groups = [x.name for x in [self._suite_init_group,
-                                             self._timestep_init_group]]
-        self._end_groups = [x.name for x in [self._suite_final_group,
-                                             self._timestep_final_group]]
+        self._beg_groups = [self._suite_init_group.name,
+                            self._timestep_init_group.name]
+        self._end_groups = [self._suite_final_group.name,
+                            self._timestep_final_group.name]
         # Build hierarchical structure as in SDF
         self._groups.append(self._suite_init_group)
         self._groups.append(self._timestep_init_group)
@@ -770,7 +780,7 @@ end module {module}
             # Suite item is a group or a suite-wide init or final method
             if item_type == 'group':
                 # Parse a group
-                self._groups.append(Group(suite_item, 'run', self, self._context))
+                self._groups.append(Group(suite_item, 'run', self, self._context, self._logger))
             else:
                 match_trans = CCPP_STATE_MACH.function_match(item_type)
                 if match_trans is None:
@@ -877,7 +887,7 @@ end module {module}
                     if not pgroup.has_item(header.title):
                         sstr = Suite.__scheme_template__.format(func_id)
                         sxml = ET.fromstring(sstr)
-                        scheme = Scheme(sxml, self._context)
+                        scheme = Scheme(sxml, self._context, logger)
                         pgroup.add_item(scheme)
                     # End if (no else needed)
                 else:
@@ -903,7 +913,7 @@ end module {module}
             # Look for group variables that need to be promoted to the suite
             # We need to promote any variable used later to the suite, however,
             # we do not yet know if it will be used.
-            for gvar in item.call_list:
+            for gvar in item.call_list.variable_list():
                 stdname = gvar.get_prop_value('standard_name')
                 if stdname in gvar_stdnames:
                     group = gvar_stdnames[stdname]
@@ -949,6 +959,14 @@ end module {module}
             # End if
         # End for
         return parts
+
+    def phase_group(self, phase):
+        "Return the (non-run) group specified by <phase>"
+        if phase in self._full_phases:
+            return self._full_phases[phase]
+        else:
+            raise ParseInternalError("Incorrect phase, '{}'".format(phase))
+        # End if
 
     def write(self, output_dir):
         """Create caps for all groups in the suite and for the entire suite
@@ -1070,7 +1088,7 @@ end module {module}
         # We need a call list for every phase
         self.__call_lists = {}
         for phase in CCPP_STATE_MACH.transitions():
-            self.__call_lists[phase] = CallList('API_' + phase)
+            self.__call_lists[phase] = CallList('API_' + phase, self._logger)
             self.__call_lists[phase].add_variable(self.suite_name_var)
             if phase == 'run':
                 self.__call_lists[phase].add_variable(self.suite_part_var)
@@ -1131,9 +1149,11 @@ end module {module}
             api.write(API.__header__.format(host_model=self._host.name,
                                             module=self.module), 0)
             api.write(API.__preamble__.format(module_use=module_use), 1)
-            for stage in CCPP_STATE_MACH.transitions():
-                api.write("public :: ccpp_physics_{}".format(stage), 1)
+            # Declare the API interfaces for each stage
+            for phase in CCPP_STATE_MACH.transitions():
+                api.write("public :: ccpp_physics_{}".format(phase), 1)
             # End for
+            # Declare the API interfaces for the suite inquiry functions
             api.write("public :: {}".format(API.__suite_fname__), 1)
             api.write("public :: {}".format(API.__part_fname__), 1)
             api.write("\ncontains\n", 0)
@@ -1142,62 +1162,68 @@ end module {module}
             for suite in self._suites:
                 max_suite_len = max(max_suite_len, len(suite.module))
             # End for
-            for stage in CCPP_STATE_MACH.transitions():
-                host_call_list = self.suite_name_var.get_prop_value('local_name')
-                if stage == 'run':
-                    host_call_list = host_call_list + ', ' + self.suite_part_var.get_prop_value('local_name')
-                    hal = self._host_arg_list_full
-                    hddt = self._host_ddt_list_full
-                else:
-                    hal = self._host_arg_list_noloop
-                    hddt = self._host_ddt_list_noloop
-                # End if
-                host_call_list = host_call_list + ", " + hal
-                host_call_list = host_call_list + ', '.join(self.prop_list('local_name'))
-                subname = API.interface_name(stage)
+            for phase in CCPP_STATE_MACH.transitions():
+# XXgoldyXX: v debug only
+#                host_call_list = self.suite_name_var.get_prop_value('local_name')
+#                if phase == 'run':
+#                    host_call_list = host_call_list + ', ' + self.suite_part_var.get_prop_value('local_name')
+#                    hal = self._host_arg_list_full
+#                    hddt = self._host_ddt_list_full
+#                else:
+#                    hal = self._host_arg_list_noloop
+#                    hddt = self._host_ddt_list_noloop
+#                # End if
+#                host_call_list = host_call_list + ", " + hal
+#                host_call_list = host_call_list + ', '.join(self.prop_list('local_name'))
+# XXgoldyXX: ^ debug only
+                subname = API.interface_name(phase)
                 api.write(API.__subhead__.format(subname=subname, host_call_list=host_call_list), 1)
                 # Write out any use statements
                 mlen = max([len(x[0]) for x in hddt])
                 mlen = max(mlen, max_suite_len)
                 for suite in self._suites:
                     mspc = (mlen - len(suite.module))*' '
-                    if stage == 'run':
+                    if phase == 'run':
                         for spart in suite.groups:
                             if suite.is_run_group(spart):
                                 api.write("use {}, {}only: {}".format(suite.module, mspc, spart.name), 2)
                             # End if
                         # End for
                     else:
-                        api.write("use {}, {}only: {}_{}".format(suite.module, mspc, suite.name, stage), 2)
+                        api.write("use {}, {}only: {}_{}".format(suite.module, mspc, suite.name, phase), 2)
                     # End if
                 # End for
+# XXgoldyXX: v debug only
                 for ddt in hddt:
                     mspc = (mlen - len(ddt[0]))*' '
                     api.write("use {}, {}only: {}".format(ddt[0], mspc, ddt[1]), 2)
                 # End for
                 # Declare dummy arguments
                 self.suite_name_var.write_def(api, 2, self)
-                if stage == 'run':
+                if phase == 'run':
                     self.suite_part_var.write_def(api, 2, self)
                 # End if
                 for var in self._host.variable_list():
                     stdname = var.get_prop_value('standard_name')
-                    if (stage=='run') or (not VarDictionary.loop_var_match(stdname)):
+                    if (phase=='run') or (not VarDictionary.loop_var_match(stdname)):
                         var.write_def(api, 2, self)
                     # End if
                 # End for
-                self.declare_variables(api, 2, loop_vars=(stage=='run'))
+# XXgoldyXX: ^ debug only
+                self.declare_variables(api, 2, loop_vars=(phase=='run'))
+                self.call_list(phase).declare_variables(api, 2)
                 # Now, add in cases for all suite parts
                 else_str = '\n'
                 for suite in self._suites:
                     api.write("{}if (trim(suite_name) == '{}') then".format(else_str, suite.name), 2)
-                    if stage == 'run':
+                    if phase == 'run':
                         el2_str = ''
                         for spart in suite.groups:
                             if suite.is_run_group(spart):
                                 pname = spart.name[len(suite.name)+1:]
                                 api.write("{}if (trim(suite_part) == '{}') then".format(el2_str, pname), 3)
-                                api.write("call {}({})".format(spart.name, self._host_arg_list_full), 4)
+                                call_str = spart.call_list.call_string()
+                                api.write("call {}({})".format(spart.name, call_str), 4)
                                 el2_str = 'else '
                             # End if
                         # End for
@@ -1207,7 +1233,8 @@ end module {module}
                         api.write("{errflg} = 1".format(errflg=errflg_name), 4)
                         api.write("end if", 3)
                     else:
-                        api.write("call {}_{}({})".format(suite.name, stage, self._host_arg_list_noloop), 3)
+                        call_str = suite.phase_group(phase).call_list.call_str()
+                        api.write("call {}_{}({})".format(suite.name, phase, call_str), 3)
                     # End if
                     else_str = 'else '
                 # End for
