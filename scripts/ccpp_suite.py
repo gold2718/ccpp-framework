@@ -760,6 +760,9 @@ end module {module}
         # Collect all the available schemes
         for header_list in scheme_headers:
             for header in header_list:
+                if header.type != 'SCHEME':
+                    continue
+                # End if
                 func_id, ftrans, match_trans = CCPP_STATE_MACH.function_match(header.title)
                 if match_trans in self._full_phases:
                     pgroup = self._full_phases[match_trans]
