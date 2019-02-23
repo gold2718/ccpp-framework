@@ -21,9 +21,10 @@ __all__ = [
     'ParseSource',
     'ParseSyntaxError',
     'ParseObject',
-    'register_fortran_ddt_name',
     'read_xml_file',
+    'register_fortran_ddt_name',
     'registered_fortran_ddt_name',
+    'registered_fortran_ddts',
     'setLogLevel',
     'setLogToFile',
     'setLogToNull',
@@ -45,6 +46,7 @@ if six.PY3:
     from parse_tools.parse_checkers import check_fortran_type
     from parse_tools.parse_checkers import registered_fortran_ddt_name
     from parse_tools.parse_checkers import register_fortran_ddt_name
+    from parse_tools.parse_checkers import registered_fortran_ddts
     from parse_tools.parse_checkers import check_dimensions
     from parse_tools.parse_checkers import check_cf_standard_name
     from parse_tools.parse_log      import initLog, setLogLevel
@@ -65,6 +67,7 @@ else:
     from parse_checkers import check_fortran_type
     from parse_checkers import registered_fortran_ddt_name
     from parse_checkers import register_fortran_ddt_name
+    from parse_checkers import registered_fortran_ddts
     from parse_checkers import check_dimensions, check_cf_standard_name
     from parse_log      import initLog, setLogLevel
     from parse_log      import setLogToStdout, setLogToNull

@@ -356,6 +356,11 @@ def registered_fortran_ddt_name(name):
 
 ########################################################################
 
+def registered_fortran_ddts():
+    return _REGISTERED_FORTRAN_DDT_NAMES
+
+########################################################################
+
 def register_fortran_ddt_name(name):
     if name not in _REGISTERED_FORTRAN_DDT_NAMES:
         _REGISTERED_FORTRAN_DDT_NAMES.append(name)

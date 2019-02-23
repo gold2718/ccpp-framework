@@ -423,6 +423,8 @@ class Var(object):
             # End if
             prop_dict['kind'] = prop_dict['ddt_type']
             del prop_dict['ddt_type']
+        elif registered_fortran_ddt_name(prop_dict['type']):
+            prop_dict['kind'] = prop_dict['type']
         # End if
         for key in prop_dict:
             if Var.get_prop(key) is None:
@@ -606,20 +608,22 @@ class Var(object):
         else:
             intent_str = ' '*13
         # End if
+        tcomma = ',' if len(intent_str.strip()) > 0 else ' '
         if self.is_ddt():
-            str = "type({kind}){cspc}{intent} :: {name}{dims}"
-            cspc = ',' + ' '*(13 - len(kind))
+            str = "type({kind}){cma}{cspc}{intent} :: {name}{dims}"
+            cspc = ' '*(13 - len(kind))
         else:
             if (kind is not None) and (len(kind) > 0):
-                str = "{type}({kind}){cspc}{intent} :: {name}{dims}"
-                cspc = ',' + ' '*(17 - len(vtype) - len(kind))
+                str = "{type}({kind}){cma}{cspc}{intent} :: {name}{dims}"
+                cspc = ' '*(17 - len(vtype) - len(kind))
             else:
-                str = "{type}{cspc}{intent} :: {name}{dims}"
-                cspc = ',' + ' '*(19 - len(vtype))
+                str = "{type}{cma}{cspc}{intent} :: {name}{dims}"
+                cspc = ' '*(19 - len(vtype))
             # End if
         # End if
         outfile.write(str.format(type=vtype, kind=kind, intent=intent_str,
-                                 name=name, dims=dimstr, cspc=cspc), indent)
+                                 name=name, dims=dimstr, cma=tcomma, cspc=cspc),
+                      indent)
 
     def is_ddt(self):
         '''Return True iff <self> is a DDT type.'''

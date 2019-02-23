@@ -491,21 +491,23 @@ class Group(VarDictionary):
                 timestep_var = svar.get_prop_value('persistence')
                 if group_type == timestep_var:
                     dims = svar.get_dimensions()
-                    rdims = list()
-                    for dim in dims:
-                        dvar = self.find_dimension_subst(dim, context=self._context)
-                        if dvar is None:
-                            dvar = self.find_variable(dim, any_scope=True)
-                        # End if
-                        if dvar is None:
-                            raise CCPPError("Dimension variable, {} not found{}".format(dim, context_string(self._context)))
-                        else:
-                            rdims.append(dvar)
-                        # End if
-                    # End for
-                    alloc_str = ', '.join([x.get_prop_value('local_name') for x in rdims])
-                    lname = svar.get_prop_value('local_name')
-                    outfile.write("allocate({}({}))".format(lname, alloc_str), indent+1)
+                    if len(dims) > 0:
+                        rdims = list()
+                        for dim in dims:
+                            dvar = self.find_dimension_subst(dim, context=self._context)
+                            if dvar is None:
+                                dvar = self.find_variable(dim, any_scope=True)
+                            # End if
+                            if dvar is None:
+                                raise CCPPError("Dimension variable, {} not found{}".format(dim, context_string(self._context)))
+                            else:
+                                rdims.append(dvar)
+                            # End if
+                        # End for
+                        alloc_str = ', '.join([x.get_prop_value('local_name') for x in rdims])
+                        lname = svar.get_prop_value('local_name')
+                        outfile.write("allocate({}({}))".format(lname, alloc_str), indent+1)
+                    # End if
                 # End if
             # End for
         # End if
@@ -516,10 +518,12 @@ class Group(VarDictionary):
         # Deallocate suite vars
         if deallocate:
             for svar in suite_vars.variable_list():
-                timestep_var = svar.get_prop_value('persistence')
-                if group_type == timestep_var:
-                    lname = svar.get_prop_value('local_name')
-                    outfile.write('deallocate({})'.format(lname), indent+1)
+                if len(svar.get_dimensions()) > 0:
+                    timestep_var = svar.get_prop_value('persistence')
+                    if group_type == timestep_var:
+                        lname = svar.get_prop_value('local_name')
+                        outfile.write('deallocate({})'.format(lname), indent+1)
+                    # End if
                 # End if
             # End for
         # End if
