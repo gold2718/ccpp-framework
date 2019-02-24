@@ -18,7 +18,7 @@ from host_cap import write_host_cap
 from ccpp_suite import API, Suite
 from parse_tools import initLog, setLogToStdout, setLogLevel
 from parse_tools import CCPPError, ParseInternalError
-from parse_tools import registered_fortran_ddts
+from parse_tools import registered_fortran_ddt_names
 
 ## Init this now so that all Exceptions can be trapped
 logger = initLog('ccpp_capgen')
@@ -244,7 +244,7 @@ def _main_func():
     logger.debug("headers = {}".format([host_model._ddt_defs[x].title for x in host_model._ddt_defs.keys()]))
     logger.debug("variables = {}".format([x.get_prop_value('local_name') for x in host_model.variable_list()]))
     logger.debug("schemes = {}".format([[x._table_title for x in y] for y in scheme_headers]))
-    logger.debug("registered Fortran DDT types = {}".format(registered_fortran_ddts()))
+    logger.debug("registered Fortran DDT types = {}".format(registered_fortran_ddt_names()))
     # Finally, we can get on with writing suites
     ccpp_api = API(sdfs, host_model, scheme_headers, logger)
     cap_filenames = ccpp_api.write(output_dir)

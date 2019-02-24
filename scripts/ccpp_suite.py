@@ -854,7 +854,13 @@ end module {module}
             outfile.write(Suite.__header__.format(module=self._module), 0)
             # Write module 'use' statements here
             outfile.write('use machine', 1)
-            outfile.write('implicit none\nprivate\n\n! Suite interfaces', 1)
+            mod_set = ddt_modules(self.variable_list())
+            max_modname = max([len(x[0]) for x in mod_set] + [0])
+            for mod in mod_set:
+                cspc = max_modname - len(mod[0])
+                outfile.write('use {}, {}only: {}'.format(mod[0], ' '*cspc, mod[1]), 1)
+            # End for
+            outfile.write('\nimplicit none\nprivate\n\n! Suite interfaces', 1)
             outfile.write(Suite.__state_machine_init__.format(css_var_name=Suite.__state_machine_var_name__, state=Suite.___state_machine_initial_state__), 1)
             for group in self._groups:
                 outfile.write('public :: {}'.format(group.name), 1)

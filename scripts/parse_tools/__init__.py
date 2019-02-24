@@ -23,8 +23,9 @@ __all__ = [
     'ParseObject',
     'read_xml_file',
     'register_fortran_ddt_name',
+    'registered_fortran_ddt_module',
     'registered_fortran_ddt_name',
-    'registered_fortran_ddts',
+    'registered_fortran_ddt_names',
     'setLogLevel',
     'setLogToFile',
     'setLogToNull',
@@ -44,9 +45,10 @@ if six.PY3:
     from parse_tools.parse_checkers import check_fortran_ref, FORTRAN_SCALAR_REF
     from parse_tools.parse_checkers import check_fortran_intrinsic
     from parse_tools.parse_checkers import check_fortran_type
+    from parse_tools.parse_checkers import registered_fortran_ddt_module
     from parse_tools.parse_checkers import registered_fortran_ddt_name
     from parse_tools.parse_checkers import register_fortran_ddt_name
-    from parse_tools.parse_checkers import registered_fortran_ddts
+    from parse_tools.parse_checkers import registered_fortran_ddt_names
     from parse_tools.parse_checkers import check_dimensions
     from parse_tools.parse_checkers import check_cf_standard_name
     from parse_tools.parse_log      import initLog, setLogLevel
@@ -65,9 +67,10 @@ else:
     from parse_checkers import check_fortran_ref, FORTRAN_SCALAR_REF
     from parse_checkers import check_fortran_intrinsic
     from parse_checkers import check_fortran_type
+    from parse_checkers import registered_fortran_ddt_module
     from parse_checkers import registered_fortran_ddt_name
     from parse_checkers import register_fortran_ddt_name
-    from parse_checkers import registered_fortran_ddts
+    from parse_checkers import registered_fortran_ddt_names
     from parse_checkers import check_dimensions, check_cf_standard_name
     from parse_log      import initLog, setLogLevel
     from parse_log      import setLogToStdout, setLogToNull

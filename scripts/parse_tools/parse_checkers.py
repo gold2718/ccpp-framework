@@ -125,7 +125,7 @@ FORTRAN_INTRINSIC_TYPES = [ "integer", "real", "logical", "complex",
 FORTRAN_DP_RE = re.compile(r"(?i)double\s*precision")
 FORTRAN_TYPE_RE = re.compile(r"(?i)type\s*\(\s*("+FORTRAN_ID+r")\s*\)")
 
-_REGISTERED_FORTRAN_DDT_NAMES = list()
+__REGISTERED_FORTRAN_DDT_NAMES__ = {}
 
 ########################################################################
 
@@ -349,21 +349,34 @@ def check_fortran_type(typestr, error=False):
 ########################################################################
 
 def registered_fortran_ddt_name(name):
-    if name in _REGISTERED_FORTRAN_DDT_NAMES:
+    if name in __REGISTERED_FORTRAN_DDT_NAMES__:
         return name
     else:
         return None
 
 ########################################################################
 
-def registered_fortran_ddts():
-    return _REGISTERED_FORTRAN_DDT_NAMES
+def registered_fortran_ddt_module(name):
+    if name in __REGISTERED_FORTRAN_DDT_NAMES__:
+        return __REGISTERED_FORTRAN_DDT_NAMES__[name]
+    else:
+        return None
+    # End if
 
 ########################################################################
 
-def register_fortran_ddt_name(name):
-    if name not in _REGISTERED_FORTRAN_DDT_NAMES:
-        _REGISTERED_FORTRAN_DDT_NAMES.append(name)
+def registered_fortran_ddt_names():
+    return __REGISTERED_FORTRAN_DDT_NAMES__.keys()
+
+########################################################################
+
+def register_fortran_ddt_name(name, module):
+    if name not in __REGISTERED_FORTRAN_DDT_NAMES__:
+        if len(module) == 0:
+            raise CCPPError("DDT module name cannot be blank")
+        # End if
+        __REGISTERED_FORTRAN_DDT_NAMES__[name] = module
+    # End if
 
 ########################################################################
 

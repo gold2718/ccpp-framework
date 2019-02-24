@@ -185,7 +185,7 @@ class MetadataHeader(ParseSource):
             else:
                 # This should be a derived data type
                 self._header_type = 'DDT'
-                register_fortran_ddt_name(self.title)
+                register_fortran_ddt_name(self.title, self.module)
             # End if
         # End if
         # Time to initialize our ParseSource parent

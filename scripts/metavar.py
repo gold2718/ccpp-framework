@@ -11,7 +11,7 @@ from collections import OrderedDict
 # CCPP framework imports
 from parse_tools import check_fortran_ref, check_fortran_type, context_string
 from parse_tools import FORTRAN_DP_RE, FORTRAN_ID
-from parse_tools import registered_fortran_ddt_name
+from parse_tools import registered_fortran_ddt_name, registered_fortran_ddt_module
 from parse_tools import check_dimensions, check_cf_standard_name
 from parse_tools import ParseContext, ParseSource
 from parse_tools import ParseInternalError, ParseSyntaxError, CCPPError
@@ -120,8 +120,11 @@ def ddt_modules(variable_list):
     ddt_mods = set()
     for var in variable_list:
         if var.is_ddt():
-            module = var.get_prop_value('module')
-            if len(module) > 0:
+            ltype = var.get_prop_value('type')
+            module = registered_fortran_ddt_module(ltype)
+            if module is None:
+                raise CCPPError("No module for DDT type {}".format(lname))
+            elif len(module) > 0:
                 ddt_mods.add((module, var.get_prop_value('type')))
             # End if
         # End if
