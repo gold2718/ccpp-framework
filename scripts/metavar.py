@@ -467,12 +467,12 @@ class Var(object):
         stype =     self.get_prop_value('type')
         skind =     self.get_prop_value('kind')
         sunits =    self.get_prop_value('units')
-        srank=      self.get_prop_value('tank')
+        srank=      self.get_dimensions()
         sstd_name = self.get_prop_value('standard_name')
         otype =     other.get_prop_value('type')
         okind =     other.get_prop_value('kind')
         ounits =    other.get_prop_value('units')
-        orank=      other.get_prop_value('tank')
+        orank=      other.get_dimensions()
         ostd_name = other.get_prop_value('standard_name')
         if stype == 'character':
             kind_eq = ((skind == okind) or
@@ -550,6 +550,11 @@ class Var(object):
             newdims = dims
         # End if
         return newdims
+
+    def get_rank(self):
+        "Return the variable's rank (zero for scalar)"
+        dims = self.get_dimensions(loop_subst=False)
+        return len(dims)
 
     def write_def(self, outfile, indent, dict, allocatable=False, loop_subst=False):
         '''Write the definition line for the variable.'''
@@ -712,9 +717,9 @@ class VarSpec(object):
 
     def get_dimensions(self, loop_subst=False):
         if loop_subst:
-            rdims = Var.loop_subst_dims(dims)
+            rdims = Var.loop_subst_dims(self._dims)
         else:
-            rdims = dims
+            rdims = self._dims
         # End if
         return rdims
 

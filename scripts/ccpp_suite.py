@@ -102,7 +102,7 @@ class Scheme(object):
         # End for
         return '%'.join(args)
 
-    def find_host_model_var(self, hdim, host_model):
+    def find_host_model_var(self, hdim, isvector, host_model):
         "Create the correct array dimension reference for hdim"
         hsdims = list()
         for hsdim in hdim.split(':'):
@@ -140,7 +140,11 @@ class Scheme(object):
                 raise ParseInternalError("Unknown loop variable type, '{}' in '{}'".format(lv_type, hdim))
             # End if
         # End if
-        return ':'.join(hsdims)
+        dimname = ':'.join(hsdims)
+        if isvector and (not ':' in dimname):
+            dimname = '1:' + dimname
+        # End if
+        return dimname
 
     def host_arg_str(self, hvar, host_model, ddt):
         '''Create the proper statement of a piece of a host-model variable.
@@ -148,13 +152,18 @@ class Scheme(object):
         '''
         hstr = hvar.get_prop_value('local_name')
         hdims = hvar.get_dimensions()
+        rank = len(hdims)
         dimsep = ''
         # Does the local name have any extra indices?
         match = array_ref_re.match(hstr.strip())
-        if match is not None:
+        if match is None:
+            array_ind = [True]*rank
+        else:
             tokens = [x.strip() for x in match.group(2).strip().split(',')]
+            # Which indices are vectors?
+            array_ind = [x == ':' for x in tokens]
             # There should one ':' token for each entry in hdims
-            if tokens.count(':') != len(hdims):
+            if tokens.count(':') != rank:
                 raise CCPPError("Invalid DDT variable spec, {}, should have {} colons".format(hstr, len(hdims)))
             else:
                 hstr = match.group(1)
@@ -171,11 +180,12 @@ class Scheme(object):
                 # End for
             # End if
         # End if
-        if len(hdims) > 0:
+        if rank > 0:
             dimstr = '('
         else:
             dimstr = ''
         # End if
+        index = 0
         for hdim in hdims:
             # We can only have a single element of a DDT when selecting
             # a field. Is this a thread block?
@@ -186,12 +196,13 @@ class Scheme(object):
                 raise CCPPError("Invalid DDT dimension spec {}{}".format(hstr, hdimval))
             else:
                 # Find the host model variable for each dim
-                hsdims = self.find_host_model_var(hdim, host_model)
+                hsdims = self.find_host_model_var(hdim, array_ind[index], host_model)
                 dimstr = dimstr + dimsep + hsdims
                 dimsep = ', '
             # End if
+            index = index + 1
         # End for
-        if len(hdims) > 0:
+        if rank > 0:
             dimstr = dimstr + ')'
         # End if
         return hstr + dimstr
