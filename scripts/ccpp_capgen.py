@@ -25,8 +25,11 @@ logger = initLog('ccpp_capgen')
 ###############################################################################
 def is_xml_file(filename):
 ###############################################################################
-    parts = os.path.basename(filename).split('.')
-    return (len(parts) > 1) and (parts[-1].lower() == 'xml')
+    if ',' in filename:
+        return False
+    else:
+        parts = os.path.basename(filename).split('.')
+        return (len(parts) > 1) and (parts[-1].lower() == 'xml')
 
 ###############################################################################
 def check_for_existing_file(filename, description, readable=True):
@@ -214,12 +217,18 @@ def _main_func():
     # End if
     check_for_writeable_file(cap_output_file, "Cap output file")
     # Did we get an SDF input?
-    if sdf_pathsfile is not None:
+    if sdf_pathsfile is None:
+        sdfs = list()
+    else:
         sdf_is_xml = is_xml_file(sdf_pathsfile)
         if sdf_is_xml:
             check_for_existing_file(sdf_pathsfile, 'SDF file')
+            sdfs = [sdf_pathsfile]
         else:
-            check_for_existing_file(sdf_pathsfile, 'SDF pathnames file')
+            sdfs = sdf_pathsfile.split(",")
+            for sdf in sdfs:
+                check_for_existing_file(sdf, 'SDF pathnames file')
+            # End for
         # End if
     # End if
     ##XXgoldyXX: Temporary warning
@@ -230,16 +239,6 @@ def _main_func():
     host_model = parse_host_model_files(host_pathsfile, preproc_defs, logger)
     # Next, parse the scheme files
     scheme_headers = parse_scheme_files(schemes_pathsfile, preproc_defs, logger)
-    # Last, we need a list of SDF file(s)
-    if sdf_pathsfile is None:
-        sdfs = list()
-    else:
-        if sdf_is_xml:
-            sdfs = [sdf_pathsfile]
-        else:
-            sdfs = sdf_pathsfile
-        # End if
-    # End if
     logger.debug("headers = {}".format([host_model._ddt_defs[x].title for x in host_model._ddt_defs.keys()]))
     logger.debug("variables = {}".format([x.get_prop_value('local_name') for x in host_model.variable_list()]))
     logger.debug("schemes = {}".format([[x._table_title for x in y] for y in scheme_headers]))
