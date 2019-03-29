@@ -16,17 +16,12 @@ from fortran_tools import parse_fortran_file
 from host_model import HostModel
 from host_cap import write_host_cap
 from ccpp_suite import API, Suite
-from parse_tools import initLog, setLogToStdout, setLogLevel
+from parse_tools import init_log, set_log_level
 from parse_tools import CCPPError, ParseInternalError
+from metadata_table import MetadataHeader
 
 ## Init this now so that all Exceptions can be trapped
-logger = initLog('ccpp_capgen')
-
-###############################################################################
-def is_xml_file(filename):
-###############################################################################
-    parts = os.path.basename(filename).split('.')
-    return (len(parts) > 1) and (parts[-1].lower() == 'xml')
+logger = init_log('ccpp_capgen')
 
 ###############################################################################
 def check_for_existing_file(filename, description, readable=True):
@@ -128,15 +123,15 @@ def read_pathnames_from_file(pathsfile):
     return pathnames
 
 ###############################################################################
-def create_file_list(files, suffices, file_type):
+def create_file_list(files, suffix, file_type):
 ###############################################################################
     master_list = list()
     file_list = [x.strip() for x in files.split(',')]
     suffix_list = [x.strip() for x in suffices.split(',')]
     for filename in file_list:
         check_for_existing_file(filename, '{} pathnames file'.format(file_type))
-        suffix = os.path.basename(filename).split('.')[-1]
-        if suffix in suffix_list:
+        suff = os.path.basename(filename).split('.')[-1]
+        if suff == suffix:
             master_list.append(os.path.abspath(filename))
         else:
             master_list.extend(read_pathnames_from_file(filename))
@@ -152,14 +147,15 @@ def parse_host_model_files(host_filenames, preproc_defs, logger):
     return a host model object with the information.
     """
     mheaders = {}
-    xml_files = list()
+    metadata_files = list()
     for filename in host_filenames:
-        if is_xml_file(filename):
-            # We have to process XML files after processing Fortran files
-            # since the Fortran files may define DDTs used by registry files.
-            xml_files.append(filename)
+        # parse metadata file
+        mheaders = MetadataHeader.parse_metadata_file(filename, logger)
+        fort_file = find_associated_fortran_file(filename)
+        if fort_file is None:
+            raise CCPPError("Cannot find Fortran file associated with {}".format(filename))
         else:
-            hheaders = parse_fortran_file(filename, preproc_defs==preproc_defs, logger=logger)
+            fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs, logger=logger)
             for header in hheaders:
                 if header.title in mheaders:
                     raise CCPPError("Duplicate DDT, {}, found in {}".format(header.title, filename))
@@ -197,15 +193,13 @@ def _main_func():
     args = parse_command_line(sys.argv[1:], __doc__)
     verbosity = args.verbose
     if verbosity > 1:
-        setLogLevel(logger, logging.DEBUG)
+        set_log_level(logger, logging.DEBUG)
     elif verbosity > 0:
-        setLogLevel(logger, logging.INFO)
+        set_log_level(logger, logging.INFO)
     # End if
     # We need to create three lists of files, hosts, schemes, and SDFs
-    # XXgoldyXX: Note that host_files arg will change to '.md' after conversion
-    fort_suffices = 'F90,f90,F,f'
-    host_files = create_file_list(args.host_files, fort_suffices+',xml', 'Host')
-    scheme_files = create_file_list(args.scheme_files, fort_suffices, 'Scheme')
+    host_files = create_file_list(args.host_files, '.meta', 'Host')
+    scheme_files = create_file_list(args.scheme_files, '.meta', 'Scheme')
     sdfs = create_file_list(args.suites, 'xml', 'Suite')
     # Make sure we know where output is going
     output_dir = os.path.abspath(args.output_root)

@@ -1,6 +1,10 @@
 [ccpp-arg-table]
   name = hello_world_host
   type = module
+[ ncols]
+  standard_name = horizontal_dimension
+  units = count
+  type = integer
 [ pver ]
   standard_name = vertical_layer_dimension
   units = count

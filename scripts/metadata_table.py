@@ -474,7 +474,7 @@ class MetadataHeader(ParseSource):
         return check_fortran_ref(test_val) is not None
 
     @classmethod
-    def parse_metadata_file(cls, filename):
+    def parse_metadata_file(cls, filename, logger):
         "Parse <filename> and return list of parsed metadata headers"
         # Read all lines of the file at once
         mheaders = list()

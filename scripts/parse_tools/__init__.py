@@ -47,4 +47,4 @@ from parse_log      import init_log, set_log_level
 from parse_log      import set_log_to_stdout, set_log_to_null
 from parse_log      import set_log_to_file
 from preprocess     import PreprocStack
-# End if
+from xml_tools      import find_schema_version, read_xml_file, validate_xml_file

@@ -4,10 +4,10 @@ module hello_world_host
 
   implicit none
 
-  integer, parameter :: ncols = 10
   !> \section arg_table_hello_world_host  Argument Table
   !! \htmlinclude arg_table_hello_world_host.html
   !!
+  integer, parameter :: ncols = 10
   integer, parameter :: pver = 5
   integer, parameter :: pverp = 6
   integer            :: ntimes_loop
