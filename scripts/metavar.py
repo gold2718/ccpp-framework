@@ -1099,7 +1099,7 @@ class VarDictionary(OrderedDict):
             for key in variables.keys():
                 var = variables[key]
                 stdname = var.get_prop_value('standard_name')
-                self[stdname] = variables[stdname]
+                self[stdname] = variables[key]
             # End for
         elif variables is not None:
             raise ParseInternalError('Illegal type for variables, {} in {}'.format(type(variables), self.name))

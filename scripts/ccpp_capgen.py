@@ -169,14 +169,17 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
                                    mfilename, ffilename, logger):
 ###############################################################################
     """Compare a set of metadata headers from <mfilename> against the
-    code in the associated Fortran file, <ffilename>."""
-    while len(meta_headers) > 0:
-        mheader = meta_headers.pop(0)
+    code in the associated Fortran file, <ffilename>.
+    NB: This routine destroys the list, <fort_headers> but returns the
+       contents in an association dictionary on successful completion."""
+    header_dict = {} # Associate a Fortran header for every metadata header
+    for mindex in xrange(len(meta_headers)):
+        mheader = meta_headers[mindex]
         fheader = None
         mtitle = mheader.title
-        for index in xrange(len(fort_headers)):
-            if fort_headers[index].title == mtitle:
-                fheader = fort_headers.pop(index)
+        for findex in xrange(len(fort_headers)):
+            if fort_headers[findex].title == mtitle:
+                fheader = fort_headers.pop(findex)
                 break
             # End if
         # End for
@@ -185,9 +188,9 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
             logger.debug("CCPP routines in {}:{}".format(ffilename, tlist))
             errmsg = "No matching Fortran routine found for {} in {}"
             raise CCPPError(errmsg.format(mtitle, ffilename))
+        else:
+            header_dict[mheader] = fheader
         # End if
-        # Compare headers
-        pass
     # End while
     if len(fort_headers) > 0:
         errmsg = ""
@@ -200,6 +203,9 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
         # End for
         raise CCPPError(errmsg)
     # End if
+    # We have a one-to-one set, compare headers
+
+    return header_dict
 
 ###############################################################################
 def parse_host_model_files(host_filenames, preproc_defs, logger):
@@ -217,8 +223,8 @@ def parse_host_model_files(host_filenames, preproc_defs, logger):
         fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs,
                                       logger=logger)
         # Check Fortran against metadata (will raise an exception on error)
-        check_fortran_against_metadata(mheaders, fheaders,
-                                       filename, fort_file, logger)
+        hdr_dict = check_fortran_against_metadata(mheaders, fheaders,
+                                                  filename, fort_file, logger)
         # Check for duplicates, then add to dict
         for header in mheaders:
             if header.title in meta_headers:
@@ -247,6 +253,7 @@ def parse_scheme_files(scheme_filenames, preproc_defs, logger):
     methods) and return resulting dictionary.
     """
     meta_headers = list()
+    header_dict = {} # To check for duplicates
     for filename in scheme_filenames:
         logger.info('Reading CCPP schemes from {}'.format(filename))
         # parse metadata file
@@ -254,14 +261,14 @@ def parse_scheme_files(scheme_filenames, preproc_defs, logger):
         fort_file = find_associated_fortran_file(filename)
         fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs, logger=logger)
         # Check Fortran against metadata (will raise an exception on error)
-        check_fortran_against_metadata(mheaders, fheaders,
-                                       filename, fort_file, logger)
+        hdr_dict = check_fortran_against_metadata(mheaders, fheaders,
+                                                  filename, fort_file, logger)
         # Check for duplicates, then add to dict
         for header in mheaders:
-            if header.title in meta_headers:
+            if header.title in header_dict:
                 errmsg = "Duplicate DDT, {title}, found in {file}"
                 edict = {'title':header.title, 'file':filename}
-                oheader = meta_headers[header.title]
+                oheader = header_dict[header.title]
                 ofile = oheader.context.filename
                 if ofile is not None:
                     errmsg = errmsg + ", original found in {ofile}"
@@ -269,7 +276,8 @@ def parse_scheme_files(scheme_filenames, preproc_defs, logger):
                 # End if
                 raise CCPPError(errmsg.format(**edict))
             else:
-                meta_headers[header.title] = header
+                meta_headers.append(header)
+                header_dict[header.title] = header
             # End if
         # End for
     # End for

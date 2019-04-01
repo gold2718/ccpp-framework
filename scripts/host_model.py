@@ -47,7 +47,7 @@ class HostModel(VarDictionary):
                     self._ddt_defs[title] = header
                 # End if
             elif header.header_type == 'module':
-                varlist.append(header)
+                varlist.extend(header.variable_list())
                 # Set the variable modules
                 modname = header.title
                 for var in header.variable_list():
@@ -57,7 +57,7 @@ class HostModel(VarDictionary):
                 if self._name is None:
                     # Grab the first host name we see
                     self._name = header.name
-                varlist.append(header)
+                varlist.extend(header.variable_list())
             else:
                 errmsg = "Invalid host model metadata header, {} ({})"
                 raise CCPPError(errmsg.format(header.title, header.header_type))

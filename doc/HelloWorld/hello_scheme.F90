@@ -23,6 +23,7 @@ CONTAINS
 
    integer,            intent(in)  :: ims, ime, lev, ilev
    REAL(kind_phys),    intent(in)  :: state_layer(lev)
+   real(kind_phys),    intent(in)  :: timestep
    REAL(kind_phys),    INTENT(out) :: state_level(ilev)
    character(len=512), intent(out) :: errmsg
    integer,            intent(out) :: errflg
