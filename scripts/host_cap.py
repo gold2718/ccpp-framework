@@ -211,9 +211,9 @@ def write_host_cap(host_model, api, output_dir, logger):
 ###############################################################################
 
 if __name__ == "__main__":
-    from parse_tools import initLog, setLogToNull
-    logger = initLog('host_registry')
-    setLogToNull(logger)
+    from parse_tools import init_log, set_log_to_null
+    logger = init_log('host_registry')
+    set_log_to_null(logger)
     # Run doctest
     import doctest
     doctest.testmod()

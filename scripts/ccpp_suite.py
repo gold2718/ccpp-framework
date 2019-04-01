@@ -1381,9 +1381,9 @@ end module {module}
 
 ###############################################################################
 if __name__ == "__main__":
-    from parse_tools import initLog, setLogToNull
-    logger = initLog('ccpp_suite')
-    setLogToNull(logger)
+    from parse_tools import init_log, set_log_to_null
+    logger = init_log('ccpp_suite')
+    set_log_to_null(logger)
     try:
         # First, run doctest
         import doctest

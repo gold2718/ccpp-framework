@@ -5,21 +5,25 @@
   standard_name = horizontal_loop_begin
   type = integer
   units = count
+  dimensions = ()
   intent = in
 [ ime ]
   standard_name = horizontal_loop_end
   type = integer
   units = count
+  dimensions = ()
   intent = in
 [ lev ]
   standard_name = vertical_layer_dimension
   type = integer
   units = count
+  dimensions = ()
   intent = in
 [ ilev ]
   standard_name = vertical_level_dimension
   type = integer
   units = count
+  dimensions = ()
   intent = in
 [ temp_layer ]
   standard_name = potential_temperature
@@ -29,7 +33,7 @@
   kind = kind_phys
   intent = inout
 [ temp_level ]
-  standard_name = potential_temperature
+  standard_name = potential_temperature_at_interface
   units = K
   dimensions = (horizontal_loop_begin:horizontal_loop_end, vertical_level_dimension)
   type = real
@@ -59,7 +63,7 @@
   type = integer
   intent = out
 [ccpp-arg-table]
-  name = hello_scheme_run
+  name = hello_scheme_init
   type = scheme
 [ errmsg ]
   standard_name = ccpp_error_message

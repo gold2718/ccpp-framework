@@ -94,10 +94,10 @@ from __future__ import print_function
 import re
 # CCPP framework imports
 from metavar     import Var, VarDictionary
-from parse_tools import ParseObject, ParseSource, register_fortran_ddt_name
+from parse_tools import ParseObject, ParseSource, ParseContext, context_string
 from parse_tools import ParseInternalError, ParseSyntaxError, CCPPError
 from parse_tools import FORTRAN_ID, FORTRAN_SCALAR_REF
-from parse_tools import check_fortran_ref
+from parse_tools import check_fortran_ref, register_fortran_ddt_name
 
 ########################################################################
 
@@ -175,6 +175,8 @@ class MetadataHeader(ParseSource):
 
     __blank_line__ = re.compile(r"\s*[#;]")
 
+    __header_types__ = ['ddt', 'host', 'module', 'scheme']
+
     def __init__(self, parse_object=None,
                  title=None, type_in=None, module=None, var_dict=None,
                  logger=None):
@@ -193,8 +195,12 @@ class MetadataHeader(ParseSource):
             # End if
             if type_in is None:
                 raise ParseInternalError('MetadataHeader requires a header type')
+            elif type_in not in MetadataHeader.__header_types__:
+                raise ParseSyntaxError("metadata table type",
+                                       token=type_in,
+                                       context=self._pobj)
             else:
-                self._header_type = type
+                self._header_type = type_in
             # End if
             if module is None:
                 raise ParseInternalError('MetadataHeader requires a module name')
@@ -208,8 +214,10 @@ class MetadataHeader(ParseSource):
             for var in var_dict.variable_list(): # Let this crash if no dict
                 self._variables.add_variable(var)
             # End for
+            self._start_context = None
         else:
-            self.__init_from_file__(parse_object, logger)
+            self.__init_from_file__(logger)
+            self._start_context = ParseContext(context=self._pobj)
         # End if
         # Categorize the variables
         self._var_intents = {'in' : list(), 'out' : list(), 'inout' : list()}
@@ -220,7 +228,7 @@ class MetadataHeader(ParseSource):
             # End if
         # End for
 
-    def __init_from_file__(self, parse_object, logger):
+    def __init_from_file__(self, logger):
         # Read the table preamble, assume the caller already figured out
         #  the first line of the header using the table_start method.
         curr_line, curr_line_num = self._pobj.next_line()
@@ -235,7 +243,7 @@ class MetadataHeader(ParseSource):
                 if key == 'name':
                     self._table_title = value
                 elif key == 'type':
-                    if value not in ['module', 'scheme', 'ddt']:
+                    if value not in MetadataHeader.__header_types__:
                         raise ParseSyntaxError("metadata table type",
                                                token=value,
                                                context=self._pobj)
@@ -439,6 +447,11 @@ class MetadataHeader(ParseSource):
             pass # Python does not guarantee much about __del__ conditions
         # End try
 
+    def start_context(self, with_comma=True, nodir=True):
+        'Return a context string for the beginning of the table'
+        return context_string(self._start_context,
+                              with_comma=with_comma, nodir=nodir)
+
     @property
     def title(self):
         'Return the name of the metadata arg_table'
@@ -458,6 +471,7 @@ class MetadataHeader(ParseSource):
     def is_blank(cls, line):
         "Return True iff <line> is a valid config format blank or comment line"
         return (len(line) == 0) or (cls.__blank_line__.match(line) is not None)
+
     @classmethod
     def table_start(cls, line):
         """Return variable name if <line> is an interface metadata table header
@@ -477,7 +491,8 @@ class MetadataHeader(ParseSource):
     def parse_metadata_file(cls, filename, logger):
         "Parse <filename> and return list of parsed metadata headers"
         # Read all lines of the file at once
-        mheaders = list()
+        meta_headers = list()
+        header_titles = list() # Keep track of names in file
         with open(filename, 'r') as file:
             fin_lines = file.readlines()
             for index in xrange(len(fin_lines)):
@@ -489,13 +504,22 @@ class MetadataHeader(ParseSource):
         curr_line, curr_line_num = parse_obj.curr_line()
         while curr_line is not None:
             if MetadataHeader.table_start(curr_line):
-                mheaders.append(MetadataHeader(parse_obj))
+                new_header = MetadataHeader(parse_object=parse_obj)
+                ntitle = new_header.title
+                if ntitle in header_titles:
+                    errmsg = 'Duplicate metadata header, {}, at {}:{}'
+                    ctx = curr_line_num + 1
+                    raise CCPPError(errmsg.format(ntitle, filename, ctx))
+                else:
+                    meta_headers.append(new_header)
+                    header_titles.append(ntitle)
+                # End if
                 curr_line, curr_line_num = parse_obj.curr_line()
             else:
                 curr_line, curr_line_num = parse_obj.next_line()
             # End if
         # End while
-        return mheaders
+        return meta_headers
 
 ########################################################################
 

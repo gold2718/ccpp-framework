@@ -23,6 +23,9 @@ from metadata_table import MetadataHeader
 ## Init this now so that all Exceptions can be trapped
 logger = init_log('ccpp_capgen')
 
+## Recognized Fortran filename extensions
+__fortran_filename_extensions__ = ['F90', 'f90', 'F', 'f']
+
 ###############################################################################
 def check_for_existing_file(filename, description, readable=True):
 ###############################################################################
@@ -123,11 +126,33 @@ def read_pathnames_from_file(pathsfile):
     return pathnames
 
 ###############################################################################
+def find_associated_fortran_file(filename):
+###############################################################################
+    fort_filename = None
+    lastdot = filename.rfind('.')
+    ##XXgoldyXX: Should we check to make sure <filename> ends in '.meta.'?
+    if lastdot < 0:
+        base = filename + '.'
+    else:
+        base = filename[0:lastdot+1]
+    # End if
+    for extension in __fortran_filename_extensions__:
+        test_name = base + extension
+        if os.path.exists(test_name):
+            fort_filename = test_name
+            break
+        # End if
+    # End for
+    if fort_filename is None:
+        raise CCPPError("Cannot find Fortran file associated with {}".format(filename))
+    # End if
+    return fort_filename
+
+###############################################################################
 def create_file_list(files, suffix, file_type):
 ###############################################################################
     master_list = list()
     file_list = [x.strip() for x in files.split(',')]
-    suffix_list = [x.strip() for x in suffices.split(',')]
     for filename in file_list:
         check_for_existing_file(filename, '{} pathnames file'.format(file_type))
         suff = os.path.basename(filename).split('.')[-1]
@@ -140,36 +165,78 @@ def create_file_list(files, suffix, file_type):
     return master_list
 
 ###############################################################################
+def check_fortran_against_metadata(meta_headers, fort_headers,
+                                   mfilename, ffilename, logger):
+###############################################################################
+    """Compare a set of metadata headers from <mfilename> against the
+    code in the associated Fortran file, <ffilename>."""
+    while len(meta_headers) > 0:
+        mheader = meta_headers.pop(0)
+        fheader = None
+        mtitle = mheader.title
+        for index in xrange(len(fort_headers)):
+            if fort_headers[index].title == mtitle:
+                fheader = fort_headers.pop(index)
+                break
+            # End if
+        # End for
+        if fheader is None:
+            tlist = '\n    '.join([x.title for x in fort_headers])
+            logger.debug("CCPP routines in {}:{}".format(ffilename, tlist))
+            errmsg = "No matching Fortran routine found for {} in {}"
+            raise CCPPError(errmsg.format(mtitle, ffilename))
+        # End if
+        # Compare headers
+        pass
+    # End while
+    if len(fort_headers) > 0:
+        errmsg = ""
+        sep = ""
+        for fheader in fort_headers:
+            errmsg = errmsg + sep
+            errmsg = errmsg + "No matching metadata header found for {} in {}"
+            errmsg = errmsg.format(fheader.title, mfilename)
+            sep = "\n"
+        # End for
+        raise CCPPError(errmsg)
+    # End if
+
+###############################################################################
 def parse_host_model_files(host_filenames, preproc_defs, logger):
 ###############################################################################
     """
     Gather information from host files (e.g., DDTs, registry) and
     return a host model object with the information.
     """
-    mheaders = {}
-    metadata_files = list()
+    meta_headers = {}
     for filename in host_filenames:
+        logger.info('Reading host model data from {}'.format(filename))
         # parse metadata file
         mheaders = MetadataHeader.parse_metadata_file(filename, logger)
         fort_file = find_associated_fortran_file(filename)
-        if fort_file is None:
-            raise CCPPError("Cannot find Fortran file associated with {}".format(filename))
-        else:
-            fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs, logger=logger)
-            for header in hheaders:
-                if header.title in mheaders:
-                    raise CCPPError("Duplicate DDT, {}, found in {}".format(header.title, filename))
-                else:
-                    mheaders[header.title] = header
+        fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs,
+                                      logger=logger)
+        # Check Fortran against metadata (will raise an exception on error)
+        check_fortran_against_metadata(mheaders, fheaders,
+                                       filename, fort_file, logger)
+        # Check for duplicates, then add to dict
+        for header in mheaders:
+            if header.title in meta_headers:
+                errmsg = "Duplicate DDT, {title}, found in {file}"
+                edict = {'title':header.title, 'file':filename}
+                oheader = meta_headers[header.title]
+                ofile = oheader.context.filename
+                if ofile is not None:
+                    errmsg = errmsg + ", original found in {ofile}"
+                    edict['ofile'] = ofile
                 # End if
-            # End for
-        # End if
+                raise CCPPError(errmsg.format(**edict))
+            else:
+                meta_headers[header.title] = header
+            # End if
+        # End for
     # End for
-    host_model = None
-    for file in xml_files:
-        host_model = HostModel.parse_host_registry(file, logger, mheaders,
-                                                   host_model=host_model)
-    # End for
+    host_model = HostModel(meta_headers.values(), logger)
     return host_model
 
 ###############################################################################
@@ -179,13 +246,34 @@ def parse_scheme_files(scheme_filenames, preproc_defs, logger):
     Gather information from scheme files (e.g., init, run, and finalize
     methods) and return resulting dictionary.
     """
-    mheaders = list()
+    meta_headers = list()
     for filename in scheme_filenames:
         logger.info('Reading CCPP schemes from {}'.format(filename))
-        sheaders = parse_fortran_file(filename, preproc_defs==preproc_defs)
-        mheaders.append(sheaders)
+        # parse metadata file
+        mheaders = MetadataHeader.parse_metadata_file(filename, logger)
+        fort_file = find_associated_fortran_file(filename)
+        fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs, logger=logger)
+        # Check Fortran against metadata (will raise an exception on error)
+        check_fortran_against_metadata(mheaders, fheaders,
+                                       filename, fort_file, logger)
+        # Check for duplicates, then add to dict
+        for header in mheaders:
+            if header.title in meta_headers:
+                errmsg = "Duplicate DDT, {title}, found in {file}"
+                edict = {'title':header.title, 'file':filename}
+                oheader = meta_headers[header.title]
+                ofile = oheader.context.filename
+                if ofile is not None:
+                    errmsg = errmsg + ", original found in {ofile}"
+                    edict['ofile'] = ofile
+                # End if
+                raise CCPPError(errmsg.format(**edict))
+            else:
+                meta_headers[header.title] = header
+            # End if
+        # End for
     # End for
-    return mheaders
+    return meta_headers
 
 ###############################################################################
 def _main_func():
@@ -198,15 +286,16 @@ def _main_func():
         set_log_level(logger, logging.INFO)
     # End if
     # We need to create three lists of files, hosts, schemes, and SDFs
-    host_files = create_file_list(args.host_files, '.meta', 'Host')
-    scheme_files = create_file_list(args.scheme_files, '.meta', 'Scheme')
+    host_files = create_file_list(args.host_files, 'meta', 'Host')
+    scheme_files = create_file_list(args.scheme_files, 'meta', 'Scheme')
     sdfs = create_file_list(args.suites, 'xml', 'Suite')
     # Make sure we know where output is going
     output_dir = os.path.abspath(args.output_root)
     if os.path.abspath(args.cap_pathlist):
         cap_output_file = args.cap_pathlist
     else:
-        cap_output_file = os.path.abspath(os.path.join(output_dir, args.cap_pathlist))
+        cap_output_file = os.path.abspath(os.path.join(output_dir,
+                                                       args.cap_pathlist))
     # End if
     preproc_defs = args.preproc_directives
     gen_hostcap = args.generate_host_cap
@@ -215,9 +304,11 @@ def _main_func():
     ## Make sure output directory is legit
     if os.path.exists(output_dir):
         if not os.path.isdir(output_dir):
-            raise CCPPError("output-root, '{}', is not a directory".format(args.output_root))
+            errmsg = "output-root, '{}', is not a directory"
+            raise CCPPError(errmsg.format(args.output_root))
         elif not os.access(output_dir, os.W_OK):
-            raise CCPPError("Cannot write files to output-root ({})".format(args.output_root))
+            errmsg = "Cannot write files to output-root ({})"
+            raise CCPPError(errmsg.format(args.output_root))
         # End if (output_dir is okay)
     else:
         # Try to create output_dir (let it crash if it fails)
@@ -236,9 +327,12 @@ def _main_func():
     host_model = parse_host_model_files(host_files, preproc_defs, logger)
     # Next, parse the scheme files
     scheme_headers = parse_scheme_files(scheme_files, preproc_defs, logger)
-    logger.debug("headers = {}".format([host_model._ddt_defs[x].title for x in host_model._ddt_defs.keys()]))
-    logger.debug("variables = {}".format([x.get_prop_value('local_name') for x in host_model.variable_list()]))
-    logger.debug("schemes = {}".format([[x._table_title for x in y] for y in scheme_headers]))
+    ddts = [host_model._ddt_defs[x].title for x in host_model._ddt_defs.keys()]
+    logger.debug("DDT definitions = {}".format(ddts))
+    logger.debug("{} variables = {}".format(host_model.name,
+                                            host_model.prop_list('local_name')))
+    logger.debug("schemes = {}".format([[x._table_title for x in y]
+                                        for y in scheme_headers]))
     # Finally, we can get on with writing suites
     ccpp_api = API(sdfs, host_model, scheme_headers, logger)
     cap_filenames = ccpp_api.write(output_dir, logger)

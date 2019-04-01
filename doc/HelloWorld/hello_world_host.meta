@@ -5,14 +5,17 @@
   standard_name = horizontal_dimension
   units = count
   type = integer
+  dimensions = ()
 [ pver ]
   standard_name = vertical_layer_dimension
   units = count
   type = integer
+  dimensions = ()
 [ pverp ]
   standard_name = vertical_level_dimension
   type = integer
   units = count
+  dimensions = ()
 [ temp_midpoints ]
   standard_name = potential_temperature
   units = K
@@ -20,7 +23,7 @@
   type = real | kind = kind_phys
   intent = inout
 [ temp_interfaces ]
-  standard_name = potential_temperature
+  standard_name = potential_temperature_at_interface
   units = K
   dimensions = (horizontal_dimension, vertical_level_dimension)
   type = real | kind = kind_phys
@@ -39,10 +42,12 @@
   standard_name = horizontal_loop_begin
   type = integer
   units = count
+  dimensions = ()
 [ col_end ]
   standard_name = horizontal_loop_end
   type = integer
   units = count
+  dimensions = ()
 [ errmsg ]
   standard_name = ccpp_error_message
   long_name = Error message for error handling in CCPP

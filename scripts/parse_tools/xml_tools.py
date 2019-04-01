@@ -163,9 +163,9 @@ def read_xml_file(filename, logger=None):
 ###############################################################################
 
 if __name__ == "__main__":
-    from parse_log import initLog, setLogToNull
-    logger = initLog('xml_tools')
-    setLogToNull(logger)
+    from parse_log import init_log, set_log_to_null
+    logger = init_log('xml_tools')
+    set_log_to_null(logger)
     try:
         # First, run doctest
         import doctest

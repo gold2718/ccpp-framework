@@ -16,19 +16,58 @@ import xml.etree.ElementTree as ET
 from metavar import Var, VarDDT, VarDictionary
 from parse_tools import ParseSource, ParseContext, CCPPError, ParseInternalError
 from parse_tools import read_xml_file, validate_xml_file, find_schema_version
-from parse_tools import check_fortran_intrinsic, FORTRAN_ID
+from parse_tools import context_string, check_fortran_intrinsic, FORTRAN_ID
 
 ###############################################################################
 class HostModel(VarDictionary):
     "Class to hold the data from a host model"
 
-    def __init__(self, name, ddt_defs, var_locations, variables, logger=None):
-        self._name = name
-        self._ddt_defs = ddt_defs
-        self._var_locations = var_locations
-        super(HostModel, self).__init__(self.name, variables=variables, logger=logger)
-        self._ddt_vars = {}
-        self._ddt_fields = {}
+    def __init__(self, meta_headers, logger):
+        self._name = None
+        self._ddt_defs = {}      # DDT definition headers
+        self._ddt_vars = {}      # DDT variable to DDT map
+        self._ddt_fields = {}    # DDT field to DDT access map
+        self._var_locations = {} # Local name to module map
+        # Process the headers by type
+        varlist = list()
+        while len(meta_headers) > 0:
+            header = meta_headers.pop()
+            title = header.title
+            if logger is not None:
+                msg = 'Adding {} {} to host model'
+                logger.debug(msg.format(header.header_type, title))
+            # End if
+            if header.header_type == 'ddt':
+                if title in self._ddt_defs:
+                    errmsg = "Duplicate DDT, {}, found{}, original{}"
+                    ctx = context_string(header.source.context)
+                    octx = context_string(self._ddt_defs[title].source.context)
+                    raise CCPPError(errmsg.format(title, ctx, octx))
+                else:
+                    self._ddt_defs[title] = header
+                # End if
+            elif header.header_type == 'module':
+                varlist.append(header)
+                # Set the variable modules
+                modname = header.title
+                for var in header.variable_list():
+                    lname = var.get_prop_value('local_name')
+                    self._var_locations[lname] = modname
+            elif header.header_type == 'host':
+                if self._name is None:
+                    # Grab the first host name we see
+                    self._name = header.name
+                varlist.append(header)
+            else:
+                errmsg = "Invalid host model metadata header, {} ({})"
+                raise CCPPError(errmsg.format(header.title, header.header_type))
+            # End if
+        # End while
+        if self.name is None:
+            errmsg = 'No name found for host model, add a host metadata entry'
+            raise CCPPError(errmsg)
+        # Initialize variable dictionary
+        super(HostModel, self).__init__(self.name, variables=varlist, logger=logger)
         # Make sure we have a DDT definition for every DDT variable
         self.check_ddt_vars(logger)
         self.collect_ddt_fields(logger)
@@ -189,84 +228,12 @@ class HostModel(VarDictionary):
         # End for
         return hdvars
 
-    ###########################################################################
-    @classmethod
-    def parse_host_registry(cls, filename, logger, ddt_defs, host_model=None):
-        host_variables = {}
-        tree, root = read_xml_file(filename, logger=logger)
-        # We do not have line number information for the XML file
-        context = ParseContext(filename=filename)
-        version = find_schema_version(root, logger=logger)
-        res = validate_xml_file(filename, 'host_registry', version, logger=logger)
-        if not res:
-            abort("Invalid host registry file, '{}'".format(filename), logger)
-        # End if
-        host_name = root.get('name')
-        variables = VarDictionary(host_name, logger=logger)
-        logger.info("Reading host model registry for {}".format(host_name))
-        for child in root:
-            if (child.tag == 'variable') or (child.tag == 'constant'):
-                prop_dict = child.attrib
-                vname = prop_dict['local_name']
-                for var_prop in child:
-                    if var_prop.tag == 'module':
-                        # We need to keep track of where host variables come from
-                        host_variables[vname] = var_prop.text
-                        logger.debug("{} defined in {}".format(vname, host_variables[vname]))
-                    # End if
-                    if var_prop.tag == 'type':
-                        prop_dict['type'] = var_prop.text
-                        if 'kind' in var_prop.attrib:
-                            prop_dict['kind'] = var_prop.get('kind')
-                        # End if
-                        if 'units' in var_prop.attrib:
-                            prop_dict['units'] = var_prop.get('units')
-                        # End if
-                    else:
-                        # These elements should just have text, no attributes
-                        if len(var_prop.attrib) > 0:
-                            abort("Bad variable property, {} for variable, {}".format(var_prop.tag, vname), logger)
-                        elif var_prop.tag == 'dimensions':
-                            # We need to rebuild this text for compatibility
-                            dims = [x.strip() for x in var_prop.text.split(',')]
-                            prop_dict[var_prop.tag] = '({})'.format(', '.join(dims))
-                        else:
-                            prop_dict[var_prop.tag] = var_prop.text
-                        # End if
-                    # End if
-                # End for
-                if child.tag == 'constant':
-                    prop_dict['constant'] = '.true.'
-                # End if
-                if child.tag == 'variable':
-                    prop_dict['intent'] = 'inout'
-                # End if
-                newvar = Var(prop_dict, ParseSource(vname, 'REGISTRY', context))
-                variables.add_variable(newvar)
-            # Else
-            # End if
-        # End for
-        # Now that we have all the info from this XML, create a HostModel
-        # object or add to the one that is there:
-        if host_model is None:
-            host_model = HostModel(host_name, ddt_defs, host_variables, variables, logger=logger)
-        elif host_name != host_model.name:
-            raise CCPPError('Inconsistent host model names, {} and {}'.format(host_name, host_model.name))
-        else:
-            host_model.add_variables(variables, logger=logger)
-            host_model.add_ddt_defs(ddt_defs, logger=logger)
-            for var in host_variables.keys():
-                host_model.add_host_variable_module(var, host_variables[var], logger=logger)
-            # End for
-        # End if
-        return host_model
-
 ###############################################################################
 
 if __name__ == "__main__":
-    from parse_tools import initLog, setLogToNull
-    logger = initLog('host_registry')
-    setLogToNull(logger)
+    from parse_tools import init_log, set_log_to_null
+    logger = init_log('host_registry')
+    set_log_to_null(logger)
     # First, run doctest
     import doctest
     doctest.testmod()

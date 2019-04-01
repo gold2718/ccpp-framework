@@ -15,7 +15,7 @@ CONTAINS
 !> \section arg_table_hello_scheme_run  Argument Table
 !! \htmlinclude arg_table_hello_scheme_run.html
 !!
-  SUBROUTINE hello_scheme_run(ims, ime, lev, ilev, state_layer, state_level,
+  SUBROUTINE hello_scheme_run(ims, ime, lev, ilev, state_layer, state_level, &
     timestep, errmsg, errflg)
 !----------------------------------------------------------------
    IMPLICIT NONE
@@ -25,12 +25,11 @@ CONTAINS
    REAL(kind_phys),    intent(in)  :: state_layer(lev)
    REAL(kind_phys),    INTENT(out) :: state_level(ilev)
    character(len=512), intent(out) :: errmsg
-   integer,            intent(out) errflg
+   integer,            intent(out) :: errflg
 !----------------------------------------------------------------
 
     errmsg = ''
     errflg = 0
-
 
   END SUBROUTINE hello_scheme_run
 
