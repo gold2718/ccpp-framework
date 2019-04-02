@@ -91,6 +91,7 @@ Notes on the input format:
 
 # Python library imports
 from __future__ import print_function
+import os.path
 import re
 # CCPP framework imports
 from metavar     import Var, VarDictionary
@@ -271,6 +272,14 @@ class MetadataHeader(ParseSource):
                                    token=curr_line, context=self._pobj)
         elif self.header_type == "ddt":
             register_fortran_ddt_name(self.title)
+        # End if
+        # We need a default module if none was listed
+        if self._module_name is None:
+            mfile = self._pobj.file_name
+            if mfile[-5:] == '.meta':
+                # Default value is a Fortran module that matches the filename
+                self._module_name = os.path.basename(mfile)[:-5]
+            # End if
         # End if
         #  Initialize our ParseSource parent
         super(MetadataHeader, self).__init__(self.title,

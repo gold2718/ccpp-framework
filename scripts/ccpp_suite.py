@@ -1075,22 +1075,20 @@ end module {module}
         # Top-level dictionary is keyed by function name
         # Secondary level is by phase
         scheme_library = {}
-        for header_list in scheme_headers:
-            for header in header_list:
-                if header.type != 'SCHEME':
-                    continue
-                # End if
-                func_id, ftrans, match_trans = CCPP_STATE_MACH.function_match(header.title)
-                if func_id not in scheme_library:
-                    scheme_library[func_id] = {}
-                # End if
-                func_entry = scheme_library[func_id]
-                if match_trans in func_entry:
-                    raise CCPPError("Duplicate scheme entry, {}".format(header.title))
-                else:
-                    func_entry[match_trans] = header
-                # End if
-            # End for
+        for header in scheme_headers:
+            if header.type != 'scheme':
+                continue
+            # End if
+            func_id, ftrans, match_trans = CCPP_STATE_MACH.function_match(header.title)
+            if func_id not in scheme_library:
+                scheme_library[func_id] = {}
+            # End if
+            func_entry = scheme_library[func_id]
+            if match_trans in func_entry:
+                raise CCPPError("Duplicate scheme entry, {}".format(header.title))
+            else:
+                func_entry[match_trans] = header
+            # End if
         # End for
         # Turn the SDF files into Suites
         for sdf in sdfs:

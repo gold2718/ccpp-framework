@@ -339,8 +339,7 @@ def _main_func():
     logger.debug("DDT definitions = {}".format(ddts))
     logger.debug("{} variables = {}".format(host_model.name,
                                             host_model.prop_list('local_name')))
-    logger.debug("schemes = {}".format([[x._table_title for x in y]
-                                        for y in scheme_headers]))
+    logger.debug("schemes = {}".format([x.title for x in scheme_headers]))
     # Finally, we can get on with writing suites
     ccpp_api = API(sdfs, host_model, scheme_headers, logger)
     cap_filenames = ccpp_api.write(output_dir, logger)
