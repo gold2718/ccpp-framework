@@ -66,6 +66,10 @@ COPYRIGHT = '''!
 ! CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 '''
 
+# Standardize name of generated kinds file and module
+KINDS_MODULE = 'ccpp_kinds'
+KINDS_FILENAME = '{}.F90'.format(KINDS_MODULE)
+
 ###############################################################################
 def new_suite_object(item, context, logger):
 ###############################################################################
@@ -988,7 +992,7 @@ end module {module}
             outfile.write(COPYRIGHT, 0)
             outfile.write(Suite.__header__.format(module=self._module), 0)
             # Write module 'use' statements here
-            outfile.write('use machine', 1)
+            outfile.write('use {}'.format(KINDS_MODULE), 1)
             outfile.write('implicit none\nprivate\n\n! Suite interfaces', 1)
             outfile.write(Suite.__state_machine_init__.format(css_var_name=Suite.__state_machine_var_name__, state=Suite.___state_machine_initial_state__), 1)
             for group in self._groups:
@@ -1164,7 +1168,7 @@ end module {module}
         # End if
         filename = os.path.join(output_dir, self.module + '.F90')
         api_filenames = list()
-        module_use = 'use machine'
+        module_use = 'use {}'.format(KINDS_MODULE)
         # Write out the suite files
         for suite in self.suites:
             out_file_name = suite.write(output_dir, logger)

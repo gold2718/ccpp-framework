@@ -12,7 +12,7 @@ import os.path
 import subprocess
 import xml.etree.ElementTree as ET
 # CCPP framework imports
-from ccpp_suite    import COPYRIGHT, CCPP_STATE_MACH, API
+from ccpp_suite    import COPYRIGHT, KINDS_MODULE, CCPP_STATE_MACH, API
 from metavar       import Var, VarDictionary, CCPP_VAR_LOOP_SUBSTS
 from fortran_tools import FortranWriter
 from parse_tools   import CCPPError, ParseSource, ParseContext
@@ -25,7 +25,7 @@ header = '''
 !
 module {module}
 
-   use machine
+   use {kinds}
 '''
 
 preamble='''
@@ -83,10 +83,14 @@ def write_host_cap(host_model, api, output_dir, logger):
 ###############################################################################
     module_name = "{}_ccpp_cap".format(host_model.name)
     cap_filename = os.path.join(output_dir, '{}.F90'.format(module_name))
+    if logger is not None:
+        msg = 'Writing CCPP Host Model Cap for {} to {}'
+        logger.info(msg.format(host_model.name, cap_filename))
+    # End if
     with FortranWriter(cap_filename, 'w') as cap:
         cap.write(COPYRIGHT, 0)
         cap.write(header.format(host_model=host_model.name,
-                                module=module_name), 0)
+                                module=module_name, kinds=KINDS_MODULE), 0)
         modules = host_model.variable_locations()
         mlen = max([len(x[0]) for x in modules])
         max_suite_len = 0

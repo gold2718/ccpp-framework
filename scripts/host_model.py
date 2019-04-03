@@ -22,8 +22,8 @@ from parse_tools import context_string, check_fortran_intrinsic, FORTRAN_ID
 class HostModel(VarDictionary):
     "Class to hold the data from a host model"
 
-    def __init__(self, meta_headers, logger):
-        self._name = None
+    def __init__(self, meta_headers, name_in, logger):
+        self._name = name_in
         self._ddt_defs = {}      # DDT definition headers
         self._ddt_vars = {}      # DDT variable to DDT map
         self._ddt_fields = {}    # DDT field to DDT access map

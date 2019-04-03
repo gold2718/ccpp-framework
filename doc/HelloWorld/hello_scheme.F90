@@ -3,9 +3,11 @@
 
 MODULE hello_scheme
 
-  USE machine, ONLY: rkind => kind_phys
+  USE ccpp_kinds, ONLY: kind_phys
 
+  IMPLICIT NONE
   PRIVATE
+
   PUBLIC :: hello_scheme_init
   PUBLIC :: hello_scheme_run
   PUBLIC :: hello_scheme_finalize

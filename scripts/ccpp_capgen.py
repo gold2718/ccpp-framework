@@ -12,10 +12,10 @@ import os
 import os.path
 import logging
 # CCPP framework imports
-from fortran_tools import parse_fortran_file
+from fortran_tools import parse_fortran_file, FortranWriter
 from host_model import HostModel
 from host_cap import write_host_cap
-from ccpp_suite import API, Suite
+from ccpp_suite import API, Suite, COPYRIGHT, KINDS_MODULE, KINDS_FILENAME
 from parse_tools import init_log, set_log_level
 from parse_tools import CCPPError, ParseInternalError
 from metadata_table import MetadataHeader
@@ -25,6 +25,14 @@ logger = init_log('ccpp_capgen')
 
 ## Recognized Fortran filename extensions
 __fortran_filename_extensions__ = ['F90', 'f90', 'F', 'f']
+
+## header for kinds file
+kinds_header = '''
+!>
+!! @brief Auto-generated kinds for CCPP
+!!
+!
+'''
 
 ###############################################################################
 def check_for_existing_file(filename, description, readable=True):
@@ -90,6 +98,13 @@ Other filenames are treated as containing a list of .xml filenames""")
     parser.add_argument("--generate-host-cap",
                         action='store_true', default=True,
                         help="Generate a host cap with correct API calling sequence")
+
+    parser.add_argument("--host-name", type=str, default='',
+                        help='Name of host model to use in CCPP API')
+
+    parser.add_argument("--kind-phys", type=str, default='REAL64',
+                        metavar="kind_phys",
+                        help='Data size for real(kind_phys) data')
 
     parser.add_argument("--generate-docfiles",
                         metavar='HTML | Latex | HTML,Latex', type=str,
@@ -165,6 +180,32 @@ def create_file_list(files, suffix, file_type):
     return master_list
 
 ###############################################################################
+def create_kinds_file(kind_phys, output_dir, logger):
+###############################################################################
+    "Create the kinds.F90 file to be used by CCPP schemes and suites"
+    kinds_filepath = os.path.join(output_dir, KINDS_FILENAME)
+    if logger is not None:
+        msg = 'Writing {} to {}'
+        logger.info(msg.format(KINDS_FILENAME, output_dir))
+    # End if
+    with FortranWriter(kinds_filepath, "w") as kw:
+        kw.write(COPYRIGHT, 0)
+        kw.write(kinds_header, 0)
+        kw.write('module {}'.format(KINDS_MODULE), 0)
+        kw.write('', 0)
+        use_stmt = 'use ISO_FORTRAN_ENV, only: kind_phys => {}'
+        kw.write(use_stmt.format(kind_phys), 1)
+        kw.write('', 0)
+        kw.write('implicit none', 1)
+        kw.write('private', 1)
+        kw.write('', 0)
+        kw.write('public kind_phys', 1)
+        kw.write('', 0)
+        kw.write('end module {}'.format(KINDS_MODULE), 0)
+    # End with
+    return kinds_filepath
+
+###############################################################################
 def check_fortran_against_metadata(meta_headers, fort_headers,
                                    mfilename, ffilename, logger):
 ###############################################################################
@@ -208,7 +249,7 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
     return header_dict
 
 ###############################################################################
-def parse_host_model_files(host_filenames, preproc_defs, logger):
+def parse_host_model_files(host_filenames, preproc_defs, host_name, logger):
 ###############################################################################
     """
     Gather information from host files (e.g., DDTs, registry) and
@@ -242,7 +283,10 @@ def parse_host_model_files(host_filenames, preproc_defs, logger):
             # End if
         # End for
     # End for
-    host_model = HostModel(meta_headers.values(), logger)
+    if len(host_name) == 0:
+        host_name = None
+    # End if
+    host_model = HostModel(meta_headers.values(), host_name, logger)
     return host_model
 
 ###############################################################################
@@ -332,7 +376,8 @@ def _main_func():
         raise CCPPError("--gen-docfiles not yet supported")
     # End if
     # First up, handle the host files
-    host_model = parse_host_model_files(host_files, preproc_defs, logger)
+    host_model = parse_host_model_files(host_files, preproc_defs,
+                                        args.host_name, logger)
     # Next, parse the scheme files
     scheme_headers = parse_scheme_files(scheme_files, preproc_defs, logger)
     ddts = [host_model._ddt_defs[x].title for x in host_model._ddt_defs.keys()]
@@ -349,6 +394,9 @@ def _main_func():
     else:
         hcap_filename = None
     # End if
+    # Create the kinds file
+    kinds_file = create_kinds_file(args.kind_phys, output_dir, logger)
+    # Finally, create the list of generated files
     with open(cap_output_file, 'w') as cap_names:
         for path in cap_filenames:
             cap_names.write('{}\n'.format(path))
@@ -356,6 +404,7 @@ def _main_func():
         if hcap_filename is not None:
             cap_names.write('{}\n'.format(hcap_filename))
         # End if
+        cap_names.write('{}\n'.format(kinds_file))
     # End with
 
 ###############################################################################
