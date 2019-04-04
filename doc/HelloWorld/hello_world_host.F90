@@ -5,16 +5,7 @@ module hello_world_host
   implicit none
   private
 
-  !> \section arg_table_hello_world_host  Argument Table
-  !! \htmlinclude arg_table_hello_world_host.html
-  !!
-  integer, parameter :: ncols = 10
-  integer, parameter :: pver = 5
-  integer, parameter :: pverp = 6
-  integer            :: ntimes_loop
-  real(kind_phys)    :: temp_midpoints(ncols, pver)
-  real(kind_phys)    :: temp_interfaces(ncols, pverp)
-  real(kind_phys)    :: dt
+  public hello_world_sub
 
 CONTAINS
 

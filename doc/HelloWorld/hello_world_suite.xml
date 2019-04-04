@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<suite name="hello_world" version="1.0">
+<suite name="hello_world_suite" version="1.0">
   <group name="physics">
     <scheme>hello_scheme</scheme>
   </group>
