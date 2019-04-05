@@ -214,11 +214,11 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
     NB: This routine destroys the list, <fort_headers> but returns the
        contents in an association dictionary on successful completion."""
     header_dict = {} # Associate a Fortran header for every metadata header
-    for mindex in xrange(len(meta_headers)):
+    for mindex in range(len(meta_headers)):
         mheader = meta_headers[mindex]
         fheader = None
         mtitle = mheader.title
-        for findex in xrange(len(fort_headers)):
+        for findex in range(len(fort_headers)):
             if fort_headers[findex].title == mtitle:
                 fheader = fort_headers.pop(findex)
                 break

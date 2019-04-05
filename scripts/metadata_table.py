@@ -504,7 +504,7 @@ class MetadataHeader(ParseSource):
         header_titles = list() # Keep track of names in file
         with open(filename, 'r') as file:
             fin_lines = file.readlines()
-            for index in xrange(len(fin_lines)):
+            for index in range(len(fin_lines)):
                 fin_lines[index] = fin_lines[index].rstrip('\n')
             # End for
         # End with

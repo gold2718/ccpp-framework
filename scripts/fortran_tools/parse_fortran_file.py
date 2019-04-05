@@ -345,7 +345,7 @@ def read_file(filename, preproc_defs=None, logger=None):
         # Read all lines of the file at once
         with open(filename, 'r') as file:
             file_lines = file.readlines()
-            for index in xrange(len(file_lines)):
+            for index in range(len(file_lines)):
                 file_lines[index] = file_lines[index].rstrip('\n').rstrip()
             # End for
         # End with

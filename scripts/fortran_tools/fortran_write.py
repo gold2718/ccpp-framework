@@ -188,7 +188,7 @@ if __name__ == "__main__":
             if len(statements) != len(check):
                 print("ERROR: File has {} statements, should have {}".format(len(statements), len(check)))
             else:
-                for line_num in xrange(len(statements)):
+                for line_num in range(len(statements)):
                     if statements[line_num].rstrip() != check[line_num]:
                         print("ERROR: Line {} does not match".format(line_num+1))
                     # End if
