@@ -3,7 +3,7 @@ module hello_world_mod
   use ccpp_kinds, only: kind_phys
 
   implicit none
-  private
+  public
 
   !> \section arg_table_hello_world_mod  Argument Table
   !! \htmlinclude arg_table_hello_world_host.html
