@@ -843,6 +843,8 @@ end module {module}
     def new_group(self, group_string, transition):
         gxml = ET.fromstring(group_string)
         group = Group(gxml, transition, self, self._context, self._logger)
+        group.call_list.add_variable(CCPP_STANDARD_VARS['ccpp_error_flag'])
+        group.call_list.add_variable(CCPP_STANDARD_VARS['ccpp_error_message']
         self._full_groups[group.name] = group
         self._full_phases[group.phase] = group
         return group
