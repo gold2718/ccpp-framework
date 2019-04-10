@@ -237,12 +237,17 @@ class SuiteObject(VarDictionary):
         output = "{}<{}>".format(indent*ind_level, nstr)
         subspec = "{}{}".format(sep, ind_level + 1)
         substr = "{o}{s}{p:" + subspec + "}"
+        subout = ""
         for part in self.parts:
-            output = substr.format(o=output, s=sep, p=part)
+            subout = substr.format(o=subout, s=sep, p=part)
         # End for
-        output = "{}<{}>".format(indent*ind_level, nstr)
-        output = "{}{}</{}>".format(sep, indent*ind_level,
-                                    self.__class__.__name__)
+        if len(subout) > 0:
+            output = "{}{}{}{}</{}>".format(output, subout, sep,
+                                            indent*ind_level,
+                                            self.__class__.__name__)
+        else:
+            output = "{}</{}>".format(output, self.__class__.__name__)
+        # End if
         return output
 
 ###############################################################################
