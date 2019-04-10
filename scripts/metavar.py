@@ -488,6 +488,7 @@ class Var(object):
         # End try
 
     def compatible(self, other, logger=None):
+        "Return True iff <other> is compatible with self"
         # We accept character(len=*) as compatible with character(len=INTEGER_VALUE)
         stype =     self.get_prop_value('type')
         skind =     self.get_prop_value('kind')

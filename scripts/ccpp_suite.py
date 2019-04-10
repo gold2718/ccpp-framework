@@ -36,6 +36,10 @@ array_ref_re = re.compile(r"([^(]*)[(]([^)]*)[)]")
 
 obj_loc_re = re.compile(r"(0x[0-9A-Fa-f]+)>")
 
+# Source for internally generated variables.
+__api_source__ = ParseSource("CCPP_API", "module",
+                             ParseContext(filename="ccpp_suite.py"))
+
 # Allowed CCPP transitions
 CCPP_STATE_MACH = StateMachine((('initialize',       'uninitialized',
                                  'initialized',       __init_st__),
@@ -71,14 +75,16 @@ KINDS_MODULE = 'ccpp_kinds'
 KINDS_FILENAME = '{}.F90'.format(KINDS_MODULE)
 
 ###############################################################################
-def new_suite_object(item, context, logger):
+def new_suite_object(item, context, parent, logger):
 ###############################################################################
     "'Factory' method to create the appropriate suite object from XML"
     new_item = None
     if item.tag == 'subcycle':
-        new_item = Subcycle(item, context, logger)
+        new_item = Subcycle(item, context, parent, logger)
     elif item.tag == 'scheme':
-        new_item = Scheme(item, context, logger)
+        new_item = Scheme(item, context, parent, logger)
+    elif item.tag == 'timesplit':
+        new_item = TimeSplit(item, context, parent, logger)
     else:
         raise CCPPError("Unknown CCPP suite element type, '{}'".format(item.tag))
     # End if
@@ -128,23 +134,129 @@ class CallList(VarDictionary):
 
 ###############################################################################
 
-class Scheme(object):
+class SuiteObject(VarDictionary):
+    "Base class for all CCPP Suite objects (e.g., Scheme, Subcycle)"
+
+    def __init__(self, name, context, parent, logger):
+        self.__name = name
+        self._context = context
+        self._logger = logger
+        self._parent = parent
+        self._call_list = CallList(name, logger)
+        self._parts = list()
+        # Initialize our dictionary
+        super(SuiteObject, self).__init__(self.name, parent_dict=parent)
+
+    def declarations(self):
+        """Return a list of local variables to be declared in parent Group
+        or Suite. By default, this list is the object's embedded VarDictionary.
+        """
+        return self.variable_list()
+
+    def add_part(self, item):
+        'Add an object (e.g., Suite, Subcycle) to this SuiteObject'
+        self._parts.append(item)
+
+    def schemes(self):
+        "Return a flattened list of schemes for this group"
+        schemes = list()
+        for item in self._parts:
+            schemes.extend(item.schemes())
+        # End for
+        return schemes
+
+    @property
+    def name(self):
+        '''Return the name of the element'''
+        return self.__name
+
+    @name.setter
+    def name(self, value):
+        '''Set the name of the element if it has not been set'''
+        if self.__name is None:
+            self.__name = value
+        else:
+            raise ParseInternalError('Attempt to change name of {} to {}'.format(self, value))
+        # End if
+
+    @property
+    def parent(self):
+        '''Element parent (or none)'''
+        return self._parent
+
+    @property
+    def call_list(self):
+        return self._call_list
+
+    @property
+    def parts(self):
+        return self._parts
+
+    def __repr__(self):
+        'Create a unique readable string for this Object'
+        repr = super(SuiteObject, self).__repr__()
+        olmatch = obj_loc_re.search(repr)
+        if olmatch is not None:
+            loc = ' at {}'.format(olmatch.group(1))
+        else:
+            loc = ""
+        # End if
+        if self._subroutine_name is None:
+            substr = ''
+        else:
+            substr = ': {}'.format(self._subroutine_name)
+        # End if
+        return '<{} {}{}>'.format(self.__class__.__name__, self.name, loc)
+
+    def __format__(self, spec):
+        """Return a string representing the SuiteObject, including its children.
+        <sep> is used between subitems.
+        <ind_level> is the indent level for multi-line output.
+        """
+        if len(spec) > 0:
+            sep = spec[0]
+        else:
+            sep = '\n'
+        # End if
+        try:
+            ind_level = int(spec[1:])
+        except (ValueError, IndexError) as ve:
+            ind_level = 0
+        # End try
+        if sep == '\n':
+            indent = "  "
+        else:
+            indent = ""
+        # End if
+        if self.name == self.__class__.__name__:
+            # This object does not have separate name
+            nstr = self.name
+        else:
+            nstr = "{}: {}".format(self.__class__.__name__, self.name)
+        # End if
+        output = "{}<{}>".format(indent*ind_level, nstr)
+        subspec = "{}{}".format(sep, ind_level + 1)
+        substr = "{o}{s}{p:" + subspec + "}"
+        for part in self.parts:
+            output = substr.format(o=output, s=sep, p=part)
+        # End for
+        output = "{}<{}>".format(indent*ind_level, nstr)
+        output = "{}{}</{}>".format(sep, indent*ind_level,
+                                    self.__class__.__name__)
+        return output
+
+###############################################################################
+
+class Scheme(SuiteObject):
     "A single scheme in a suite (e.g., init method)"
 
-    def __init__(self, scheme_xml, context, logger):
-        self._name = scheme_xml.text
+    def __init__(self, scheme_xml, context, parent, logger):
+        name = scheme_xml.text
         self._subroutine_name = None
         self._context = context
         self._version = scheme_xml.get('version', None)
         self._lib = scheme_xml.get('lib', None)
-        # This dictionary is not part of the object but how it is used
-        self._call_list = CallList(self.name, logger=logger)
-        self._parent = None
-
-    @property
-    def name(self):
-        '''Return name of scheme'''
-        return self._name
+        super(Scheme, self).__init__(name, context, parent, logger)
 
 # XXgoldyXX: v debug only
 #    def ddtspec_to_str(self, ddt_spec, host_model):
@@ -255,11 +367,6 @@ class Scheme(object):
 #        return hstr + dimstr
 # XXgoldyXX: ^ debug only
 
-    @property
-    def call_list(self):
-        "Return this scheme's call list dictionary"
-        return self._call_list
-
     def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
         self._group = group
         my_header = None
@@ -287,7 +394,7 @@ class Scheme(object):
         for var in my_header.variable_list():
             self._call_list.add_variable(var)
         # End for
-        return scheme_mods, list() # No loop variables for scheme
+        return scheme_mods
 
     def write(self, outfile, logger, indent):
         my_args = self.call_list.call_string(dict=self._group.call_list)
@@ -301,98 +408,98 @@ class Scheme(object):
         'Create a readable string for this Scheme'
         return '<Scheme {}: {}>'.format(self.name, self._subroutine_name)
 
-    def __repr__(self):
-        'Create a unique readable string for this Scheme'
-        repr = super(Scheme, self).__repr__()
-        olmatch = obj_loc_re.search(repr)
-        if olmatch is not None:
-            loc = ' at {}'.format(olmatch.group(1))
-        else:
-            loc = ""
-        # End if
-        if self._subroutine_name is None:
-            substr = ''
-        else:
-            substr = ': {}'.format(self._subroutine_name)
-        # End if
-        return '<Scheme {}{}{}>'.format(self.name, substr, loc)
-
 ###############################################################################
 
-class Subcycle(object):
+class Subcycle(SuiteObject):
     "Class to represent a subcycled group of schemes or scheme collections"
 
-    def __init__(self, sub_xml, context, logger):
-        self._name = sub_xml.get('name', None)
+    def __init__(self, sub_xml, context, parent, logger):
+        name = sub_xml.get('name', None)
         self._loop = sub_xml.get('loop', "1")
-        self._context = context
-        self._logger = logger
-        self._items = list()
+        # See if our loop variable is an interger or a variable
+        try:
+            loop_int = int(self.loop)
+            self._loop_var_int = True
+        except ValueError as ve:
+            self._loop_var_int = False
+            lvar = parent.find_variable(self.loop, any_scope=True)
+            if lvar is None:
+                emsg = "Subcycle, {}, specifies {} iterations but {} not found"
+                raise CCPPError(emsg.format(name, self.loop, self.loop))
+            # End if
+        # End try
         for scheme in sub_xml:
             new_item = new_suite_item(item, context)
-            self._items.append(new_item)
+            self.add_part(new_item)
         # End for
-        # A null call list for compatibility
-        self._call_list = None
+        super(Subcycle, self).__init__(name, context, parent, logger)
 
     def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
-        loopvars = set()
-        if self._name is None:
-            self._name = "subcycle_index{}".format(level)
+        if self.name is None:
+            self.name = "subcycle_index{}".format(level)
         # End if
-        loopvars.add('integer :: {}'.format(self.name))
-        self._call_list = CallList(self.name, logger=self._logger)
+        # Create a variable for the loop index
+        self.add_variable(Var({'local_name':self.name,
+                               'standard_name':'loop_variable',
+                               'type':'integer', 'units':'count',
+                               'dimensions':'()'}, __api_source__))
+        # Handle all the suite objects inside of this subcycle
         scheme_mods = set()
-        for item in self._items:
-            smods, lvars = item.analyze(phase, group, scheme_library, suite_vars, level+1, logger)
+        for item in self.parts:
+            smods = item.analyze(phase, group, scheme_library, suite_vars, level+1, logger)
             for smod in smods:
                 scheme_mods.add(smod)
             # End for
-            for lvar in lvars:
-                loopvars.add(lvar)
-            # End for
         # End for
-        return scheme_mods, loopvars
-
-    @property
-    def call_list(self):
-        "Null call list for compatibility with schemes"
-        return self._call_list
+        return scheme_mods
 
     def write(self, outfile, logger, indent):
         outfile.write('do {} = 1, {}'.format(self.name, self.loop), indent)
         # Note that 'scheme' may be a sybcycle or other construct
-        for item in self._items:
+        for item in self.parts:
             item.write(outfile, logger, indent+1)
         # End for
         outfile.write('end do', 2)
-
-    @property
-    def name(self):
-        '''name property to be consistent with other classes'''
-        return self._name
 
     @property
     def loop(self):
         '''Get the loop value or variable standard_name'''
         return self._loop
 
-    @property
-    def schemes(self):
-        '''Get the flattened list of schemes'''
-        scheme_list = list()
-        for item in self._items:
-            if isinstance(item, Scheme):
-                scheme_list.append(item)
-            else:
-                scheme_list.extend(item.schemes())
-            # End if
+###############################################################################
+
+class TimeSplit(SuiteObject):
+    """Class to represent a group of processes to be computed in a time-split
+    manner -- each parameterization or other construct is called with an
+    state which has been updated from the previous step.
+    """
+
+    def __init__(self, sub_xml, context, parent, logger):
+        for scheme in sub_xml:
+            new_item = new_suite_item(item, context)
+            self.add_part(new_item)
         # End for
-        return scheme_list
+        super(TimeSplit, self).__init__('TimeSplit', context, parent, logger)
+
+    def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+        # Handle all the suite objects inside of this group
+        scheme_mods = set()
+        for item in self.parts:
+            smods = item.analyze(phase, group, scheme_library, suite_vars, level+1, logger)
+            for smod in smods:
+                scheme_mods.add(smod)
+            # End for
+        # End for
+        return scheme_mods
+
+    def write(self, outfile, logger, indent):
+        for item in self.parts:
+            item.write(outfile, logger, indent+1)
+        # End for
 
 ###############################################################################
 
-class Group(VarDictionary):
+class Group(SuiteObject):
     """Class to represent a grouping of schemes in a suite
     A Group object is implemented as a subroutine callable by the API.
     The main arguments to a group are the host model variables.
@@ -410,55 +517,52 @@ class Group(VarDictionary):
    end subroutine {subname}
 '''
 
+    __process_types__ = ['timesplit', 'processsplit']
+
+    __process_xml__ = {}
+    for gptype in __process_types__:
+        __process_xml__[gptype] = '<{}></{}>'.format(gptype, gptype)
+    # End for
+
     def __init__(self, group_xml, transition, parent, context, logger):
-        self._name = parent.name + '_' + group_xml.get('name')
+        name = parent.name + '_' + group_xml.get('name')
         if transition not in CCPP_STATE_MACH.transitions():
             raise ParseInternalError("Bad transition argument to Group, '{}'".format(transition))
         # End if
         self._transition = transition
-        self._parts = list()
         # Initialize the dictionary of variables internal to group
-        super(Group, self).__init__(self.name, parent_dict=parent)
-        # Initialize dictionary of variables passed from outside
-        self._call_list = CallList(self.name, logger=logger)
+        super(Group, self).__init__(name, context, parent, logger)
+        # Add the items but first make sure we know the process tpye for
+        # the group (e.g., TimeSplit or ProcessSplit).
+        if (len(group_xml) == 0) or (group_xml[0].tag not in Group.__process_types__):
+            # Default is TimeSplit
+            tsxml = ET.fromstring(Group.__process_xml__['timesplit'])
+            ts = new_suite_object(tsxml, context, parent, logger)
+            add_to = ts
+            self.add_part(ts)
+        else:
+            add_to = self
+        # End if
+        # Add the sub objects either directly to the Group or to the TimeSplit
         for item in group_xml:
-            new_item = new_suite_object(item, context, logger)
-            self.add_item(new_item)
+            new_item = new_suite_object(item, context, parent, logger)
+            add_to.add_part(new_item)
         # End for
-        # Grab a frozen copy of the context
-        self._context = ParseContext(context=context)
-        self._loop_var_defs = set()
         self._local_schemes = set()
         self._host_vars = None
         self._host_ddts = None
+        logger.debug("{}".format(self))
 
     def has_item(self, item_name):
         'Check to see if an item is already in this group'
         has = False
-        for item in self._parts:
+        for item in self.parts:
             if item.name == item_name:
                 has = True
                 break
             # End if
         # End for
         return has
-
-    def add_item(self, item):
-        'Add an item (e.g., Suite, Subcycle) to this group'
-        self._parts.append(item)
-
-    def schemes(self):
-        "Return a flattened list of schemes for this group"
-        schemes = list()
-        for item in self._parts:
-            schemes.extend(item.schemes())
-        # End for
-        return schemes
-
-    @property
-    def call_list(self):
-        "Return this group's call list dictionary"
-        return self._call_list
 
     @property
     def phase(self):
@@ -493,15 +597,11 @@ class Group(VarDictionary):
     def analyze(self, phase, suite_vars, scheme_library, logger):
         parent = self.parent
         self._phase = phase
-        for item in self._parts:
+        for item in self.parts:
             # Items can be schemes, subcycles or other objects
             # All have the same interface and return a set of module use
             # statements (lschemes) and a set of loop variables
-            lschemes, lvars = item.analyze(phase, self, scheme_library, suite_vars, 1, logger)
-            # Keep track of loop variables to define
-            for lvar in lvars:
-                self._loop_var_defs.add(lvar)
-            # End for
+            lschemes = item.analyze(phase, self, scheme_library, suite_vars, 1, logger)
             for lscheme in lschemes:
                 self._local_schemes.add(lscheme)
             # End for
@@ -559,10 +659,26 @@ class Group(VarDictionary):
         outfile.write('! Dummy arguments', indent+1)
         logger.debug('Variables for {}: ({})'.format(self.name, self._call_list.variable_list()))
         self._call_list.declare_variables(outfile, indent+1)
-        if len(self._loop_var_defs) > 0:
+        subpart_var_set = {}
+        for item in self.parts:
+            for var in item.declarations():
+                lname = var.get_prop_value('local_name')
+                if lname in subpart_var_set:
+                    if subpart_var_set[lname].compatible(var):
+                        pass # We already are going to declare this variable
+                    else:
+                        errmsg = "Duplicate suite part variable, {}"
+                        raise ParseInternalError(errmsg.format(lvar))
+                    # End if
+                else:
+                    subpart_var_set[lname] = var
+                # End if
+            # End for
+        # End for
+        if len(subpart_var_set) > 0:
             outfile.write('\n! Local Variables', indent+1)
         # Write out local variables
-        for var in self._loop_var_defs:
+        for var in subpart_var_set:
             outfile.write(var, indent+1)
         # End for
         outfile.write('', 0)
@@ -610,7 +726,7 @@ class Group(VarDictionary):
             # End for
         # End if
         # Write the scheme and subcycle calls
-        for item in self._parts:
+        for item in self.parts:
             item.write(outfile, logger, indent+1)
         # End for
         # Deallocate suite vars
@@ -625,11 +741,6 @@ class Group(VarDictionary):
         # End if
         outfile.write(self._set_state[0], indent + self._set_state[1])
         outfile.write(Group.__subend__.format(subname=subname), indent)
-
-    @property
-    def name(self):
-        '''Get the name of the group.'''
-        return self._name
 
 ###############################################################################
 
@@ -909,8 +1020,9 @@ end module {module}
                                 if not pgroup.has_item(header.title):
                                     sstr = Suite.__scheme_template__.format(scheme.name)
                                     sxml = ET.fromstring(sstr)
-                                    scheme = Scheme(sxml, self._context, logger)
-                                    pgroup.add_item(scheme)
+                                    scheme = Scheme(sxml, self._context,
+                                                    pgroup, logger)
+                                    pgroup.add_part(scheme)
                                 # End if (no else needed)
                             # End if
                         # End for (phase)
@@ -1049,9 +1161,6 @@ private
     __footer__ = '''
 end module {module}
 '''
-
-    __api_source__ = ParseSource("CCPP_API", "MODULE",
-                                 ParseContext(filename="ccpp_suite.F90"))
 
     # Note, we cannot add these vars to our dictionary as we do not want
     #    them showing up in group dummy arg lists
