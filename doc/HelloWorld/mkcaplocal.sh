@@ -5,6 +5,6 @@ if [ -f "${lname}" ]; then
   rm ${lname}
 fi
 touch ${lname}
-for file in `cat ${1}`; do
-  echo "`basename ${file} .F90`.o" >> ${lname}
-done
+while read line || [[ -n "${line}" ]]; do
+  echo "`basename ${line} .F90`.o" >> ${lname}
+done < "${1}"

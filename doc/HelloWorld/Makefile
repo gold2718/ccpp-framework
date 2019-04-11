@@ -37,11 +37,14 @@ all: HelloWorld
 # Generate CCPP cap files
 capfiles.txt: $(SRCS_META) $(SRCS_XML)
 	$(CAPGEN) $(CAPGEN_ARGS)
+
+.PHONY: capobjs
+capobjs: capfiles.txt
 	$(shell $(MKFILE_PATH)/mkcaplocal.sh $(BLDDIR)/capfiles.txt)
 	$(eval CAPOBJS=$(shell cat caplocal.txt))
 
 # Human written
-HelloWorld: capfiles.txt $(CAPOBJS) $(OBJS_F90)
+HelloWorld: capobjs $(CAPOBJS) $(OBJS_F90)
 	$(FC) $(FCFLAGS) -o $@ $(CAPOBJS) $(OBJS_F90)
 
 hello_scheme.o: ccpp_kinds.o $(MKFILE_PATH)/hello_scheme.F90
@@ -55,11 +58,11 @@ hello_world_host.o: $(MKFILE_PATH)/hello_world_host.F90
 	$(FC) -c $(INCPATH) $(FCFLAGS) $(MKFILE_PATH)/hello_world_host.F90
 
 # CCPP generated
-ccpp_kinds.F90: capfiles.txt
+ccpp_kinds.F90: capobjs
 
-HelloWorld_ccpp_cap.F90: capfiles.txt
+HelloWorld_ccpp_cap.F90: capobjs
 
-ccpp_hello_world_suite_cap.F90: capfiles.txt
+ccpp_hello_world_suite_cap.F90: capobjs
 
 ccpp_kinds.o: ccpp_kinds.F90
 	$(FC) -c $(INCPATH) $(FCFLAGS) ccpp_kinds.F90

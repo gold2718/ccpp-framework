@@ -14,6 +14,7 @@ CONTAINS
   !!
   subroutine hello_world_sub()
 
+    use hello_world_mod,     only: ncols
     use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_initialize
     use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_timestep_initial
     use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_run
@@ -30,14 +31,14 @@ CONTAINS
     integer                         :: errflg
 
     ! Use the suite information to setup the run
-    call HelloWorld_ccpp_physics_initialize('hello_world', errmsg, errflg)
+    call HelloWorld_ccpp_physics_initialize('hello_world_suite', errmsg, errflg)
     if (errflg /= 0) then
       write(6, *) trim(errmsg)
       stop
     end if
 
     ! Initialize the timestep
-    call HelloWorld_ccpp_physics_timestep_initial('hello_world', errmsg, errflg)
+    call HelloWorld_ccpp_physics_timestep_initial('hello_world_suite', errmsg, errflg)
     if (errflg /= 0) then
       write(6, *) trim(errmsg)
       stop
@@ -46,10 +47,10 @@ CONTAINS
     do col_start = 1, ncols, 5
       col_end = MIN(col_start + 4, ncols)
 
-      call HelloWorld_ccpp_physics_run('hello_world', 'physics', col_start, col_end, precl, vmr, total_dens, errmsg, errflg)
+      call HelloWorld_ccpp_physics_run('hello_world_suite', 'physics', col_start, col_end, errmsg, errflg)
       if (errflg /= 0) then
         write(6, *) trim(errmsg)
-        call ccpp_physics_suite_part_list('hello_world', part_names, errmsg, errflg)
+        call ccpp_physics_suite_part_list('hello_world_suite', part_names, errmsg, errflg)
         write(6, *) 'Available suite parts are:'
         do index = 1, size(part_names)
           write(6, *) trim(part_names(index))
@@ -58,9 +59,9 @@ CONTAINS
       end if
     end do
 
-    call HelloWorld_ccpp_physics_timestep_final('hello_world', errmsg, errflg)
+    call HelloWorld_ccpp_physics_timestep_final('hello_world_suite', errmsg, errflg)
 
-    call HelloWorld_ccpp_physics_finalize('hello_world', errmsg, errflg)
+    call HelloWorld_ccpp_physics_finalize('hello_world_suite', errmsg, errflg)
     if (errflg /= 0) then
       write(6, *) trim(errmsg)
       write(6,'(a)') 'An error occurred in ccpp_timestep_final, Exiting...'
@@ -72,6 +73,6 @@ CONTAINS
 end module hello_world_host
 
 program hello_world
-  use hello_world_sub, only: hellow_world_sub
+  use hello_world_host, only: hello_world_sub
   call hello_world_sub()
 end program hello_world
