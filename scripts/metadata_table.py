@@ -338,6 +338,8 @@ class MetadataHeader(ParseSource):
         if valid_line:
             var_props = {}
             var_props['local_name'] = local_name
+            # Grab context that points at beginning of definition
+            context = ParseContext(context=self.context)
         else:
             var_props = None
         # End if
@@ -392,7 +394,7 @@ class MetadataHeader(ParseSource):
             return None, curr_line
         else:
             try:
-                newvar = Var(var_props, source=self)
+                newvar = Var(var_props, source=self, context=context)
             except CCPPError as ve:
                 raise ParseSyntaxError(ve, context=self._pobj)
             return newvar, curr_line
@@ -494,7 +496,7 @@ class MetadataHeader(ParseSource):
 
     @classmethod
     def is_scalar_reference(cls, test_val):
-        return check_fortran_ref(test_val) is not None
+        return check_fortran_ref(test_val, None, False) is not None
 
     @classmethod
     def parse_metadata_file(cls, filename, logger):

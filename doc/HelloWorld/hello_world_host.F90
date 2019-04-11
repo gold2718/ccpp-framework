@@ -19,8 +19,8 @@ CONTAINS
     use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_run
     use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_timestep_final
     use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_finalize
-    use ccpp_physics_api,    only: ccpp_physics_suite_list
-    use ccpp_physics_api,    only: ccpp_physics_suite_part_list
+    use HelloWorld_ccpp_cap, only: ccpp_physics_suite_list
+    use HelloWorld_ccpp_cap, only: ccpp_physics_suite_part_list
 
 
     integer                         :: col_start, col_end

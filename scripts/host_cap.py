@@ -25,7 +25,6 @@ header = '''
 !
 module {module}
 
-   use {kinds}
 '''
 
 preamble='''
@@ -47,7 +46,7 @@ end module {module}
 '''
 
 __api_source__ = ParseSource("CCPP_API", "MODULE",
-                             ParseContext(filename="host_ccpp_cap.F90"))
+                             ParseContext(filename="host_cap.F90"))
 
 __suite_name_var__ = Var({'local_name':'suite_name',
                           'standard_name':'suite_name',
@@ -90,7 +89,9 @@ def write_host_cap(host_model, api, output_dir, logger):
     with FortranWriter(cap_filename, 'w') as cap:
         cap.write(COPYRIGHT, 0)
         cap.write(header.format(host_model=host_model.name,
-                                module=module_name, kinds=KINDS_MODULE), 0)
+                                module=module_name), 0)
+        cap.write('   use {kinds}'.format(kinds=KINDS_MODULE), 1)
+
         modules = host_model.variable_locations()
         mlen = max([len(x[0]) for x in modules])
         max_suite_len = 0
@@ -133,7 +134,7 @@ def write_host_cap(host_model, api, output_dir, logger):
             apivars = [__suite_name_var__]
             if run_stage:
                 # Only the run phase needs a suite part name
-                apivars.append(__suite_name_var__)
+                apivars.append(__suite_part_var__)
             # End if
             apinames = [x.get_prop_value('standard_name') for x in apivars]
             hdvars = host_model.call_list(stage) # Host interface dummy args

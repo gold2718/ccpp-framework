@@ -9,7 +9,7 @@ import re
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
 # CCPP framework imports
-from parse_tools import check_fortran_ref, check_fortran_type, context_string
+from parse_tools import check_local_name, check_fortran_type, context_string
 from parse_tools import FORTRAN_DP_RE, FORTRAN_ID
 from parse_tools import registered_fortran_ddt_name
 from parse_tools import check_dimensions, check_cf_standard_name
@@ -240,9 +240,18 @@ class VariableProperty(object):
         "Return True iff <test_name> is the name of this property"
         return self.name.lower() == test_name.lower()
 
-    def valid_value(self, test_value, error=False):
-        'Return True iff test_value is valid'
+    def valid_value(self, test_value, prop_dict=None, error=False):
+        '''Return a valid version of <test_value> if it is valid.
+        If <test_value> is not valid, return None or raise an exception,
+        depending on the value of <error>.
+        If <prop_dict> is not None, it may be used in value validation.
+        '''
         valid_val = None
+        if (prop_dict is not None) and ('constant' in prop_dict):
+            constant = prop_dict['constant']
+        else:
+            constant = False
+        # End if
         if self.type is int:
             try:
                 tv = int(test_value)
@@ -306,7 +315,7 @@ class VariableProperty(object):
         # End if
         # Call a check function?
         if valid_val and (self._check_fn is not None):
-            valid_val = self._check_fn(valid_val, error=error)
+            valid_val = self._check_fn(valid_val, prop_dict, error)
         elif (valid_val is None) and error:
             raise CCPPError("Invalid {} variable property, '{}'".format(self.name, test_value))
         # End if
@@ -355,7 +364,7 @@ class Var(object):
 
     # __spec_props are for variables defined in a specification
     __spec_props = [VariableProperty('local_name', str,
-                                     check_fn_in=check_fortran_ref),
+                                     check_fn_in=check_local_name),
                     VariableProperty('standard_name', str,
                                      check_fn_in=check_cf_standard_name),
                     VariableProperty('long_name', str, optional_in=True,
@@ -409,7 +418,8 @@ class Var(object):
         # End if
     # End for
 
-    def __init__(self, prop_dict, source, invalid_ok=False, logger=None):
+    def __init__(self, prop_dict, source, context=None,
+                 invalid_ok=False, logger=None):
         """NB: invalid_ok=True is dangerous because it allows creation
         of a Var object with invalid properties.
         In order to prevent silent failures, invalid_ok requires a logger
@@ -423,7 +433,11 @@ class Var(object):
         # End if
         self._source = source
         # Grab a frozen copy of the context
-        self._context = ParseContext(context=source.context)
+        if context is None:
+            self._context = ParseContext(context=source.context)
+        else:
+            self._context = context
+        # End if
         # First, check the input
         if 'ddt_type' in prop_dict:
             # Special case to bypass normal type rules
@@ -475,6 +489,7 @@ class Var(object):
         try:
             for prop in self._prop_dict.keys():
                 check = Var.get_prop(prop).valid_value(self._prop_dict[prop],
+                                                       prop_dict=self._prop_dict,
                                                        error=True)
             # End for
         except CCPPError as cp:
@@ -493,12 +508,10 @@ class Var(object):
         stype =     self.get_prop_value('type')
         skind =     self.get_prop_value('kind')
         sunits =    self.get_prop_value('units')
-        srank=      self.get_prop_value('tank')
         sstd_name = self.get_prop_value('standard_name')
         otype =     other.get_prop_value('type')
         okind =     other.get_prop_value('kind')
         ounits =    other.get_prop_value('units')
-        orank=      other.get_prop_value('tank')
         ostd_name = other.get_prop_value('standard_name')
         if stype == 'character':
             kind_eq = ((skind == okind) or
@@ -508,7 +521,7 @@ class Var(object):
             kind_eq = skind == okind
         # End if
         if ((sstd_name == ostd_name) and kind_eq and
-            (sunits == ounits) and (stype == otype) and (srank == orank)):
+            (sunits == ounits) and (stype == otype)):
             return True, None
         else:
             logger_str = None
@@ -525,9 +538,6 @@ class Var(object):
             elif stype != otype:
                 logger_str = "type: '{}' != '{}'".format(stype, otype)
                 reason = 'type'
-            elif srank != orank:
-                logger_str = "rank: '{}' != '{}'".format(srank, orank)
-                reason = 'rank'
             else:
                 error_str = 'Why are these variables not compatible?'
                 reason = 'UNKNOWN'
@@ -585,6 +595,27 @@ class Var(object):
         else:
             return None
 
+    def valid_value(self, prop_name, test_value=None, error=False):
+        '''Return a valid version of <test_value> if it is a valid value
+        for the property, <prop_name>.
+        If <test_value> is not valid, return None or raise an exception,
+        depending on the value of <error>.
+        If <test_value> is None, use the current value of <prop_name>.
+        '''
+        vprop = Var.get_prop(prop_name)
+        if vprop is None:
+            valid = None
+            errmsg = 'Invalid variable property, {}'
+            raise ParseInternalError(errmsg.format(prop_name))
+        else:
+            if test_value is None:
+                test_val = self.get_prop_value(prop_name)
+            # End if
+            valid = vprop.valid_value(test_val,
+                                      prop_dict=self._prop_dict, error=error)
+        # End if
+        return valid
+
     @property
     def context(self):
         return self._context
@@ -614,8 +645,7 @@ class Var(object):
 
     def get_dimensions(self, loop_subst=False):
         "Return the variable's dimension string"
-        dimval = self.get_prop_value('dimensions')
-        dims = Var.get_prop('dimensions').valid_value(dimval)
+        dims = self.valid_value('dimensions')
         if loop_subst:
             newdims = loop_subst_dims(dims)
         else:
@@ -701,16 +731,21 @@ class Var(object):
         else:
             intent_str = ' '*13
         # End if
+        if len(intent_str.strip()) > 0:
+            comma = ','
+        else:
+            comma = ' '
+        # End if
         if self.is_ddt():
             str = "type({kind}){cspc}{intent} :: {name}{dims}"
-            cspc = ',' + ' '*(13 - len(kind))
+            cspc = comma + ' '*(13 - len(kind))
         else:
             if (kind is not None) and (len(kind) > 0):
                 str = "{type}({kind}){cspc}{intent} :: {name}{dims}"
-                cspc = ',' + ' '*(17 - len(vtype) - len(kind))
+                cspc = comma + ' '*(17 - len(vtype) - len(kind))
             else:
                 str = "{type}{cspc}{intent} :: {name}{dims}"
-                cspc = ',' + ' '*(19 - len(vtype))
+                cspc = comma + ' '*(19 - len(vtype))
             # End if
         # End if
         outfile.write(str.format(type=vtype, kind=kind, intent=intent_str,
@@ -916,45 +951,68 @@ class VarDDT(Var):
 
 ###############################################################################
 
-__ccpp_registry_parse_source__ = ParseSource('VarDictionary', 'REGISTRY',
-                                             ParseContext())
+__ccpp_parse_context__ = ParseContext(filename='metavar.py')
+
+__ccpp_registry_parse_source__ = ParseSource('VarDictionary', 'module',
+                                             __ccpp_parse_context__)
+
+__ccpp_scheme_parse_source__ = ParseSource('VarDictionary', 'scheme',
+                                           __ccpp_parse_context__)
 
 # Dictionary of standard CCPP variables
 CCPP_STANDARD_VARS = {
     # Variable representing the constant integer, 1
     'ccpp_constant_one' :
-    Var({'local_name' : 'ccpp_one', 'constant' : 'True',
-         'standard_name' : 'ccpp_constant_one',
-         'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
-        __ccpp_registry_parse_source__),
+    {'local_name' : '1', 'constant' : 'True',
+     'standard_name' : 'ccpp_constant_one',
+     'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
     'ccpp_error_flag' :
-    Var({'local_name' : 'errflg', 'standard_name' : 'ccpp_error_flag',
-         'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
-        __ccpp_registry_parse_source__),
+    {'local_name' : 'errflg', 'standard_name' : 'ccpp_error_flag',
+     'units' : 'flag', 'dimensions' : '()', 'type' : 'integer'},
     'ccpp_error_message' :
-    Var({'local_name' : 'errmsg', 'standard_name' : 'ccpp_error_message',
-         'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
-        __ccpp_registry_parse_source__),
+    {'local_name' : 'errmsg', 'standard_name' : 'ccpp_error_message',
+     'units' : '1', 'dimensions' : '()', 'type' : 'character',
+     'kind' : 'len=512'},
     'horizontal_loop_extent' :
-    Var({'local_name' : 'horz_loop_ext',
-         'standard_name' : 'horizontal_loop_extent', 'units' : '1',
-         'dimensions' : '()', 'type' : 'integer'},
-        __ccpp_registry_parse_source__),
+    {'local_name' : 'horz_loop_ext',
+     'standard_name' : 'horizontal_loop_extent', 'units' : '1',
+     'dimensions' : '()', 'type' : 'integer'},
     'horizontal_loop_begin' :
-    Var({'local_name' : 'horz_col_beg',
-         'standard_name' : 'horizontal_loop_begin', 'units' : '1',
-         'dimensions' : '()', 'type' : 'integer'},
-        __ccpp_registry_parse_source__),
+    {'local_name' : 'horz_col_beg',
+     'standard_name' : 'horizontal_loop_begin', 'units' : '1',
+     'dimensions' : '()', 'type' : 'integer'},
     'horizontal_loop_end' :
-    Var({'local_name' : 'horz_col_end',
-         'standard_name' : 'horizontal_loop_end', 'units' : '1',
-         'dimensions' : '()', 'type' : 'integer'},
-        __ccpp_registry_parse_source__)
+    {'local_name' : 'horz_col_end',
+     'standard_name' : 'horizontal_loop_end', 'units' : '1',
+     'dimensions' : '()', 'type' : 'integer'}
 }
+
+###############################################################################
+
+def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
+    if std_name in CCPP_STANDARD_VARS:
+        # Copy the dictionary because Var can change it
+        vdict = dict(CCPP_STANDARD_VARS[std_name])
+        if context is None:
+            psource = ParseSource('VarDictionary', source_type,
+                                  __ccpp_parse_context__)
+        else:
+            psource = ParseSource('VarDictionary', source_type, context)
+        # End if
+        if source_type.lower() == 'scheme':
+            vdict['intent'] = intent
+        # End if
+        newvar = Var(vdict, psource)
+    else:
+        newvar = None
+    # End if
+    return newvar
+
+###############################################################################
 
 # List of constant variables which are universally available
 CCPP_CONSTANT_VARS = {'ccpp_constant_one' :
-                      CCPP_STANDARD_VARS['ccpp_constant_one']}
+                      ccpp_standard_var('ccpp_constant_one', 'module')}
 
 ###############################################################################
 
@@ -1120,8 +1178,7 @@ class VarDictionary(OrderedDict):
         <loop_vars> a variable ending in "_extent", "_begin", "_end", or
         <consts> a variable with the "constant" property.
         '''
-        const_val = var.get_prop_value('constant')
-        const_var = Var.get_prop('constant').valid_value(const_val)
+        const_var = var.valid_value('constant')
         include_var = consts and const_var
         if not include_var:
             standard_name = var.get_prop_value('standard_name')
@@ -1181,7 +1238,7 @@ class VarDictionary(OrderedDict):
                 errstr = "new variable, {}, incompatible {} between {}{} and"
                 raise ParseSyntaxError(errstr.format(nlname, reason, clname, cstr),
                                        token=standard_name,
-                                       context=newvar.source.context)
+                                       context=newvar.context)
             # End if
         # End if
         lname = newvar.get_prop_value('local_name')
@@ -1343,7 +1400,7 @@ class VarDictionary(OrderedDict):
             dict_var = self.find_variable(standard_name,
                                           any_scope=any_scope, loop_subst=False)
             if dict_var is not None:
-                var_one = CCPP_STANDARD_VARS['ccpp_constant_one']
+                var_one = CCPP_CONSTANT_VARS['ccpp_constant_one']
                 my_var = (var_one, dict_var)
                 if self._logger is not None:
                     logger_str = "loop_subst: found {}{}".format(standard_name, context_string(context))

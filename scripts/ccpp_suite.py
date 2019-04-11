@@ -16,7 +16,8 @@ from parse_tools   import ParseContext, ParseSource, context_string
 from parse_tools   import ParseInternalError, ParseSyntaxError, CCPPError
 from parse_tools   import FORTRAN_ID
 from parse_tools   import read_xml_file, validate_xml_file, find_schema_version
-from metavar       import Var, VarDDT, VarDictionary, ddt_modules, CCPP_STANDARD_VARS
+from metavar       import Var, VarDDT, VarDictionary, ddt_modules
+from metavar       import ccpp_standard_var
 from state_machine import StateMachine
 from fortran_tools import FortranWriter
 
@@ -37,8 +38,8 @@ array_ref_re = re.compile(r"([^(]*)[(]([^)]*)[)]")
 obj_loc_re = re.compile(r"(0x[0-9A-Fa-f]+)>")
 
 # Source for internally generated variables.
-__api_source__ = ParseSource("CCPP_API", "module",
-                             ParseContext(filename="ccpp_suite.py"))
+__api_context__ = ParseContext(filename="ccpp_suite.py")
+__api_source__ = ParseSource("CCPP_API", "module", __api_context__)
 
 # Allowed CCPP transitions
 CCPP_STATE_MACH = StateMachine((('initialize',       'uninitialized',
@@ -53,8 +54,10 @@ CCPP_STATE_MACH = StateMachine((('initialize',       'uninitialized',
                                  'uninitialized',     __final_st__)))
 
 # Required variables for inclusion in auto-generated schemes
-CCPP_REQUIRED_VARS = [CCPP_STANDARD_VARS['ccpp_error_flag'],
-                      CCPP_STANDARD_VARS['ccpp_error_message']]
+CCPP_REQUIRED_VARS = [ccpp_standard_var('ccpp_error_flag', 'scheme',
+                                        context=__api_context__),
+                      ccpp_standard_var('ccpp_error_message', 'scheme',
+                                        context=__api_context__)]
 
 # CCPP copyright statement to be included in all generated Fortran files
 COPYRIGHT = '''!
@@ -843,8 +846,9 @@ end module {module}
     def new_group(self, group_string, transition):
         gxml = ET.fromstring(group_string)
         group = Group(gxml, transition, self, self._context, self._logger)
-        group.call_list.add_variable(CCPP_STANDARD_VARS['ccpp_error_flag'])
-        group.call_list.add_variable(CCPP_STANDARD_VARS['ccpp_error_message']
+        for svar in CCPP_REQUIRED_VARS:
+            group.call_list.add_variable(svar)
+        # End for
         self._full_groups[group.name] = group
         self._full_phases[group.phase] = group
         return group
@@ -1254,11 +1258,11 @@ end module {module}
 
     @property
     def suite_name_var(self):
-        return type(self).__suite_name__
+        return self.__class__.__suite_name__
 
     @property
     def suite_part_var(self):
-        return type(self).__suite_part__
+        return self.__class__.__suite_part__
 
     @property
     def suites(self):
@@ -1347,8 +1351,6 @@ end module {module}
         ofile.write("{errflg} = 1".format(errflg=errflg_name), 3)
         ofile.write("end if", 2)
         ofile.write("end subroutine {}".format(API.__part_fname__), 1)
-        # Finish off the module
-        ofile.write(API.__footer__.format(module=self.module), 0)
 
 # XXgoldyXX: v debug only
     def foo(self):
@@ -1496,6 +1498,9 @@ end module {module}
         # End with
         api_filenames.append(filename)
         return api_filenames
+        # Finish off the module
+        ofile.write(API.__footer__.format(module=self.module), 0)
+# XXgoldyXX: ^ debug only
 
 ###############################################################################
 if __name__ == "__main__":
