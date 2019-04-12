@@ -404,9 +404,22 @@ class MetadataHeader(ParseSource):
         "Return an ordered list of the header's variables"
         return self._variables.variable_list()
 
-    def find_variable(self, std_name):
+    def find_variable(self, std_name, use_local_name=False):
         "Find a variable in this header's dictionary"
-        return self._variables.find_variable(std_name, any_scope=False)
+        var = None
+        if use_local_name:
+            # Look for match by local_name property
+            for tvar in self.variable_list():
+                lname = tvar.get_prop_value('local_name')
+                if lname == std_name:
+                    var = tvar
+                    break
+                # End if
+            # End for
+        else:
+            var = self._variables.find_variable(std_name, any_scope=False)
+        # End if
+        return var
 
     def get_var(self, standard_name=None):
         if standard_name is not None:

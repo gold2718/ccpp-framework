@@ -206,16 +206,20 @@ def create_kinds_file(kind_phys, output_dir, logger):
     return kinds_filepath
 
 ###############################################################################
-def var_comp(prop_name, mvar, fvar, title):
+def var_comp(prop_name, mvar, fvar, title, case_sensitive=False):
 ###############################################################################
     "Compare a property between two variables"
     mprop = mvar.get_prop_value(prop_name)
     fprop = fvar.get_prop_value(prop_name)
+    if not case_sensitive:
+        mprop = mprop.lower()
+        fprop = fprop.lower()
+    # End if
     comp = mprop == fprop
     if not comp:
-        errmsg = '{} mismatch in {}{}'
+        errmsg = '{} mismatch ({} != {}) in {}{}'
         ctx = context_string(mvar.context)
-        logger.error(errmsg.format(prop_name, title, ctx))
+        logger.error(errmsg.format(prop_name, mprop, fprop, title, ctx))
     # End if
     return comp
 
@@ -263,11 +267,16 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
     for mheader in header_dict.keys():
         title = mheader.title
         fheader = header_dict[mheader]
-        if mheader.header_type != fheader.header_type:
-            errmsg = 'Metadata table type mismatch for {}, {} != {}{}'
-            ctx = mheader.start_context()
-            raise CCPPError(errmsg.format(title, mheader.header_type,
-                                          fheader.header_type, ctx))
+        mht = mheader.header_type
+        fht = fheader.header_type
+        if mht != fht:
+            # Special case, host metadata can be in a Fortran module or scheme
+            if (mht != 'host') or ((fht != 'module') and (fht != 'scheme')):
+                errmsg = 'Metadata table type mismatch for {}, {} != {}{}'
+                ctx = mheader.start_context()
+                raise CCPPError(errmsg.format(title, mheader.header_type,
+                                              fheader.header_type, ctx))
+            # End if
         else:
             # The headers should have the same variables in the same order
             mlist = mheader.variable_list()
@@ -283,30 +292,28 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
                 std_name = mvar.get_prop_value('standard_name')
                 lname = mvar.get_prop_value('local_name')
                 if mind >= flen:
-                    if fheader.find_variable(std_name) is None:
+                    if fheader.find_variable(name, use_local_name=True) is None:
                         errmsg = 'No Fortran variable for {} in {}'
                         logger.error(errmsg.format(lname, title))
                     # End if (no else, we already reported an out-of-place error
                 else:
                     fvar = flist[mind]
-                    if not var_comp('standard_name', mvar, fvar, title):
-                        errors_found = errors_found + 1
-                    # End if
-                    if not var_comp('local_name', mvar, fvar, title):
-                        errors_found = errors_found + 1
-                    # End if
-                    if not var_comp('type', mvar, fvar, title):
-                        errors_found = errors_found + 1
-                    # End if
-                    if not var_comp('kind', mvar, fvar, title):
-                        errors_found = errors_found + 1
-                    # End if
-                    if mheader.header_type == 'scheme':
-                        if not var_comp('', mvar, fvar, title):
+                    if var_comp('local_name', mvar, fvar, title):
+                        if not var_comp('type', mvar, fvar, title):
                             errors_found = errors_found + 1
                         # End if
+                        if not var_comp('kind', mvar, fvar, title):
+                            errors_found = errors_found + 1
+                        # End if
+                        if mheader.header_type == 'scheme':
+                            if not var_comp('intent', mvar, fvar, title):
+                                errors_found = errors_found + 1
+                            # End if
+                        # End if
+                        # Compare dimensions
+                    else:
+                        errors_found = errors_found + 1
                     # End if
-                    # Compare dimensions
             # End for
         # End if
     # End for

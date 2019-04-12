@@ -5,13 +5,13 @@ module hello_world_mod
   implicit none
   public
 
+  integer            :: ntimes_loop
   !> \section arg_table_hello_world_mod  Argument Table
   !! \htmlinclude arg_table_hello_world_host.html
   !!
   integer, parameter :: ncols = 10
   integer, parameter :: pver = 5
   integer, parameter :: pverp = 6
-  integer            :: ntimes_loop
   real(kind_phys)    :: temp_midpoints(ncols, pver)
   real(kind_phys)    :: temp_interfaces(ncols, pverp)
   real(kind_phys)    :: dt
