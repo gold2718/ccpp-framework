@@ -16,7 +16,7 @@ from fortran_tools import parse_fortran_file, FortranWriter
 from host_model import HostModel
 from host_cap import write_host_cap
 from ccpp_suite import API, Suite, COPYRIGHT, KINDS_MODULE, KINDS_FILENAME
-from parse_tools import init_log, set_log_level
+from parse_tools import init_log, set_log_level, context_string
 from parse_tools import CCPPError, ParseInternalError
 from metadata_table import MetadataHeader
 
@@ -206,6 +206,20 @@ def create_kinds_file(kind_phys, output_dir, logger):
     return kinds_filepath
 
 ###############################################################################
+def var_comp(prop_name, mvar, fvar, title):
+###############################################################################
+    "Compare a property between two variables"
+    mprop = mvar.get_prop_value(prop_name)
+    fprop = fvar.get_prop_value(prop_name)
+    comp = mprop == fprop
+    if not comp:
+        errmsg = '{} mismatch in {}{}'
+        ctx = context_string(mvar.context)
+        logger.error(errmsg.format(prop_name, title, ctx))
+    # End if
+    return comp
+
+###############################################################################
 def check_fortran_against_metadata(meta_headers, fort_headers,
                                    mfilename, ffilename, logger):
 ###############################################################################
@@ -245,6 +259,61 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
         raise CCPPError(errmsg)
     # End if
     # We have a one-to-one set, compare headers
+    errors_found = 0
+    for mheader in header_dict.keys():
+        title = mheader.title
+        fheader = header_dict[mheader]
+        if mheader.header_type != fheader.header_type:
+            errmsg = 'Metadata table type mismatch for {}, {} != {}{}'
+            ctx = mheader.start_context()
+            raise CCPPError(errmsg.format(title, mheader.header_type,
+                                          fheader.header_type, ctx))
+        else:
+            # The headers should have the same variables in the same order
+            mlist = mheader.variable_list()
+            mlen = len(mlist)
+            flist = fheader.variable_list()
+            flen = len(flist)
+            if len(mlist) != len(flist):
+                errmsg = 'Variable mismatch in {}'
+                logger.error(errmsg.format(title))
+            # End if
+            for mind in range(mlen):
+                mvar = mlist[mind]
+                std_name = mvar.get_prop_value('standard_name')
+                lname = mvar.get_prop_value('local_name')
+                if mind >= flen:
+                    if fheader.find_variable(std_name) is None:
+                        errmsg = 'No Fortran variable for {} in {}'
+                        logger.error(errmsg.format(lname, title))
+                    # End if (no else, we already reported an out-of-place error
+                else:
+                    fvar = flist[mind]
+                    if not var_comp('standard_name', mvar, fvar, title):
+                        errors_found = errors_found + 1
+                    # End if
+                    if not var_comp('local_name', mvar, fvar, title):
+                        errors_found = errors_found + 1
+                    # End if
+                    if not var_comp('type', mvar, fvar, title):
+                        errors_found = errors_found + 1
+                    # End if
+                    if not var_comp('kind', mvar, fvar, title):
+                        errors_found = errors_found + 1
+                    # End if
+                    if mheader.header_type == 'scheme':
+                        if not var_comp('', mvar, fvar, title):
+                            errors_found = errors_found + 1
+                        # End if
+                    # End if
+                    # Compare dimensions
+            # End for
+        # End if
+    # End for
+    if errors_found > 0:
+        errmsg = "{} errors found comparing {} to {}"
+        raise CCPPError(errmsg.format(errors_found, mfilename, ffilename))
+    # End if
 
     return header_dict
 
