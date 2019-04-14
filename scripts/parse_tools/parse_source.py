@@ -8,6 +8,15 @@ import copy
 import os.path
 # CCPP framework imports
 
+__sname_num__ = 0 # Counter for unique standard names
+
+###############################################################################
+def unique_standard_name():
+###############################################################################
+    global __sname_num__
+    __sname_num__ = __sname_num__ + 1
+    return 'enter_standard_name_{}'.format(__sname_num__)
+
 ###############################################################################
 def context_string(context=None, with_comma=True, nodir=False):
 ###############################################################################

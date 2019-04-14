@@ -987,6 +987,9 @@ CCPP_STANDARD_VARS = {
      'dimensions' : '()', 'type' : 'integer'}
 }
 
+# Pythonic version of a forward reference (CCPP_CONSTANT_VARS defined below)
+CCPP_CONSTANT_VARS = {}
+
 ###############################################################################
 
 def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
@@ -1007,12 +1010,6 @@ def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
         newvar = None
     # End if
     return newvar
-
-###############################################################################
-
-# List of constant variables which are universally available
-CCPP_CONSTANT_VARS = {'ccpp_constant_one' :
-                      ccpp_standard_var('ccpp_constant_one', 'module')}
 
 ###############################################################################
 
@@ -1247,14 +1244,17 @@ class VarDictionary(OrderedDict):
             if gen_unique:
                 new_lname = self.new_internal_variable_name(lname)
                 newvar = newvar.clone(new_lname)
-            else:
-                errstr = ' {}: already registered{}'
+            elif not exists_ok:
+                errstr = 'Invalid local_name: {} already registered{}'
                 cstr = context_string(lvar.source.context, with_comma=True)
                 raise ParseSyntaxError(errstr.format(lname, cstr),
-                                       token='local_name',
                                        context=newvar.source.context)
+            # End if (no else, things are okay)
+        # End if (no else, things are okay)
         # If we make it to here without an exception, add the variable
-        self[standard_name] = newvar
+        if standard_name not in self:
+            self[standard_name] = newvar
+        # End if
 
     def remove_variable(self, standard_name):
         """Remove <standard_name> from the dictionary.
@@ -1459,7 +1459,7 @@ class VarDictionary(OrderedDict):
         for var in self.variable_list():
             tname = var.get_prop_value('local_name')
             if tname == local_name:
-                lvar
+                lvar = var
                 break
             # End if
         # End for
@@ -1490,6 +1490,13 @@ class VarDictionary(OrderedDict):
             # End if
         # End while
         return newvar
+
+###############################################################################
+
+# List of constant variables which are universally available
+CCPP_CONSTANT_VARS = VarDictionary('CCPP_CONSTANT_VARS',
+                                   [ccpp_standard_var('ccpp_constant_one',
+                                                      'module')])
 
 ###############################################################################
 if __name__ == "__main__":

@@ -94,10 +94,10 @@ from __future__ import print_function
 import os.path
 import re
 # CCPP framework imports
-from metavar     import Var, VarDictionary
+from metavar     import Var, VarDictionary, CCPP_CONSTANT_VARS
 from parse_tools import ParseObject, ParseSource, ParseContext, context_string
 from parse_tools import ParseInternalError, ParseSyntaxError, CCPPError
-from parse_tools import FORTRAN_ID, FORTRAN_SCALAR_REF
+from parse_tools import FORTRAN_ID, FORTRAN_SCALAR_REF, unique_standard_name
 from parse_tools import check_fortran_ref, register_fortran_ddt_name
 
 ########################################################################
@@ -118,7 +118,7 @@ class MetadataHeader(ParseSource):
                        "[ im ]", "standard_name = horizontal_loop_extent",    \
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
-                       "dimensions = () |  intent = in"])).get_var(standard_name='horizontal_loop_extent') #doctest: +ELLIPSIS
+                       "dimensions = () |  intent = in"])).find_variable('horizontal_loop_extent') #doctest: +ELLIPSIS
     <metavar.Var horizontal_loop_extent: im at 0x...>
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
                       ["name = foobar", "module = foo",                       \
@@ -126,7 +126,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       "  subroutine foo()"])).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       "  subroutine foo()"])).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Missing metadata header type, at foobar.txt:7
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
@@ -135,7 +135,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent').get_prop_value('local_name')
+                       ""], line_start=0)).find_variable('horizontal_loop_extent').get_prop_value('local_name')
     'im'
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
                       ["name = foobar", "type = scheme"                       \
@@ -143,7 +143,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       ""], line_start=0)).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid variable property value, 'horizontal loop extent', at foobar.txt:2
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
@@ -152,7 +152,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       ""], line_start=0)).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid property syntax, '[ccpp-arg-table]', at foobar.txt:1
     >>> MetadataHeader(ParseObject("foobar.txt",                              \
@@ -161,7 +161,7 @@ class MetadataHeader(ParseSource):
                        "long_name = horizontal loop extent, start at 1",      \
                        "units = index | type = integer",                      \
                        "dimensions = () |  intent = in",                      \
-                       ""], line_start=0)).get_var(standard_name='horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
+                       ""], line_start=0)).find_variable('horizontal_loop_extent') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid metadata header start, no table type, at foobar.txt:2
     >>> MetadataHeader.__var_start__.match('[ qval ]') #doctest: +ELLIPSIS
@@ -408,25 +408,62 @@ class MetadataHeader(ParseSource):
         "Find a variable in this header's dictionary"
         var = None
         if use_local_name:
-            # Look for match by local_name property
-            for tvar in self.variable_list():
-                lname = tvar.get_prop_value('local_name')
-                if lname == std_name:
-                    var = tvar
-                    break
-                # End if
-            # End for
+            var = self._variables.find_local_name(std_name)
         else:
             var = self._variables.find_variable(std_name, any_scope=False)
         # End if
         return var
 
-    def get_var(self, standard_name=None):
-        if standard_name is not None:
-            var = self._variables.find_variable(standard_name)
-            return var
-        else:
-            return None
+    def convert_dims_to_standard_names(self, var, logger=None, context=None):
+        """Convert the dimension elements in <var> to standard names by
+        by using other variables in this header.
+        """
+        std_dims = list()
+        for dim in var.get_dimensions():
+            std_dim = list()
+            if ':' not in dim:
+                # Metadata dimensions always have an explicit start
+                var_one = CCPP_CONSTANT_VARS.find_local_name('1')
+                if var_one is not None:
+                    std = var_one.get_prop_value('standard_name')
+                    std_dim.append(std)
+                # End if
+            # End if
+            for item in dim.split(':'):
+                try:
+                    int_item = int(item)
+                    dvar = CCPP_CONSTANT_VARS.find_local_name(item)
+                    if dvar is not None:
+                        # If this integer value is a CCPP standard int, use that
+                        dname = dvar.get_prop_value('standard_name')
+                    else:
+                        # Some non-standard integer value
+                        dname = item
+                    # End if
+                except ValueError as ve:
+                    # Not an integer, try to find the standard_name
+                    dvar = self.find_variable(item, use_local_name=True)
+                    if dvar is not None:
+                        dname = dvar.get_prop_value('standard_name')
+                    else:
+                        errmsg = "Unknown dimension element, {}, in {}{}"
+                        std = var.get_prop_value('local_name')
+                        ctx = context_string(context)
+                        if logger is not None:
+                            errmsg = "WARNING: " + errmsg
+                            logger.error(errmsg.format(item, std, ctx))
+                            dname = unique_standard_name()
+                        else:
+                            raise CCPPError(errmsg.format(item, std, ctx))
+                        # End if
+                    # End if
+                # End try
+                std_dim.append(dname)
+            # End for
+            std_dims.append(':'.join(std_dim))
+        # End for
+
+        return std_dims
 
     def prop_list(self, prop_name):
         "Return list of <prop_name> values for this scheme's arguments"

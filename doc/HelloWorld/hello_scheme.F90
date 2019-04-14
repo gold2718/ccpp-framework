@@ -24,15 +24,31 @@ CONTAINS
 !----------------------------------------------------------------
 
    integer,            intent(in)    :: ims, ime, lev, ilev
-   REAL(kind_phys),    intent(inout) :: temp_layer(lev)
+   REAL(kind_phys),    intent(inout) :: temp_layer(ims:ime, lev)
    real(kind_phys),    intent(in)    :: timestep
-   REAL(kind_phys),    INTENT(out)   :: temp_level(ilev)
+   REAL(kind_phys),    INTENT(out)   :: temp_level(ims:ime, ilev)
    character(len=512), intent(out)   :: errmsg
    integer,            intent(out)   :: errflg
 !----------------------------------------------------------------
 
+   integer :: col_index
+   integer :: lev_index
+
     errmsg = ''
     errflg = 0
+
+    if (ilev /= (lev + 1)) then
+       errflg = 1
+       errmsg = 'Invalid value for ilev, must be lev+1'
+       return
+    end if
+
+    do col_index = ims, ime
+       do lev_index = 1, lev
+          temp_layer(col_index, lev_index) = (temp_level(col_index, lev_index) &
+               + temp_level(col_index, lev_index + 1)) / 2.0_kind_phys
+       end do
+    end do
 
   END SUBROUTINE hello_scheme_run
 

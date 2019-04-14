@@ -206,7 +206,7 @@ def create_kinds_file(kind_phys, output_dir, logger):
     return kinds_filepath
 
 ###############################################################################
-def var_comp(prop_name, mvar, fvar, title, case_sensitive=False):
+def var_comp(prop_name, mvar, fvar, title, logger, case_sensitive=False):
 ###############################################################################
     "Compare a property between two variables"
     mprop = mvar.get_prop_value(prop_name)
@@ -220,6 +220,46 @@ def var_comp(prop_name, mvar, fvar, title, case_sensitive=False):
         errmsg = '{} mismatch ({} != {}) in {}{}'
         ctx = context_string(mvar.context)
         logger.error(errmsg.format(prop_name, mprop, fprop, title, ctx))
+    # End if
+    return comp
+
+###############################################################################
+def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
+###############################################################################
+    "Compare the dimensions attribute of two variables"
+    mdims = mvar.get_dimensions()
+    fdims = mheader.convert_dims_to_standard_names(fvar, logger=logger)
+# XXgoldyXX: v debug only
+    if not isinstance(mdims, list):
+        raise CCPPError("dims not a list!")
+    # End if
+# XXgoldyXX: ^ debug only
+    comp = len(mdims) == len(fdims)
+    if not comp:
+        errmsg = 'Error: rank mismatch in {}/{} ({} != {}){}'
+        stdname = mvar.get_prop_value('standard_name')
+        ctx = context_string(mvar.context)
+        logger.error(errmsg.format(title, stdname, len(mdims), len(fdims), ctx))
+    # End if
+    if comp:
+        # First, convert fdims to use standard names
+        # Now, compare the dims
+        for dim_ind in range(len(mdims)):
+            mdim = mdims[dim_ind]
+            fdim = fdims[dim_ind]
+            if not case_sensitive:
+                mdim = mdim.lower()
+                fdim = fdim.lower()
+            # End if
+            comp = mdim == fdim
+            if not comp:
+                errmsg = 'Error: dim {} mismatch ({} != {}) in {}/{}{}'
+                stdname = mvar.get_prop_value('standard_name')
+                ctx = context_string(mvar.context)
+                logger.error(errmsg.format(dim_ind+1, mdim, fdims[dim_ind],
+                                           title, stdname, ctx))
+            # End if
+        # End for
     # End if
     return comp
 
@@ -298,19 +338,23 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
                     # End if (no else, we already reported an out-of-place error
                 else:
                     fvar = flist[mind]
-                    if var_comp('local_name', mvar, fvar, title):
-                        if not var_comp('type', mvar, fvar, title):
+                    if var_comp('local_name', mvar, fvar, title, logger):
+                        if not var_comp('type', mvar, fvar, title, logger):
                             errors_found = errors_found + 1
                         # End if
-                        if not var_comp('kind', mvar, fvar, title):
+                        if not var_comp('kind', mvar, fvar, title, logger):
                             errors_found = errors_found + 1
                         # End if
                         if mheader.header_type == 'scheme':
-                            if not var_comp('intent', mvar, fvar, title):
+                            if not var_comp('intent', mvar, fvar,
+                                            title, logger):
                                 errors_found = errors_found + 1
                             # End if
                         # End if
                         # Compare dimensions
+                        if not dims_comp(mheader, mvar, fvar, title, logger):
+                            errors_found = errors_found + 1
+                        # End if
                     else:
                         errors_found = errors_found + 1
                     # End if

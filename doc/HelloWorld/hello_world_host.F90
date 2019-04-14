@@ -22,6 +22,7 @@ CONTAINS
     use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_finalize
     use HelloWorld_ccpp_cap, only: ccpp_physics_suite_list
     use HelloWorld_ccpp_cap, only: ccpp_physics_suite_part_list
+    use hello_world_mod,     only: init_temp, compare_temp
 
 
     integer                         :: col_start, col_end
@@ -29,6 +30,9 @@ CONTAINS
     character(len=128), allocatable :: part_names(:)
     character(len=512)              :: errmsg
     integer                         :: errflg
+
+    ! Initialize our 'data'
+    call init_temp()
 
     ! Use the suite information to setup the run
     call HelloWorld_ccpp_physics_initialize('hello_world_suite', errmsg, errflg)
@@ -66,6 +70,12 @@ CONTAINS
       write(6, *) trim(errmsg)
       write(6,'(a)') 'An error occurred in ccpp_timestep_final, Exiting...'
       stop
+    end if
+
+    if (compare_temp()) then
+      write(6, *) 'Answers are correct!'
+    else
+      write(6, *) 'Answers are not correct!'
     end if
 
   end subroutine hello_world_sub
