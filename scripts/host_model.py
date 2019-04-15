@@ -28,6 +28,7 @@ class HostModel(VarDictionary):
         self._ddt_vars = {}      # DDT variable to DDT map
         self._ddt_fields = {}    # DDT field to DDT access map
         self._var_locations = {} # Local name to module map
+        self._loop_vars = None   # Loop control vars in interface calls
         # Process the headers by type
         varlist = list()
         while len(meta_headers) > 0:
@@ -53,11 +54,38 @@ class HostModel(VarDictionary):
                 for var in header.variable_list():
                     lname = var.get_prop_value('local_name')
                     self._var_locations[lname] = modname
+                # End for
             elif header.header_type == 'host':
                 if self._name is None:
                     # Grab the first host name we see
                     self._name = header.name
+                # End if
                 varlist.extend(header.variable_list())
+                loop_vars = header.variable_list(std_vars=False,
+                                                 loop_vars=True, consts=False)
+                if len(loop_vars) > 0:
+                    # loop_vars are part of the host-model interface call
+                    # at run time. As such, they override the host-model
+                    # array dimensions.
+                    self._loop_vars = VarDictionary(self.name)
+                # End if
+                for hvar in loop_vars:
+                    std_name = hvar.get_prop_value('standard_name')
+                    if std_name in self._loop_vars:
+                        ovar = self._loop_vars[std_name]
+                        ctx1 = context_string(ovar.context)
+                        ctx2 = context_string(hvar.context)
+                        lname1 = ovar.get_prop_value('local_name')
+                        lname2 = hvar.get_prop_value('local_name')
+                        errmsg = ("Duplicate host loop var for {n}:\n"
+                                  "  Dup:  {l1}{c1}\n  Orig: {l2}{c2}")
+                        raise CCPPError(errmsg.format(n=self.name,
+                                                      l1=lname1,c1=ctx1,
+                                                      l2=lname2,c2=ctx2))
+                    else:
+                        self._loop_vars.add_variable(hvar)
+                    # End if
+                # End for
             else:
                 errmsg = "Invalid host model metadata header, {} ({})"
                 raise CCPPError(errmsg.format(header.title, header.header_type))
@@ -76,6 +104,10 @@ class HostModel(VarDictionary):
     def name(self):
         'Return the host model name'
         return self._name
+
+    @property
+    def loop_vars(self):
+        return self._loop_vars
 
     def argument_list(self, loop_vars=True):
         'Return a string representing the host model variable arg list'

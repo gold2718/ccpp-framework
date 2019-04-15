@@ -111,7 +111,8 @@ def write_host_cap(host_model, api, output_dir, logger):
         cap.write('\ncontains\n', 0)
         for stage in CCPP_STATE_MACH.transitions():
             # Create a dict of local variables for stage
-            host_local_vars = VarDictionary("{}_{}".format(host_model.name, stage))
+            host_local_vars = VarDictionary("{}_{}".format(host_model.name,
+                                                           stage))
             # Create part call lists
             # Look for any loop-variable mismatch
             spart_list = suite_part_list(suite, stage)
@@ -122,7 +123,8 @@ def write_host_cap(host_model, api, output_dir, logger):
                     stdname = sp_var.get_prop_value('standard_name')
                     hvar = host_model.find_variable(stdname)
                     if (hvar is None) and (stdname in CCPP_VAR_LOOP_SUBSTS):
-                        hvar = CCPP_VAR_LOOP_SUBSTS[stdname].find_subst(host_model)
+                        lsubst = CCPP_VAR_LOOP_SUBSTS[stdname]
+                        hvar = lsubst.find_subst(host_local_vars)
                     # End if
                     if hvar is None:
                         raise CCPPError('No host model variable for {} in {}'.format(stdname, spart.name))
@@ -181,8 +183,8 @@ def write_host_cap(host_model, api, output_dir, logger):
                             if hvar is None:
                                 raise CCPPError('No host model variable for {} in {}'.format(stdname, spart.name))
                             # End if
-                            lname = hvar.get_prop_value('local_name')
-                            # Insert array arguments
+                            lvars = host_model.loop_vars()
+                            lname = host_model.var_call_string(hvar, lvars)
                             hmvars.append(lname)
                         # End for
                         call_str = ', '.join(hmvars)

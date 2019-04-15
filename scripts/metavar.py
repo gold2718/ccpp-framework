@@ -390,6 +390,7 @@ class Var(object):
                                                       'vertical_level_dimension',
                                                       'vertical_layer_dimension'],
                                      default_in='vertical_index'),
+add vertical default function to use dims
                     VariableProperty('persistence', str, optional_in=True,
                                      valid_values_in=['timestep', 'run'],
                                      default_in='timestep')]
@@ -629,29 +630,10 @@ class Var(object):
         'True iff self is included in the host model interface calls'
         return self.source.type == 'host'
 
-    @classmethod
-    def loop_subst_dims(cls, dims):
-        newdims = list()
-        for dim in dims:
-            # loop_subst_match swallows an entire dim string, even ranges
-            ldim = VarDictionary.loop_subst_match(dim)
-            if ldim is None:
-                newdims.append(dim)
-            else:
-                newdims.append(ldim)
-            # End if
-        # End for
-        return newdims
-
-    def get_dimensions(self, loop_subst=False):
+    def get_dimensions(self):
         "Return the variable's dimension string"
         dims = self.valid_value('dimensions')
-        if loop_subst:
-            newdims = loop_subst_dims(dims)
-        else:
-            newdims = dims
-        # End if
-        return newdims
+        return dims
 
     def get_dim_stdnames(self):
         "Return a set of all the dimension standard names for this Var"
@@ -671,15 +653,15 @@ class Var(object):
 
     def get_rank(self):
         "Return the variable's rank (zero for scalar)"
-        dims = self.get_dimensions(loop_subst=False)
+        dims = self.get_dimensions()
         return len(dims)
 
-    def write_def(self, outfile, indent, dict, allocatable=False, loop_subst=False):
+    def write_def(self, outfile, indent, dict, allocatable=False):
         '''Write the definition line for the variable.'''
         vtype = self.get_prop_value('type')
         kind = self.get_prop_value('kind')
         name = self.get_prop_value('local_name')
-        dims = self.get_dimensions(loop_subst=loop_subst)
+        dims = self.get_dimensions()
         if (dims is not None) and (len(dims) > 0):
             if allocatable:
                 dimstr = '(:' + ',:'*(len(dims) - 1) + ')'
@@ -756,44 +738,46 @@ class Var(object):
         vtype = self.get_prop_value('type')
         return registered_fortran_ddt_name(vtype) is not None
 
-    def host_arg_str(self, hvar, host_model, ddt):
-        '''Create the proper statement of a piece of a host-model variable.
-        If ddt is True, we can only have a single element selected
-        '''
-        hstr = hvar.get_prop_value('local_name')
-        # Turn the dimensions string into a proper list and take the correct one
-        hdims = hvar.get_dimensions()
-        dimsep = ''
-        # Does the local name have any extra indices?
-        match = array_ref_re.match(hstr.strip())
-        if match is not None:
-            hstr = match.group(1)
-            # Find real names for all the indices
-            tokens = [x.strip() for x in match.group(2).strip().split(',')]
-            for token in tokens:
-                hsdim = self.find_host_model_var(token, host_model)
-                dimstr = dimstr + dimsep + hsdim
-            # End for
-        # End if
-        if len(hdims) > 0:
-            dimstr = '('
-        else:
-            dimstr = ''
-        # End if
-        for hdim in hdims:
-            if ddt and (':' in hdim):
-                raise CCPPError("Invalid DDT dimension spec {}({})".format(hstr, hdimval))
-            else:
-                # Find the host model variable for each dim
-                hsdims = self.find_host_model_var(hdim, host_model)
-                dimstr = dimstr + dimsep + hsdims
-                dimsep = ', '
-            # End if
-        # End for
-        if len(hdims) > 0:
-            dimstr = dimstr + ')'
-        # End if
-        return hstr + dimstr
+# XXgoldyXX: v debug only
+    # def host_arg_str(self, hvar, host_model, ddt):
+    #     '''Create the proper statement of a piece of a host-model variable.
+    #     If ddt is True, we can only have a single element selected
+    #     '''
+    #     hstr = hvar.get_prop_value('local_name')
+    #     # Turn the dimensions string into a proper list and take the correct one
+    #     hdims = hvar.get_dimensions()
+    #     dimsep = ''
+    #     # Does the local name have any extra indices?
+    #     match = array_ref_re.match(hstr.strip())
+    #     if match is not None:
+    #         hstr = match.group(1)
+    #         # Find real names for all the indices
+    #         tokens = [x.strip() for x in match.group(2).strip().split(',')]
+    #         for token in tokens:
+    #             hsdim = self.find_host_model_var(token, host_model)
+    #             dimstr = dimstr + dimsep + hsdim
+    #         # End for
+    #     # End if
+    #     if len(hdims) > 0:
+    #         dimstr = '('
+    #     else:
+    #         dimstr = ''
+    #     # End if
+    #     for hdim in hdims:
+    #         if ddt and (':' in hdim):
+    #             raise CCPPError("Invalid DDT dimension spec {}({})".format(hstr, hdimval))
+    #         else:
+    #             # Find the host model variable for each dim
+    #             hsdims = self.find_host_model_var(hdim, host_model)
+    #             dimstr = dimstr + dimsep + hsdims
+    #             dimsep = ', '
+    #         # End if
+    #     # End for
+    #     if len(hdims) > 0:
+    #         dimstr = dimstr + ')'
+    #     # End if
+    #     return hstr + dimstr
+# XXgoldyXX: ^ debug only
 
     def __str__(self):
         '''Print representation or string for Var objects'''
@@ -824,43 +808,9 @@ class VarSpec(object):
     contains a comma-separated list of dimension standard names in parentheses.
     """
 
-    def __init__(self, var, loop_subst=False):
+    def __init__(self, var):
         self._name = var.get_prop_value('standard_name')
-        self._dims = var.get_dimensions(loop_subst=loop_subst)
-        if len(self._dims) == 0:
-            self._dims = None
-        # End if
-
-    @property
-    def name(self):
-        return self._name
-
-    def get_dimensions(self, loop_subst=False):
-        if loop_subst:
-            rdims = Var.loop_subst_dims(dims)
-        else:
-            rdims = dims
-        # End if
-        return rdims
-
-    def __repr__(self):
-        if self._dims is not None:
-            return "{}({})".format(self._name, ', '.join(self._dims))
-        else:
-            return self._name
-        # End if
-
-###############################################################################
-
-class VarSpec(object):
-    """A class to hold a standard_name description of a variable.
-    A scalar variable is just a standard name while an array also
-    contains a comma-separated list of dimension standard names in parentheses.
-    """
-
-    def __init__(self, var, loop_subst=False):
-        self._name = var.get_prop_value('standard_name')
-        self._dims = var.get_dimensions(loop_subst=loop_subst)
+        self._dims = var.get_dimensions()
         if len(self._dims) == 0:
             self._dims = None
         # End if
@@ -924,26 +874,30 @@ class VarDDT(Var):
         "Return the source of the variable source (DDT root)"
         return self._var_ref_list[0].source
 
-    def get_dimensions(self, loop_subst=False, index=0):
-        "Return the dimensions of the indicated var, defauling to the top-level DDT"
+    def get_dimensions(self, index=0):
+        """Return the dimensions of the indicated var, defauling to the
+        top-level DDT"""
         if abs(index) >= self._vlen:
-            raise ParseInternalError("VarDDT.get_prop_value index ({}) out of range".format(index))
+            errmsg = "VarDDT.get_prop_value index ({}) out of range"
+            raise ParseInternalError(errmsg.format(index))
         # End if
-        return self._var_ref_list[index].get_dimensions(loop_subst)
+        return self._var_ref_list[index].get_dimensions()
 
-    def write_def(self, outfile, indent, dict, allocatable=False, loop_subst=False):
+    def write_def(self, outfile, indent, dict, allocatable=False):
         '''Write the definition line for the variable.'''
-        pass
+        raise CCPPError('{}.write_def not implemented'.format(self.__class__.__name__))
 
     def is_ddt(self):
         '''Return True iff <self> is a DDT type.'''
         return True
 
-    def host_arg_str(self, hvar, host_model, ddt):
-        '''Create the proper statement of a piece of a host-model variable.
-        If ddt is True, we can only have a single element selected
-        '''
-        pass
+# XXgoldyXX: v debug only
+    # def host_arg_str(self, hvar, host_model, ddt):
+    #     '''Create the proper statement of a piece of a host-model variable.
+    #     If ddt is True, we can only have a single element selected
+    #     '''
+    #     pass
+# XXgoldyXX: ^ debug only
 
     def __repr__(self):
         '''Print representation or string for VarDDT objects'''
@@ -1016,7 +970,8 @@ def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
 class VarLoopSubst(object):
     """A class to handle required loop substitutions where the host model
     (or a suite part) does not provide a loop-like variable used by a
-    suite part or scheme"""
+    suite part or scheme or where a host model passes a subset of a
+    dimension at run time."""
 
     def __init__(self, missing_stdname, required_stdnames, set_action):
         self._missing_stdname = missing_stdname
@@ -1075,7 +1030,8 @@ class VarLoopSubst(object):
         action_dict[self._missing_stdname] = var.get_prop_value('local_name')
         return self._set_action.format(**action_dict)
 
-CCPP_VAR_LOOP_SUBSTS = { 'horizontal_loop_extent' :
+# Substitutions where a new variable must be created
+CCPP_VAR_LOOP_SUBSTS = { 'ccpp_constant_one:horizontal_loop_extent' :
                          VarLoopSubst('horizontal_loop_extent',
                                       ('horizontal_loop_begin',
                                        'horizontal_loop_end'),
@@ -1089,6 +1045,10 @@ CCPP_VAR_LOOP_SUBSTS = { 'horizontal_loop_extent' :
                                       ('horizontal_loop_extent',),
                                       '{horizontal_loop_end} = {horizontal_loop_extent}')
 }
+
+# Substituions for run time dimension control
+CCPP_LOOP_DIM_SUBSTS = { 'ccpp_constant_one:horizontal_dimension' :
+                         'horizontal_loop_begin:horizontal_loop_end' }
 
 ###############################################################################
 
@@ -1122,10 +1082,6 @@ class VarDictionary(OrderedDict):
     Traceback (most recent call last):
     ParseSyntaxError: Invalid Duplicate standard name, 'hi_mom', at <standard input>:
     """
-
-    # Loop variables
-    __ccpp_loop_vars__ = ['horizontal_loop_begin', 'horizontal_loop_end',
-                          'thread_block_number', 'horizontal_loop_extent']
 
     # Dimension substitutions
     __ccpp_dim_subst__ = {'horizontal_loop_extent' : 'horizontal_dimension'}
@@ -1298,7 +1254,8 @@ class VarDictionary(OrderedDict):
         plist = list()
         for standard_name in self.keys():
             var = self.find_variable(standard_name, any_scope=False)
-            if self.include_var_in_list(var, std_vars=std_vars, loop_vars=loop_vars, consts=consts):
+            if self.include_var_in_list(var, std_vars=std_vars,
+                                        loop_vars=loop_vars, consts=consts):
                 plist.append(self[standard_name].get_prop_value(prop_name))
             # End if
         # End for
@@ -1309,7 +1266,8 @@ class VarDictionary(OrderedDict):
         "Write out the declarations for this dictionary's variables"
         for standard_name in self.keys():
             var = self.find_variable(standard_name, any_scope=False)
-            if self.include_var_in_list(var, std_vars=std_vars, loop_vars=loop_vars, consts=consts):
+            if self.include_var_in_list(var, std_vars=std_vars,
+                                        loop_vars=loop_vars, consts=consts):
                 self[standard_name].write_def(outfile, indent, self)
             # End if
         # End for
@@ -1325,7 +1283,8 @@ class VarDictionary(OrderedDict):
                 ename = evar.get_prop_value('local_name')
                 subst_str = '{} = {} - {} + 1'.format(local_name, ename, bname)
             else:
-                raise ParseInternalError("Unable to create value for {}".format(local_name))
+                errmsg = "Unable to create value for {}"
+                raise ParseInternalError(errmsg.format(local_name))
             # End if
         elif stdname == 'horizontal_loop_begin':
             subst_str = '{} = 1'.format(local_name)
@@ -1335,10 +1294,12 @@ class VarDictionary(OrderedDict):
                 ename = evar.get_prop_value('local_name')
                 subst_str = '{} = {}'.format(local_name, ename)
             else:
-                raise ParseInternalError("Unable to create value for {}".format(local_name))
+                errmsg = "Unable to create value for {}"
+                raise ParseInternalError(errmsg.format(local_name))
             # End if
         else:
-            raise ParseInternalError("Unknown loop subst standard name, '{}'".format(stdname))
+            errmsg = "Unknown loop subst standard name, '{}'"
+            raise ParseInternalError(errmsg.format(stdname))
         # End if
         return subst_str
 
@@ -1372,17 +1333,36 @@ class VarDictionary(OrderedDict):
 
     @classmethod
     def loop_var_match(cls, standard_name):
-        'Return True iff <standard_name> is a loop variable'
-        return standard_name in cls.__ccpp_loop_vars__
-
-    @classmethod
-    def loop_subst_match(cls, standard_name):
-        'Return a loop substitution match, if any, for <standard_name>'
-        if standard_name in cls.__ccpp_loop_subst__:
-            return cls.__ccpp_loop_subst__[standard_name]
+        '''Return a VarLoopSubst if <standard_name> is a loop variable,
+        otherwise, return None'''
+        if standard_name in CCPP_VAR_LOOP_SUBSTS:
+            vmatch = CCPP_VAR_LOOP_SUBSTS[standard_name]
         else:
-            return None
+            vmatch = None
         # End if
+        return vmatch
+
+    def find_loop_dim_match(self, dim_string):
+        """Find a match in dict for <dim_string>. That is, if <dim_string>
+        has a loop dim substitution, and each standard name in that
+        substitution is in self, return the equivalent local name string."""
+        ldim_string = None
+        if dim_string in CCPP_LOOP_DIM_SUBSTS:
+            lnames = list()
+            std_subst = CCPP_LOOP_DIM_SUBSTS[dim_string].split(':')
+            for ssubst in std_subst:
+                svar = self.find_variable(ssubst, any_scope=False)
+                if svar is not None:
+                    lnames.append(svar.get_prop_value('local_name'))
+                else:
+                    break
+                # End if
+            # End for
+            if len(lnames) == len(std_subst):
+                lnames = ':'.join(lnames)
+            # End if
+        # End if
+        return ldim_string
 
     def find_loop_subst(self, standard_name, any_scope=True, context=None):
         """If <standard_name> is of the form <standard_name>_extent and that
@@ -1393,7 +1373,7 @@ class VarDictionary(OrderedDict):
         range, ('ccpp_constant_one', <standard_name>_extent)
         In other cases, return None
         """
-        loop_var = VarDictionary.loop_subst_match(standard_name)
+        loop_var = VarDictionary.loop_var_match(standard_name)
         logger_str = None
         if loop_var is not None:
             # Let us see if we can fix a loop variable
@@ -1451,6 +1431,56 @@ class VarDictionary(OrderedDict):
             my_var = None
         # End if
         return my_var
+
+    def var_call_string(self, var, loop_vars=None):
+        """Construct the actual argument string for <var> by translating
+        standard names to local names. String includes array bounds.
+        if <loop_vars> is present, look there first for array bounds,
+        even if usage requires a loop substitution.
+        """
+        call_str = var.get_prop_value('local_name')
+        dims = var.get_dimensions()
+        if len(dims) > 0:
+            call_str = call_str + '('
+            dsep = ''
+            for dim in dims:
+                call_str = call_str + dsep
+                dsep = ', '
+                lname = None
+                if loop_vars is not None:
+                    lname = loop_vars.find_loop_dim_match(dim)
+                # End if
+                if lname is None:
+                    isep = ''
+                    lname = ""
+                    for item in dim.split(':'):
+                        dvar = self.find_variable(item, any_scope=False)
+                        if dvar not None:
+                            iname = None
+                        else:
+                            iname = dvar.get_prop_value('local_name')
+                        # End if
+                        if iname is None:
+                            errmsg = 'No local variable {} in {}{}'
+                            ctx = context_string(var.context)
+                            raise CCPPError(errmsg.format(item, self.name, ctx))
+                        else:
+                            lname = lname + isep + iname
+                            isep = ':'
+                        # End if
+                    # End for
+                # End if
+                if lname is None:
+                    errmsg = 'Unable to convert {} to local variables in {}{}'
+                    ctx = context_string(var.context)
+                    raise CCPPError(errmsg.format(dim, self.name, ctx))
+                else:
+                    call_str = call_str + dsep + lname
+                # End if
+            # End for
+            call_str = call_str + ')'
+        # End if
+        return call_str
 
     def find_local_name(self, local_name):
         """Return the variable in this dictionary with local_name,

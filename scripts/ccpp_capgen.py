@@ -389,8 +389,10 @@ def parse_host_model_files(host_filenames, preproc_defs, host_name, logger):
         # Check for duplicates, then add to dict
         for header in mheaders:
             if header.title in meta_headers:
-                errmsg = "Duplicate DDT, {title}, found in {file}"
-                edict = {'title':header.title, 'file':filename}
+                errmsg = "Duplicate {typ}, {title}, found in {file}"
+                edict = {'title':header.title,
+                         'file':filename,
+                         'typ':header.header_type}
                 oheader = meta_headers[header.title]
                 ofile = oheader.context.filename
                 if ofile is not None:
