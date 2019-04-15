@@ -229,11 +229,6 @@ def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
     "Compare the dimensions attribute of two variables"
     mdims = mvar.get_dimensions()
     fdims = mheader.convert_dims_to_standard_names(fvar, logger=logger)
-# XXgoldyXX: v debug only
-    if not isinstance(mdims, list):
-        raise CCPPError("dims not a list!")
-    # End if
-# XXgoldyXX: ^ debug only
     comp = len(mdims) == len(fdims)
     if not comp:
         errmsg = 'Error: rank mismatch in {}/{} ({} != {}){}'

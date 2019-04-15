@@ -248,6 +248,13 @@ class HostModel(VarDictionary):
             self._var_locations[local_name] = module
         # End if
 
+    def var_call_string(self, var):
+        """Construct the actual argument string for <var> by translating
+        standard names to local names. String includes array bounds.
+        """
+        return super(HostModel, self).var_call_string(var,
+                                                      loop_vars=self.loop_vars)
+
     def call_list(self, phase):
         "Return the list of variables passed by the host model to the host cap"
         hdvars = list()

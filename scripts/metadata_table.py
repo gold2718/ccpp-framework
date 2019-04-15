@@ -400,9 +400,11 @@ class MetadataHeader(ParseSource):
             return newvar, curr_line
         # End if
 
-    def variable_list(self):
+    def variable_list(self, std_vars=True, loop_vars=True, consts=True):
         "Return an ordered list of the header's variables"
-        return self._variables.variable_list()
+        return self._variables.variable_list(recursive=False,
+                                             std_vars=std_vars,
+                                             loop_vars=loop_vars, consts=consts)
 
     def find_variable(self, std_name, use_local_name=False):
         "Find a variable in this header's dictionary"

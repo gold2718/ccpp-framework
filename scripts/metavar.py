@@ -110,13 +110,56 @@ def default_kind_val(prop_dict, context=None):
         kind = ''
         if 'local_name' in prop_dict:
             lname = ' {}'.format(prop_dict['local_name'])
+            errmsg = 'No type to find default kind for {ln}{ct}'
         else:
             lname = ''
+            errmsg = 'No type to find default kind{ct}'
         # End if
         ctxt = context_string(context)
-        raise CCPPError('No type to find default kind for {}{}'.format(lname, ctxt))
+        raise CCPPError(errmsg.format(ln=lname, ct=ctxt))
     # End if
     return kind
+
+########################################################################
+def default_vertical_coord(prop_dict, context=None):
+########################################################################
+    """Choose a default vertical coordinate based on a variable's
+    dimensions property.
+    >>> default_vertical_coord({'dimensions':'()'})
+    'vertical_index'
+    >>> default_vertical_coord({'dimensions':'(horizontal_loop_extent)'})
+    'vertical_index'
+    >>> default_vertical_coord({'dimensions':'(ccpp_constant_one:horizontal_loop_extent, ccpp_constant_one:vertical_level_dimension)'})
+    'vertical_level_dimension'
+    >>> default_vertical_coord({'dimensions':'(ccpp_constant_one:horizontal_loop_extent, vertical_layer_dimension)'})
+    'vertical_layer_dimension'
+    >>> default_vertical_coord({'local_name':'foo'}) #doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    CCPPError: No dimensions to find default vertical_coord for foo
+    >>> default_vertical_coord({}, context=ParseContext(linenum=3, filename='foo.F90')) #doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    CCPPError: No dimensions to find default vertical_coord, at foo.F90:3
+    """
+    if 'dimensions' in prop_dict:
+        dims = prop_dict['dimensions']
+    else:
+        if 'local_name' in prop_dict:
+            lname = prop_dict['local_name']
+            errmsg = 'No dimensions to find default vertical_coord for{ln}{ct}'
+        else:
+            lname = ''
+            errmsg = 'No dimensions to find default vertical_coord{ct}'
+        # End if
+        ctx = context_string(context)
+        raise CCPPError(errmsg.format(ln=lname, ct=ctx))
+    if 'vertical_layer_dimension' in dims:
+        vcoord = 'vertical_layer_dimension'
+    elif 'vertical_level_dimension' in dims:
+        vcoord = 'vertical_level_dimension'
+    else:
+        vcoord = 'vertical_index'
+    # End if
+    return vcoord
 
 ########################################################################
 def ddt_modules(variable_list):
@@ -389,8 +432,7 @@ class Var(object):
                                      valid_values_in=['vertical_index',
                                                       'vertical_level_dimension',
                                                       'vertical_layer_dimension'],
-                                     default_in='vertical_index'),
-add vertical default function to use dims
+                                     default_fn_in=default_vertical_coord),
                     VariableProperty('persistence', str, optional_in=True,
                                      valid_values_in=['timestep', 'run'],
                                      default_in='timestep')]
@@ -738,47 +780,6 @@ add vertical default function to use dims
         vtype = self.get_prop_value('type')
         return registered_fortran_ddt_name(vtype) is not None
 
-# XXgoldyXX: v debug only
-    # def host_arg_str(self, hvar, host_model, ddt):
-    #     '''Create the proper statement of a piece of a host-model variable.
-    #     If ddt is True, we can only have a single element selected
-    #     '''
-    #     hstr = hvar.get_prop_value('local_name')
-    #     # Turn the dimensions string into a proper list and take the correct one
-    #     hdims = hvar.get_dimensions()
-    #     dimsep = ''
-    #     # Does the local name have any extra indices?
-    #     match = array_ref_re.match(hstr.strip())
-    #     if match is not None:
-    #         hstr = match.group(1)
-    #         # Find real names for all the indices
-    #         tokens = [x.strip() for x in match.group(2).strip().split(',')]
-    #         for token in tokens:
-    #             hsdim = self.find_host_model_var(token, host_model)
-    #             dimstr = dimstr + dimsep + hsdim
-    #         # End for
-    #     # End if
-    #     if len(hdims) > 0:
-    #         dimstr = '('
-    #     else:
-    #         dimstr = ''
-    #     # End if
-    #     for hdim in hdims:
-    #         if ddt and (':' in hdim):
-    #             raise CCPPError("Invalid DDT dimension spec {}({})".format(hstr, hdimval))
-    #         else:
-    #             # Find the host model variable for each dim
-    #             hsdims = self.find_host_model_var(hdim, host_model)
-    #             dimstr = dimstr + dimsep + hsdims
-    #             dimsep = ', '
-    #         # End if
-    #     # End for
-    #     if len(hdims) > 0:
-    #         dimstr = dimstr + ')'
-    #     # End if
-    #     return hstr + dimstr
-# XXgoldyXX: ^ debug only
-
     def __str__(self):
         '''Print representation or string for Var objects'''
         return "<Var {standard_name}: {local_name}>".format(**self._prop_dict)
@@ -890,14 +891,6 @@ class VarDDT(Var):
     def is_ddt(self):
         '''Return True iff <self> is a DDT type.'''
         return True
-
-# XXgoldyXX: v debug only
-    # def host_arg_str(self, hvar, host_model, ddt):
-    #     '''Create the proper statement of a piece of a host-model variable.
-    #     If ddt is True, we can only have a single element selected
-    #     '''
-    #     pass
-# XXgoldyXX: ^ debug only
 
     def __repr__(self):
         '''Print representation or string for VarDDT objects'''
@@ -1359,7 +1352,7 @@ class VarDictionary(OrderedDict):
                 # End if
             # End for
             if len(lnames) == len(std_subst):
-                lnames = ':'.join(lnames)
+                ldim_string = ':'.join(lnames)
             # End if
         # End if
         return ldim_string
@@ -1444,8 +1437,6 @@ class VarDictionary(OrderedDict):
             call_str = call_str + '('
             dsep = ''
             for dim in dims:
-                call_str = call_str + dsep
-                dsep = ', '
                 lname = None
                 if loop_vars is not None:
                     lname = loop_vars.find_loop_dim_match(dim)
@@ -1455,7 +1446,7 @@ class VarDictionary(OrderedDict):
                     lname = ""
                     for item in dim.split(':'):
                         dvar = self.find_variable(item, any_scope=False)
-                        if dvar not None:
+                        if dvar is None:
                             iname = None
                         else:
                             iname = dvar.get_prop_value('local_name')
@@ -1476,6 +1467,7 @@ class VarDictionary(OrderedDict):
                     raise CCPPError(errmsg.format(dim, self.name, ctx))
                 else:
                     call_str = call_str + dsep + lname
+                    dsep = ', '
                 # End if
             # End for
             call_str = call_str + ')'

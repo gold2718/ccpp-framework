@@ -174,7 +174,6 @@ def write_host_cap(host_model, api, output_dir, logger):
                     for spart in spart_list:
                         pname = spart.name[len(suite.name)+1:]
                         cap.write("{}if (trim(suite_part) == '{}') then".format(el2_str, pname), 3)
-# XXgoldyXX: v debug only
                         spart_args = spart.call_list.variable_list()
                         hmvars = list() # Host model to spart dummy args
                         for sp_var in spart_args:
@@ -183,12 +182,10 @@ def write_host_cap(host_model, api, output_dir, logger):
                             if hvar is None:
                                 raise CCPPError('No host model variable for {} in {}'.format(stdname, spart.name))
                             # End if
-                            lvars = host_model.loop_vars()
-                            lname = host_model.var_call_string(hvar, lvars)
+                            lname = host_model.var_call_string(hvar)
                             hmvars.append(lname)
                         # End for
                         call_str = ', '.join(hmvars)
-# XXgoldyXX: ^ debug only
                         cap.write("call {}({})".format(spart.name, call_str), 4)
                         el2_str = 'else '
                     # End for
