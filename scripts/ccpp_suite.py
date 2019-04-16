@@ -138,7 +138,14 @@ class CallList(VarDictionary):
 ###############################################################################
 
 class SuiteObject(VarDictionary):
-    "Base class for all CCPP Suite objects (e.g., Scheme, Subcycle)"
+    """Base class for all CCPP Suite objects (e.g., Scheme, Subcycle)
+    SuiteObjects have an internal dictionary for variables created for
+    execution of the SuiteObject. These variables will be allocated and
+    managed at the Group level (unless cross-group usage or persistence
+    requires handling at the Suite level).
+    SuiteObjects also have a call list which is a list of variables which
+    are passed to callable SuiteObjects (e.g., Scheme).
+    """
 
     def __init__(self, name, context, parent, logger):
         self.__name = name
@@ -167,6 +174,38 @@ class SuiteObject(VarDictionary):
             schemes.extend(item.schemes())
         # End for
         return schemes
+
+    def dimension_check(self, need_dims, have_dims):
+        """Compare dimensions between <need_dims> and <have_dims>.
+        Return True if all dims match.
+        XXgoldyXX: Add substitution and permutation
+        """
+        match = True
+        nlen = len(need_dims)
+        hlen = len(have_dims)
+        if nlen != hlen:
+            match = False
+        else:
+            for index in range(nlen):
+                if need_dims[index] != have_dims[index]:
+                    match = False
+                    break
+                # End if
+            # End for
+        # End if
+        return match
+
+    def find_variable(self, var, any_scope=True, clone=False):
+        """Find a matching variable to <var>, create a local clone (if
+        <clone> is True), or return None.
+        First search the SuiteObject's internal dictionary, then its
+        call list, then any parent dictionary (if <any_scope> is True).
+        <var> can be a Var object or a standard_name string.
+        """
+        if xxx
+        found_var = False
+        # First, search our local dictionary
+        fvar
 
     @property
     def name(self):
@@ -495,41 +534,13 @@ class Group(SuiteObject):
             self.remove_variable(standard_name)
         # End if
 
-    def local_or_call_list(self, standard_name, logger, var=None):
-        """If this is a local Group variable, just return True.
-        If not but it in a parent dictionary, make sure <var> is in
-        this Group's call list (and return True). If <var> is None (e.g.,
-        because <standard_name> is a variable dimension), create an
-        appropriate variable to add to this Group's call list.
-        If the variable is not found, return False.
-        """
-        found_var = False
-        if self.find_variable(standard_name, any_scope=False) is not None:
-            # This is already a local group var, move on
-            found_var = True
-        elif self.find_variable(standard_name, any_scope=True) is not None:
-            # Someone higher up knows about this, get it passed in
-            if var is not None:
-                self.call_list.add_variable(var, exists_ok=True)
-            else:
-                # Create a variable for this dimension
-                vdict = {'standard_name':standard_name,
-                         'local_name':standard_name, 'dimensions':'()',
-                         'type':'integer', 'units':'count', 'intent':'in'}
-                newvar = Var(vdict, __api_source__, logger=logger)
-                self.call_list.add_variable(newvar, exists_ok=True)
-            # End if
-            found_var = True
-        # End if (no else, found_var is already False)
-        return found_var
-
     def analyze(self, phase, suite_vars, scheme_library, logger):
         parent = self.parent
         self._phase = phase
         for item in self.parts:
             # Items can be schemes, subcycles or other objects
             # All have the same interface and return a set of module use
-            # statements (lschemes) and a set of loop variables
+            # statements (lschemes)
             lschemes = item.analyze(phase, self, scheme_library,
                                     suite_vars, 1, logger)
             for lscheme in lschemes:
@@ -543,6 +554,15 @@ class Group(SuiteObject):
         for scheme in self.schemes():
             for cvar in scheme.call_list.variable_list():
                 cstdname = cvar.get_prop_value('standard_name')
+                cdims = cvar.get_dimensions()
+                found_var = False
+                # Is this variable already local?
+                local_var = self.find_variable(standard_name, any_scope=False)
+                call_var = self.call_list.find_variable(standard_name,
+                                                        any_scope=False)
+                if local_var is not None:
+                    # Check dimensions
+                    local_dims = local_var.get_dimensions()
                 slist = [cstdname]
                 slist.extend(cvar.get_dim_stdnames())
                 for stdname in slist:

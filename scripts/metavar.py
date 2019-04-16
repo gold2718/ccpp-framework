@@ -604,24 +604,25 @@ class Var(object):
         else:
             return None
 
-    def clone(self, name, source_name=None, source_type=None, context=None,
-              loop_match=False, internal=True):
-        """Create a clone of this Var object with local_name, <name>.
+    def clone(self, subst_dict, source_name=None, source_type=None,
+              context=None, loop_match=False, internal=True):
+        """Create a clone of this Var object with properties from <subst_dict>
+        overriding this variable's properties. <subst_dict> may also be
+        a string in which case only the local_name property is changed
+        (to the value of the <subst_dict> string).
         The optional <source_name>, <source_type>, and <context> inputs
         allow the clone to appear to be coming from a designated source,
         by default, the source and type are the same as this Var (self).
         <internal> is an indication that the clone is generated and owned by
         the CCPP framework, not by the host model or any scheme.
         """
+        if isinstance(subst_dict, str):
+            subst_dict = {'local_name':subst_dict}
+        # End if
         cprop_dict = {}
         for prop in self._prop_dict.keys():
-            if prop == 'local_name':
-                cprop_dict[prop] = name
-            elif loop_match and (prop == 'dimensions'):
-                newdims = list()
-                for dim in self._prop_dict[prop]:
-                    #Ack! forward reference, what to do?
-                    vmatch = VarDictionary.loop_var_match(stdname)
+            if prop in subst_dict:
+                cprop_dict[prop] = subst_dict[prop]
             else:
                 cprop_dict[prop] = self._prop_dict[prop]
             # End if
@@ -679,7 +680,7 @@ class Var(object):
         return self.source.type == 'host'
 
     def get_dimensions(self):
-        "Return the variable's dimension string"
+        "Return a list with the variable's dimension strings"
         dims = self.valid_value('dimensions')
         return dims
 
