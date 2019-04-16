@@ -17,16 +17,16 @@ CONTAINS
 !> \section arg_table_hello_scheme_run  Argument Table
 !! \htmlinclude arg_table_hello_scheme_run.html
 !!
-  SUBROUTINE hello_scheme_run(ims, ime, lev, ilev, temp_layer, temp_level,   &
+  SUBROUTINE hello_scheme_run(ncol, lev, ilev, temp_layer, temp_level,   &
     timestep, errmsg, errflg)
 !----------------------------------------------------------------
    IMPLICIT NONE
 !----------------------------------------------------------------
 
-   integer,            intent(in)    :: ims, ime, lev, ilev
-   REAL(kind_phys),    intent(inout) :: temp_layer(ims:ime, lev)
+   integer,            intent(in)    :: ncol, lev, ilev
+   REAL(kind_phys),    intent(inout) :: temp_layer(ncol, lev)
    real(kind_phys),    intent(in)    :: timestep
-   REAL(kind_phys),    INTENT(out)   :: temp_level(ims:ime, ilev)
+   REAL(kind_phys),    INTENT(out)   :: temp_level(ncol, ilev)
    character(len=512), intent(out)   :: errmsg
    integer,            intent(out)   :: errflg
 !----------------------------------------------------------------
@@ -43,7 +43,7 @@ CONTAINS
        return
     end if
 
-    do col_index = ims, ime
+    do col_index = 1, ncol
        do lev_index = 1, lev
           temp_layer(col_index, lev_index) = (temp_level(col_index, lev_index) &
                + temp_level(col_index, lev_index + 1)) / 2.0_kind_phys

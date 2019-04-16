@@ -1,14 +1,8 @@
 [ccpp-arg-table]
   name = hello_scheme_run
   type = scheme
-[ ims ]
-  standard_name = horizontal_loop_begin
-  type = integer
-  units = count
-  dimensions = ()
-  intent = in
-[ ime ]
-  standard_name = horizontal_loop_end
+[ ncol ]
+  standard_name = horizontal_loop_extent
   type = integer
   units = count
   dimensions = ()
@@ -28,14 +22,14 @@
 [ temp_layer ]
   standard_name = potential_temperature
   units = K
-  dimensions = (horizontal_loop_begin:horizontal_loop_end, vertical_layer_dimension)
+  dimensions = (horizontal_loop_extent, vertical_layer_dimension)
   type = real
   kind = kind_phys
   intent = inout
 [ temp_level ]
   standard_name = potential_temperature_at_interface
   units = K
-  dimensions = (horizontal_loop_begin:horizontal_loop_end, vertical_level_dimension)
+  dimensions = (ccpp_constant_one:horizontal_loop_extent, vertical_level_dimension)
   type = real
   kind = kind_phys
   intent = out

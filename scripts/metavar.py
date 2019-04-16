@@ -604,7 +604,8 @@ class Var(object):
         else:
             return None
 
-    def clone(self, name, source_name=None, source_type=None, context=None, internal=True):
+    def clone(self, name, source_name=None, source_type=None, context=None,
+              loop_match=False, internal=True):
         """Create a clone of this Var object with local_name, <name>.
         The optional <source_name>, <source_type>, and <context> inputs
         allow the clone to appear to be coming from a designated source,
@@ -616,6 +617,11 @@ class Var(object):
         for prop in self._prop_dict.keys():
             if prop == 'local_name':
                 cprop_dict[prop] = name
+            elif loop_match and (prop == 'dimensions'):
+                newdims = list()
+                for dim in self._prop_dict[prop]:
+                    #Ack! forward reference, what to do?
+                    vmatch = VarDictionary.loop_var_match(stdname)
             else:
                 cprop_dict[prop] = self._prop_dict[prop]
             # End if
@@ -998,19 +1004,22 @@ class VarLoopSubst(object):
         if var is None:
             raise CCPPError('Unable to find or create missing loop variable, {}'.format(self._missing_stdname))
         # End if
-        for stdname in self._required_stdnames:
+        for stdname in self.required_stdnames:
             if dict.find_variable(stdname, any_scope=any_scope) is None:
                 raise CCPPError("{} is required to set value for {} but is not in dictionary".format(stdname, self._missing_stdname))
             # End if
         # End for
         return var
 
-    def write_action(self, dict, any_scope=False):
+    def write_action(self, dict, dict2=None, any_scope=False):
         """Return a string setting the correct values for our
-        replacement variable"""
+        replacement variable. Variables must be in <dict> or <dict2>"""
         action_dict = {}
-        for stdname in self._required_stdnames:
+        for stdname in self.required_stdnames:
             var = dict.find_variable(stdname, any_scope=any_scope)
+            if (var is None) and (dict2 is not None):
+                var = dict2.find_variable(stdname, any_scope=any_scope)
+            # End if
             if var is None:
                 raise CCPPError("Required variable, {}, not found".format(stdname))
             # End if
@@ -1023,8 +1032,12 @@ class VarLoopSubst(object):
         action_dict[self._missing_stdname] = var.get_prop_value('local_name')
         return self._set_action.format(**action_dict)
 
+    @property
+    def required_stdnames(self):
+        return self._required_stdnames
+
 # Substitutions where a new variable must be created
-CCPP_VAR_LOOP_SUBSTS = { 'ccpp_constant_one:horizontal_loop_extent' :
+CCPP_VAR_LOOP_SUBSTS = { 'horizontal_loop_extent' :
                          VarLoopSubst('horizontal_loop_extent',
                                       ('horizontal_loop_begin',
                                        'horizontal_loop_end'),
