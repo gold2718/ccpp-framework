@@ -214,6 +214,12 @@ class SuiteObject(VarDictionary):
         # End if
         return perm
 
+    def match_dimensions(self, need_dims, have_dims):
+        """Attempt to find match for all the dimensions in need_dims.
+        For a loop variable, a match can be created using a VarLoopSubst object.
+
+        """
+
     def find_variable(self, var, any_scope=True, clone=False):
         """Find a matching variable to <var>, create a local clone (if
         <clone> is True), or return None.
@@ -259,6 +265,21 @@ class SuiteObject(VarDictionary):
             found_var = None
         # End if
         return found_var
+
+    def in_process_split(self):
+        "Find out if we are in a process-split region"
+        proc_split = False
+        obj = self
+        while obj is not None:
+            if isinstance(obj, ProcessSplit):
+                proc_split = True
+                break
+            elif isinstance(obj, TimeSplit):
+                break
+            # End if (other object types do not change status)
+            obj = obj.parent
+        # End while
+        return proc_split
 
     @property
     def name(self):
@@ -492,6 +513,25 @@ class TimeSplit(SuiteObject):
 
 ###############################################################################
 
+class ProcessSplit(SuiteObject):
+    """Class to represent a group of processes to be computed in a
+    process-split manner -- all parameterizations or other constructs are
+    called with the same state.
+    NOTE: Currently a stub
+    """
+
+    def __init__(self, sub_xml, context, parent, logger):
+        raise CCPPError('ProcessSplit not yet implemented')
+
+    def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+        # Handle all the suite objects inside of this group
+        raise CCPPError('ProcessSplit not yet implemented')
+
+    def write(self, outfile, logger, indent):
+        raise CCPPError('ProcessSplit not yet implemented')
+
+###############################################################################
+
 class Group(SuiteObject):
     """Class to represent a grouping of schemes in a suite
     A Group object is implemented as a subroutine callable by the API.
@@ -618,8 +658,10 @@ class Group(SuiteObject):
                 if local_var is not None:
                     # Check dimensions
                     local_dims = local_var.get_dimensions()
-                    if not dimension_match(cdims, local_dims):
-                        vmatch_list = match_dimensions(cdims, local_dims)
+                    if not self.dimension_match(cdims, local_dims):
+                        vmatch_list = self.match_dimensions(cdims, local_dims)
+                        if vmatch_list is not None:
+                            raise exc here? In match dimensions?
                 for stdname in slist:
                     vmatch = VarDictionary.loop_var_match(stdname)
                     if self.local_or_call_list(stdname, logger, var=cvar):
