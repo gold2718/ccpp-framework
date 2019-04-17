@@ -147,12 +147,15 @@ class SuiteObject(VarDictionary):
     are passed to callable SuiteObjects (e.g., Scheme).
     """
 
-    def __init__(self, name, context, parent, logger):
+    def __init__(self, name, context, parent, logger, active_call_list=False):
         self.__name = name
         self._context = context
         self._logger = logger
         self._parent = parent
-        self._call_list = CallList(name, logger)
+        if active_call_list:
+            self._call_list = CallList(name, logger)
+        else:
+            self._call_list = None
         self._parts = list()
         # Initialize our dictionary
         super(SuiteObject, self).__init__(self.name, parent_dict=parent)
@@ -175,10 +178,9 @@ class SuiteObject(VarDictionary):
         # End for
         return schemes
 
-    def dimension_check(self, need_dims, have_dims):
+    def dimension_match(self, need_dims, have_dims):
         """Compare dimensions between <need_dims> and <have_dims>.
         Return True if all dims match.
-        XXgoldyXX: Add substitution and permutation
         """
         match = True
         nlen = len(need_dims)
@@ -195,17 +197,68 @@ class SuiteObject(VarDictionary):
         # End if
         return match
 
+    def dimension_permute(self, need_dims, have_dims):
+        """Compare dimensions between <need_dims> and <have_dims>.
+        Return permutation if the dimensions in <have_dims> are a
+        permutation of the dimensions in <need_dims>, otherwise return None.
+        The permutation is the index in <have_dims> for every dimension in
+        <need_dims>
+        """
+        if set(need_dims) == set(have_dims):
+            perm = list()
+            for nindex in range(len(need_dims)):
+                perm.append(have_dims.index(need_dims[nindex]))
+            # End if
+        else:
+            perm = None
+        # End if
+        return perm
+
     def find_variable(self, var, any_scope=True, clone=False):
         """Find a matching variable to <var>, create a local clone (if
         <clone> is True), or return None.
         First search the SuiteObject's internal dictionary, then its
         call list, then any parent dictionary (if <any_scope> is True).
         <var> can be a Var object or a standard_name string.
+
         """
-        if xxx
-        found_var = False
+        if isinstance(var, str):
+            stdname = var
+            var = None
+        else:
+            stdname = var.get_prop_value('standard_name')
+        # End if
         # First, search our local dictionary
-        fvar
+        local_var = super(SuiteOjbect, self).find_variable(any_scope=False)
+        if self.call_list is not None:
+            call_var = self.call_list.find_variable(any_scope=False)
+        else:
+            call_var = None
+        # End if
+        if (local_var is None) and (call_var is None):
+            # We do not have the variable, look to parents.
+            p_var = super(SuiteOjbect, self).find_variable(any_scope=any_scope)
+            if p_var is not None:
+                if self.call_list is not None:
+                    self.call_list.add_variable(p_var)
+                    call_var = self.call_list.find_variable(any_scope=False)
+                else:
+                    # We do not have this variable, pretend it is local
+                    local_var = p_var
+                # End if
+            # End if
+        # End if
+        if local_var is not None:
+            found_var = local_var
+        elif call_var is not None:
+            found_var = call_var
+        elif clone:
+            msg = "ERROR: SuiteObject variable clone is not implemented"
+            raise ParseInternalError(msg)
+        else:
+            found_var = None
+        # End if
+        return found_var
 
     @property
     def name(self):
@@ -303,7 +356,8 @@ class Scheme(SuiteObject):
         self._context = context
         self._version = scheme_xml.get('version', None)
         self._lib = scheme_xml.get('lib', None)
-        super(Scheme, self).__init__(name, context, parent, logger)
+        super(Scheme, self).__init__(name, context, parent,
+                                     logger, active_call_list=True)
 
     def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
         self._group = group
@@ -423,7 +477,8 @@ class TimeSplit(SuiteObject):
         # Handle all the suite objects inside of this group
         scheme_mods = set()
         for item in self.parts:
-            smods = item.analyze(phase, group, scheme_library, suite_vars, level+1, logger)
+            smods = item.analyze(phase, group, scheme_library,
+                                 suite_vars, level+1, logger)
             for smod in smods:
                 scheme_mods.add(smod)
             # End for
@@ -469,10 +524,12 @@ class Group(SuiteObject):
         # End if
         self._transition = transition
         # Initialize the dictionary of variables internal to group
-        super(Group, self).__init__(name, context, parent, logger)
+        super(Group, self).__init__(name, context, parent,
+                                    logger, active_call_list=True)
         # Add the items but first make sure we know the process tpye for
         # the group (e.g., TimeSplit or ProcessSplit).
-        if (len(group_xml) == 0) or (group_xml[0].tag not in Group.__process_types__):
+        if (len(group_xml) == 0) or (group_xml[0].tag not in
+                                     Group.__process_types__):
             # Default is TimeSplit
             tsxml = ET.fromstring(Group.__process_xml__['timesplit'])
             ts = new_suite_object(tsxml, context, parent, logger)
@@ -530,7 +587,7 @@ class Group(SuiteObject):
             errmsg = "Group {}, cannot move {}, variable not found"
             raise ParseInternalError(errmsg.format(self.name, standard_name))
         else:
-            self._call_list.add_variable(gvar, exists_ok=True)
+            self.call_list.add_variable(gvar, exists_ok=True)
             self.remove_variable(standard_name)
         # End if
 
@@ -556,15 +613,13 @@ class Group(SuiteObject):
                 cstdname = cvar.get_prop_value('standard_name')
                 cdims = cvar.get_dimensions()
                 found_var = False
-                # Is this variable already local?
-                local_var = self.find_variable(standard_name, any_scope=False)
-                call_var = self.call_list.find_variable(standard_name,
-                                                        any_scope=False)
+                # Do we have this variable?
+                local_var = self.find_variable(standard_name)
                 if local_var is not None:
                     # Check dimensions
                     local_dims = local_var.get_dimensions()
-                slist = [cstdname]
-                slist.extend(cvar.get_dim_stdnames())
+                    if not dimension_match(cdims, local_dims):
+                        vmatch_list = match_dimensions(cdims, local_dims)
                 for stdname in slist:
                     vmatch = VarDictionary.loop_var_match(stdname)
                     if self.local_or_call_list(stdname, logger, var=cvar):
