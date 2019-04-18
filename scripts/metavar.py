@@ -1342,8 +1342,14 @@ class VarDictionary(OrderedDict):
     def loop_var_match(cls, standard_name):
         '''Return a VarLoopSubst if <standard_name> is a loop variable,
         otherwise, return None'''
-        if standard_name in CCPP_VAR_LOOP_SUBSTS:
-            vmatch = CCPP_VAR_LOOP_SUBSTS[standard_name]
+        # Strip off 'ccpp_constant_one:', if present
+        if standard_name[0:18] == 'ccpp_constant_one:':
+            beg = 18
+        else:
+            beg = 0
+        # End if
+        if standard_name[beg:] in CCPP_VAR_LOOP_SUBSTS:
+            vmatch = CCPP_VAR_LOOP_SUBSTS[standard_name[beg:]]
         else:
             vmatch = None
         # End if
