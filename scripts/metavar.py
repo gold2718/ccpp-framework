@@ -988,6 +988,25 @@ class VarLoopSubst(object):
         # End if
         self._set_action = set_action
 
+    def has_subst(self, dict, any_scope=False):
+        """Determine if variables for the required standard names of this
+        VarLoopSubst object are present in <dict> (or in the parents of <dict)
+        if <any_scope> is True.
+        Return a list of the required variables on success, None on failure.
+        """
+        # A template for 'missing' should be in the standard variable list
+        subst_list = list()
+        for name in self.required_stdnames:
+            svar = dict.find_variable(name, any_scope=any_scope)
+            if svar is None:
+                subst_list = None
+                break
+            else:
+                subst_list.append(svar)
+            # End if
+        # End for
+        return subst_list
+
     def find_subst(self, dict, any_scope=False):
         """Attempt to find or create a Var for <_missing_stdname> and add it
         to <dict>.
@@ -1089,9 +1108,6 @@ class VarDictionary(OrderedDict):
     Traceback (most recent call last):
     ParseSyntaxError: Invalid Duplicate standard name, 'hi_mom', at <standard input>:
     """
-
-    # Dimension substitutions
-    __ccpp_dim_subst__ = {'horizontal_loop_extent' : 'horizontal_dimension'}
 
     def __init__(self, name, variables=None, parent_dict=None, logger=None):
         "Unlike dict, VarDictionary only takes a Var or Var list"
@@ -1279,37 +1295,6 @@ class VarDictionary(OrderedDict):
             # End if
         # End for
 
-    def set_subst_value(self, local_name, stdname):
-        "Return code to set <local_name> value"
-        subst_str = None
-        if stdname == 'horizontal_loop_extent':
-            bvar = self.find_variable('horizontal_loop_begin', any_scope=False)
-            evar = self.find_variable('horizontal_loop_end', any_scope=False)
-            if bvar and evar:
-                bname = bvar.get_prop_value('local_name')
-                ename = evar.get_prop_value('local_name')
-                subst_str = '{} = {} - {} + 1'.format(local_name, ename, bname)
-            else:
-                errmsg = "Unable to create value for {}"
-                raise ParseInternalError(errmsg.format(local_name))
-            # End if
-        elif stdname == 'horizontal_loop_begin':
-            subst_str = '{} = 1'.format(local_name)
-        elif stdname == 'horizontal_loop_end':
-            evar = self.find_variable('horizontal_loop_extent', any_scope=False)
-            if evar:
-                ename = evar.get_prop_value('local_name')
-                subst_str = '{} = {}'.format(local_name, ename)
-            else:
-                errmsg = "Unable to create value for {}"
-                raise ParseInternalError(errmsg.format(local_name))
-            # End if
-        else:
-            errmsg = "Unknown loop subst standard name, '{}'"
-            raise ParseInternalError(errmsg.format(stdname))
-        # End if
-        return subst_str
-
     def merge(self, other_dict):
         "Add new entries from <other_dict>"
         for ovar in other_dict.variable_list():
@@ -1421,27 +1406,6 @@ class VarDictionary(OrderedDict):
         # End if
         if logger_str is not None:
             self._logger.debug(logger_str)
-        # End if
-        return my_var
-
-    def find_dimension_subst(self, standard_name, any_scope=True, context=None):
-        """If <standard_name> is of the form <standard_name>_loop_extent
-        attempt to find a variable of the form <standard_name>_dimension
-        and return that. If such a variable is not found, raise an exception.
-        If <standard_name> is not of the form <standard_name>_extent, return
-        None.
-        """
-        loop_var = standard_name in VarDictionary.__ccpp_dim_subst__
-        logger_str = None
-        if loop_var:
-            # Let us see if we can replace the variable
-            dim_name = VarDictionary.__ccpp_dim_subst__[standard_name]
-            my_var = self.find_variable(dim_name, any_scope=any_scope)
-            if my_var is None:
-                raise CCPPError("Dimension variable, {} not found{}".format(dim_name, context_string(context)))
-            # End if
-        else:
-            my_var = None
         # End if
         return my_var
 

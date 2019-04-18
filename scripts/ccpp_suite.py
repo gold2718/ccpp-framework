@@ -147,6 +147,10 @@ class SuiteObject(VarDictionary):
     are passed to callable SuiteObjects (e.g., Scheme).
     """
 
+    ## SuiteObjects recognize horizontal dimensions as special
+    __horiz_dimensions__ = ['horizontal_loop_extent',
+                            'horizontal_loop_dimensions']
+
     def __init__(self, name, context, parent, logger, active_call_list=False):
         self.__name = name
         self._context = context
@@ -178,12 +182,32 @@ class SuiteObject(VarDictionary):
         # End for
         return schemes
 
+    @classmethod
+    def dimension_equivalents(cls, dim1, dim2):
+        """Are these two dimensions equivalent?"""
+        equiv = dim1 == dim2
+        if not equiv:
+            if dim1[0:18] == 'ccpp_constant_one:':
+                beg1 = 18
+            else:
+                beg1 = 0
+            # End if
+            if dim2[0:18] == 'ccpp_constant_one:':
+                beg2 = 18
+            else:
+                beg2 = 0
+            # End if
+            equiv = ((dim1[beg1:] in SuiteObject.__horiz_dimensions__) and
+                     (dim2[beg2:] in SuiteObject.__horiz_dimensions__))
+        # End if
+        return equiv
+
     def dimension_match(self, need_dims, have_dims, loop_check=False):
         """Compare dimensions between <need_dims> and <have_dims>.
         Return True if all dims match.
         """
         if loop_check:
-            vmatch_list = list()
+            vmatch_list = [None]*len(need_dims)
         # End if
         new_dims = list(need_dims)
         match = True
@@ -196,7 +220,8 @@ class SuiteObject(VarDictionary):
             match = False
         else:
             for index in range(nlen):
-                if need_dims[index] != have_dims[index]:
+                if not SuiteObject.dimension_equivalents(need_dims[index],
+                                                         have_dims[index]):
                     if loop_check:
                         # No match, look for a loop match
                         dim = need_dims[index]
@@ -208,8 +233,8 @@ class SuiteObject(VarDictionary):
                         else:
                             ldim = ':'.join(vmatch.required_stdnames)
                             if ldim == have_dims[index]:
-                                match.append(vmatch)
                                 new_dims[index] = ldim
+                                vmatch_list[index] = vmatch
                             else:
                                 match = False
                                 vmatch_list = None
@@ -237,7 +262,7 @@ class SuiteObject(VarDictionary):
         <need_dims>
         """
         if loop_check:
-            vmatch_list = list()
+            vmatch_list = [None]*len(need_dims)
         # End if
         new_dims = list(need_dims)
         if set(need_dims) == set(have_dims):
@@ -261,10 +286,10 @@ class SuiteObject(VarDictionary):
                     else:
                         ldim = ':'.join(vmatch.required_stdnames)
                         try:
-                            hindex = have_dims.index[ldim]
+                            hindex = have_dims.index(ldim)
                             perm.append(hindex)
                             new_dims[nindex] = ldim
-                            vmatch_list.append(vmatch)
+                            vmatch_list[nindex] = vmatch
                         except ValueError as ve:
                             perm = None
                             break
@@ -318,14 +343,15 @@ class SuiteObject(VarDictionary):
         else:
             call_var = None
         # End if
-        if (local_var is None) and (call_var is None):
+        if (local_var is None) and (call_var is None) and any_scope:
             # We do not have the variable, look to parents.
             p_var = super(SuiteObject, self).find_variable(stdname,
-                                                           any_scope=any_scope)
+                                                           any_scope=True)
             if p_var is not None:
                 if self.call_list is not None:
                     self.call_list.add_variable(p_var)
-                    call_var = self.call_list.find_variable(any_scope=False)
+                    call_var = self.call_list.find_variable(stdname,
+                                                            any_scope=False)
                 else:
                     # We do not have this variable, pretend it is local
                     local_var = p_var
@@ -730,26 +756,65 @@ class Group(SuiteObject):
             for cvar in scheme.call_list.variable_list():
                 cstdname = cvar.get_prop_value('standard_name')
                 cdims = cvar.get_dimensions()
+                if len(cdims) == 0:
+                    vmatch = VarDictionary.loop_var_match(cstdname)
+                else:
+                    vmatch = None
+                # End if
                 found_var = False
-                # Do we have this variable?
+                # Do we already have this variable?
                 local_var = self.find_variable(cstdname, any_scope=False)
+                if local_var is None:
+                    host_var = self.find_variable(cstdname, any_scope=True)
+                else:
+                    host_var = None
+                # End if
                 if local_var is not None:
+                    found_var = True
+                    # We already have the variable, assume it has been checked
+                elif host_var is not None:
+                    found_var = True
                     # Check dimensions
-                    local_dims = local_var.get_dimensions()
-                    if self.dimension_match(cdims, local_dims):
-                        args = self.match_dimensions(cdims, local_dims)
-                        match, perm, vmatches, new_dims = args
-                        # We have a match, do we have a source
-                        # for all the dimensions?
+                    host_dims = host_var.get_dimensions()
+                    args = self.match_dimensions(cdims, host_dims)
+                    match, perm, vmatches, new_dims = args
+                    if match:
+                        # We have a match, make sure var is in call list
+                        if new_dims == cdims:
+                            self.call_list.add_variable(cvar, exists_ok=True)
+                        else:
+                            subst_dict = {'dimensions':new_dims}
+                            clone = cvar.clone(subst_dict)
+                            self.call_list.add_variable(clone, exists_ok=True)
+                        # End if
+                        # Do we have a source for all the dimensions?
                         for index in range(len(new_dims)):
                             dim = new_dims[index]
                             for stdname in dim.split(':'):
-                                if self.find_variable(stdname):
+                                dimvar = self.find_variable(stdname)
+                                if dimvar is not None:
                                     # This is already a local group var, make
                                     # sure it has been added to our call list
-                                    self.call_list.add_variable(cvar,
+                                    self.call_list.add_variable(dimvar,
                                                                 exists_ok=True)
+                                    msg = "Adding {} to {} call list"
+                                    logger.debug(msg.format(stdname,
+                                                            self.name))
+                                elif vmatch_list[index] is not None:
+                                    svars = vmatch_list[index].has_subst(self)
+                                    if svars is None:
+                                        found_var = False
+                                    else:
+                                        clist = self.call_list
+                                        for var in svars:
+                                            clist.add_variable(var,
+                                                               exists_ok=True)
+                                        # End for
+                                    # End if
                                 else:
+                                    found_var = False
+                                # End if
+                                if not found_var:
                                     errmsg = ('Unable to convert {}, {} '
                                               'not found{}')
                                     ctx = context_string(cvar.context)
@@ -758,6 +823,8 @@ class Group(SuiteObject):
                                 # End if
                             # End for
                         # End for
+                        # Add all the loop substitutions
+                        self._loop_var_matches.extend(vmatches)
                     else:
                         errmsg = ('Unable to convert {}, '
                                   'dimensions do not match{}')
@@ -766,7 +833,20 @@ class Group(SuiteObject):
                     # End if
                 elif cvar.get_prop_value('intent') == 'out':
                     self.add_variable(cvar, exists_ok=True)
+                elif vmatch is not None:
+                    svars = vmatch.has_subst(self, any_scope=True)
+                    if svars is None:
+                        found_var = False
+                    else:
+                        found_var = True
+                        for var in svars:
+                            self.call_list.add_variable(var, exists_ok=True)
+                        # End for
+                    # End if
                 else:
+                    found_var = False
+                # End if
+                if not found_var:
                     intent = cvar.get_prop_value('intent')
                     lname = cvar.get_prop_value('local_name')
                     errmsg = ("{grp} / {sch} intent({int}) variable "

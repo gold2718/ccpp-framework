@@ -124,6 +124,9 @@ def write_host_cap(host_model, api, output_dir, logger):
                     hvar = host_model.find_variable(stdname)
                     if (hvar is None) and (stdname in CCPP_VAR_LOOP_SUBSTS):
                         lsubst = CCPP_VAR_LOOP_SUBSTS[stdname]
+# XXgoldyXX: v debug only
+                        raise ValueError('XXG: subst of {} to {}'.format(stdname, lsubst))
+# XXgoldyXX: ^ debug only
                         hvar = lsubst.find_subst(host_local_vars)
                     # End if
                     if hvar is None:
