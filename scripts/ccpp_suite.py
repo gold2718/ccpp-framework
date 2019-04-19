@@ -148,8 +148,9 @@ class SuiteObject(VarDictionary):
     """
 
     ## SuiteObjects recognize horizontal dimensions as special
-    __horiz_dimensions__ = ['horizontal_loop_extent',
-                            'horizontal_loop_dimensions']
+    __horiz_dimensions__ = ['ccpp_constant_one:horizontal_loop_extent',
+                            'ccpp_constant_one:horizontal_dimension',
+                            'horizontal_loop_begin:horizontal_loop_end']
 
     def __init__(self, name, context, parent, logger, active_call_list=False):
         self.__name = name
@@ -183,24 +184,40 @@ class SuiteObject(VarDictionary):
         return schemes
 
     @classmethod
-    def dimension_equivalents(cls, dim1, dim2):
-        """Are these two dimensions equivalent?"""
-        equiv = dim1 == dim2
-        if not equiv:
-            if dim1[0:18] == 'ccpp_constant_one:':
-                beg1 = 18
-            else:
-                beg1 = 0
-            # End if
-            if dim2[0:18] == 'ccpp_constant_one:':
-                beg2 = 18
-            else:
-                beg2 = 0
-            # End if
-            equiv = ((dim1[beg1:] in SuiteObject.__horiz_dimensions__) and
-                     (dim2[beg2:] in SuiteObject.__horiz_dimensions__))
-        # End if
-        return equiv
+    def is_horiz_dim(cls, dim):
+        """Is <dim> a horizontal dimension??"""
+        return dim in SuiteObject.__horiz_dimensions__
+
+    def horiz_dim_match(self, ndim, hdim, nloop_subst):
+        """Find a match between <ndim> and <hdim>, if they are both
+        horizontal dimensions.
+        If <ndim> == <hdim>, return <ndim>.
+        If <nloop_subst> is not None and its required standard names exist
+        in our extended dictionary, return them.
+        Otherwise, return None.
+        """
+        dim_match = None
+        if SuiteObject.is_horiz_dim(ndim) and SuiteObject.is_horiz_dim(hdim):
+            if ndim == hdim:
+                dim_match = ndim
+            elif nloop_subst is not None:
+                stdnames = nloop_subst.required_stdnames
+                match = True
+                for stdname in stdnames:
+                    svar = self.find_variable(stdname, any_scope=True)
+                    if svar is None:
+                        match = False
+                        break
+                    elif self.call_list is not None:
+                        self.call_list.add_variable(svar, exists_ok=True)
+                    # End if
+                # End for
+                if match:
+                    dim_match = ':'.join(stdnames)
+                # End if
+            # End if (no else, there is no match)
+        # End if (no else, there is no match)
+        return dim_match
 
     def dimension_match(self, need_dims, have_dims, loop_check=False):
         """Compare dimensions between <need_dims> and <have_dims>.
@@ -220,8 +237,7 @@ class SuiteObject(VarDictionary):
             match = False
         else:
             for index in range(nlen):
-                if not SuiteObject.dimension_equivalents(need_dims[index],
-                                                         have_dims[index]):
+                if need_dims[index] != have_dims[index]:
                     if loop_check:
                         # No match, look for a loop match
                         dim = need_dims[index]
@@ -231,8 +247,10 @@ class SuiteObject(VarDictionary):
                             vmatch_list = None
                             break
                         else:
-                            ldim = ':'.join(vmatch.required_stdnames)
-                            if ldim == have_dims[index]:
+                            ldim = self.horiz_dim_match(need_dims[index],
+                                                        have_dims[index],
+                                                        vmatch)
+                            if ldim is not None:
                                 new_dims[index] = ldim
                                 vmatch_list[index] = vmatch
                             else:
@@ -270,13 +288,13 @@ class SuiteObject(VarDictionary):
             for nindex in range(len(need_dims)):
                 perm.append(have_dims.index(need_dims[nindex]))
             # End if
-        elif loop_check:
-            perm = list()
+        elif loop_check and (len(need_dims) == len(have_dims)):
+            perm = [None]*len(need_dims)
             for nindex in range(len(need_dims)):
                 dim = need_dims[nindex]
                 try:
                     hindex = have_dims.index(dim)
-                    perm.append(hindex)
+                    perm[nindex] = hindex
                 except ValueError as ve:
                     # No match, look for a loop match
                     vmatch = VarDictionary.loop_var_match(dim)
@@ -287,12 +305,22 @@ class SuiteObject(VarDictionary):
                         ldim = ':'.join(vmatch.required_stdnames)
                         try:
                             hindex = have_dims.index(ldim)
-                            perm.append(hindex)
+                            perm[nindex] = hindex
                             new_dims[nindex] = ldim
                             vmatch_list[nindex] = vmatch
                         except ValueError as ve:
-                            perm = None
-                            break
+                            for hindex in range(len(have_dims)):
+                                hdim = have_dims[index]
+                                pdim = self.horiz_dim_match(ldim, hdim, vmatch)
+                                if pdim is not None:
+                                    perm[nindex] = hindex
+                                    new_dims[nindex] = pdim
+                                    vmatch_list[nindex] = vmatch
+                                else:
+                                    perm = None
+                                    break
+                                # End if
+                            # End for
                         # End try
                     # End if (vmatch)
                 # End try
@@ -800,8 +828,8 @@ class Group(SuiteObject):
                                     msg = "Adding {} to {} call list"
                                     logger.debug(msg.format(stdname,
                                                             self.name))
-                                elif vmatch_list[index] is not None:
-                                    svars = vmatch_list[index].has_subst(self)
+                                elif vmatches[index] is not None:
+                                    svars = vmatches[index].has_subst(self)
                                     if svars is None:
                                         found_var = False
                                     else:

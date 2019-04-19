@@ -637,7 +637,7 @@ class Var(object):
             context = self._context
         # End if
         psource = ParseSource(source_name, source_type, context)
-        return Var(cprop_dict, psource, internal=internal)
+        return Var(cprop_dict, psource)
 
     def get_prop_value(self, name):
         if name in self._prop_dict:
