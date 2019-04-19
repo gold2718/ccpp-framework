@@ -13,7 +13,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 # CCPP framework imports
 from ccpp_suite    import COPYRIGHT, KINDS_MODULE, CCPP_STATE_MACH, API
-from metavar       import Var, VarDictionary, CCPP_VAR_LOOP_SUBSTS
+from metavar       import Var, VarDictionary, CCPP_CONSTANT_VARS
 from fortran_tools import FortranWriter
 from parse_tools   import CCPPError, ParseSource, ParseContext
 
@@ -105,7 +105,8 @@ def write_host_cap(host_model, api, output_dir, logger):
         cap.write(preamble.format(host_model=host_model.name), 1)
         # CCPP_STATE_MACH.transitions represents the host CCPP interface
         for stage in CCPP_STATE_MACH.transitions():
-            cap.write("public :: {host_model}_ccpp_physics_{stage}".format(host_model=host_model.name, stage=stage), 1)
+            stmt = "public :: {host_model}_ccpp_physics_{stage}"
+            cap.write(stmt.format(host_model=host_model.name, stage=stage), 1)
         # End for
         api.declare_inspection_interfaces(cap)
         cap.write('\ncontains\n', 0)
@@ -122,15 +123,9 @@ def write_host_cap(host_model, api, output_dir, logger):
                 for sp_var in spart_args:
                     stdname = sp_var.get_prop_value('standard_name')
                     hvar = host_model.find_variable(stdname)
-                    if (hvar is None) and (stdname in CCPP_VAR_LOOP_SUBSTS):
-                        lsubst = CCPP_VAR_LOOP_SUBSTS[stdname]
-# XXgoldyXX: v debug only
-                        raise ValueError('XXG: subst of {} to {}'.format(stdname, lsubst))
-# XXgoldyXX: ^ debug only
-                        hvar = lsubst.find_subst(host_local_vars)
-                    # End if
                     if hvar is None:
-                        raise CCPPError('No host model variable for {} in {}'.format(stdname, spart.name))
+                        errmsg = 'No host model variable for {} in {}'
+                        raise CCPPError(errmsg.format(stdname, spart.name))
                     # End if
                 # End for (loop over part variables)
             # End for (loop of suite parts
@@ -152,7 +147,8 @@ def write_host_cap(host_model, api, output_dir, logger):
             for suite in api.suites:
                 mspc = (max_suite_len - len(suite.module))*' '
                 for spart in spart_list:
-                    cap.write("use {}, {}only: {}".format(suite.module, mspc, spart.name), 2)
+                    stmt = "use {}, {}only: {}"
+                    cap.write(stmt.format(suite.module, mspc, spart.name), 2)
                 # End for
             # End for
             cap.write("", 1)
@@ -171,40 +167,53 @@ def write_host_cap(host_model, api, output_dir, logger):
             errmsg_name, errflg_name = api.get_errinfo_names()
             else_str = '\n'
             for suite in api.suites:
-                cap.write("{}if (trim(suite_name) == '{}') then".format(else_str, suite.name), 2)
+                stmt = "{}if (trim(suite_name) == '{}') then"
+                cap.write(stmt.format(else_str, suite.name), 2)
                 if stage == 'run':
                     el2_str = ''
                     for spart in spart_list:
                         pname = spart.name[len(suite.name)+1:]
-                        cap.write("{}if (trim(suite_part) == '{}') then".format(el2_str, pname), 3)
+                        stmt = "{}if (trim(suite_part) == '{}') then"
+                        cap.write(stmt.format(el2_str, pname), 3)
                         spart_args = spart.call_list.variable_list()
                         hmvars = list() # Host model to spart dummy args
                         for sp_var in spart_args:
                             stdname = sp_var.get_prop_value('standard_name')
                             hvar = host_model.find_variable(stdname)
                             if hvar is None:
-                                raise CCPPError('No host model variable for {} in {}'.format(stdname, spart.name))
+                                errmsg = 'No host model variable for {} in {}'
+                                raise CCPPError(errmsg.format(stdname,
+                                                              spart.name))
                             # End if
-                            lname = host_model.var_call_string(hvar)
-                            hmvars.append(lname)
+                            if stdname not in CCPP_CONSTANT_VARS:
+                                lname = host_model.var_call_string(hvar)
+                                hmvars.append(lname)
+                            # End if
                         # End for
                         call_str = ', '.join(hmvars)
                         cap.write("call {}({})".format(spart.name, call_str), 4)
                         el2_str = 'else '
                     # End for
                     cap.write("else", 3)
-                    cap.write("{errmsg} = 'No suite part named '//trim(suite_part)".format(errmsg=errmsg_name), 4)
-                    cap.write("{errmsg} = trim({errmsg})//' found in suite {sname}'".format(errmsg=errmsg_name, sname=suite.name), 4)
+                    emsg = "write({errmsg}, '(3a)')".format(errmsg=errmsg_name)
+                    emsg += '"No suite part named ", '
+                    emsg += 'trim(suite_part), '
+                    emsg += '" found in suite {sname}"'.format(sname=suite.name)
+                    cap.write(emsg, 4)
                     cap.write("{errflg} = 1".format(errflg=errflg_name), 4)
                     cap.write("end if", 3)
                 else:
                     call_str = suite.phase_group(stage).call_list.call_string()
-                    cap.write("call {}_{}({})".format(suite.name, stage, call_str), 3)
+                    stmt = "call {}_{}({})"
+                    cap.write(stmt.format(suite.name, stage, call_str), 3)
                 # End if
                 else_str = 'else '
             # End for
             cap.write("else", 2)
-            cap.write("{errmsg} = 'No suite named '//trim(suite_name)//' found'".format(errmsg=errmsg_name), 3)
+            emsg = "write({errmsg}, '(3a)')".format(errmsg=errmsg_name)
+            emsg += '"No suite named ", '
+            emsg += 'trim(suite_name), "found"'
+            cap.write(emsg, 3)
             cap.write("{errflg} = 1".format(errflg=errflg_name), 3)
             cap.write("end if", 2)
             cap.write(subfoot.format(host_model=host_model.name,

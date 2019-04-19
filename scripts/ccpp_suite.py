@@ -17,7 +17,7 @@ from parse_tools   import ParseInternalError, ParseSyntaxError, CCPPError
 from parse_tools   import FORTRAN_ID
 from parse_tools   import read_xml_file, validate_xml_file, find_schema_version
 from metavar       import Var, VarDDT, VarDictionary, ddt_modules
-from metavar       import ccpp_standard_var
+from metavar       import ccpp_standard_var, CCPP_CONSTANT_VARS
 from state_machine import StateMachine
 from fortran_tools import FortranWriter
 
@@ -118,21 +118,25 @@ class CallList(VarDictionary):
         """
         arg_str = ""
         for var in self.variable_list():
-            if dict is not None:
-                stdname = var.get_prop_value('standard_name')
-                dvar = dict.find_variable(stdname)
-                if dvar is None:
-                    raise CCPPError("Variable, '{}', not found in {}".format(stdname, dict.name))
+            # Do not include constants
+            stdname = var.get_prop_value('standard_name')
+            if stdname not in CCPP_CONSTANT_VARS:
+                if dict is not None:
+                    dvar = dict.find_variable(stdname)
+                    if dvar is None:
+                        errmsg = "Variable, '{}', not found in {}"
+                        raise CCPPError(errmsg.format(stdname, dict.name))
+                    else:
+                        lname = dvar.get_prop_value('local_name')
+                    # End if
                 else:
-                    lname = dvar.get_prop_value('local_name')
+                    lname = var.get_prop_value('local_name')
                 # End if
-            else:
-                lname = var.get_prop_value('local_name')
+                if len(arg_str) > 0:
+                    arg_str = arg_str + ", "
+                # End if
+                arg_str = arg_str + lname
             # End if
-            if len(arg_str) > 0:
-                arg_str = arg_str + ", "
-            # End if
-            arg_str = arg_str + lname
         # End for
         return arg_str
 
@@ -533,7 +537,7 @@ class Scheme(SuiteObject):
         return scheme_mods
 
     def write(self, outfile, logger, indent):
-        my_args = self.call_list.call_string(dict=self._group.call_list)
+        my_args = self.call_list.call_string(dict=self)
         outfile.write('call {}({})'.format(self._subroutine_name, my_args), indent)
 
     def schemes(self):
@@ -772,7 +776,12 @@ class Group(SuiteObject):
         # dictionary (field is defined in the group subroutine).
         # Variable dimensions also count since they need a source.
         for scheme in self.schemes():
-            for cvar in scheme.call_list.variable_list():
+            # Sort the call list to handle scalars first (to capture
+            # dimension loop substitutions before dealing with them as
+            # vector dimensions
+            var_list = scheme.call_list.variable_list()
+            var_list.sort(key=lambda x: len(x.get_dimensions()))
+            for cvar in var_list:
                 cstdname = cvar.get_prop_value('standard_name')
                 cdims = cvar.get_dimensions()
                 if len(cdims) == 0:
@@ -840,11 +849,11 @@ class Group(SuiteObject):
                             # End for
                         # End for
                         # Add all the loop substitutions
-                        for vmatch in vmatches:
-                            if vmatch is not None:
-                                self._loop_var_matches.append(vmatch)
+                        for dim_vmatch in vmatches:
+                            if dim_vmatch is not None:
+                                self._loop_var_matches.append(dim_vmatch)
                                 # Add the missing dim
-                                vmatch.add_local(self, __api_local__)
+                                dim_vmatch.add_local(self, __api_local__)
                             # End if
                         # End for
                     else:
@@ -864,6 +873,17 @@ class Group(SuiteObject):
                         for var in svars:
                             self.call_list.add_variable(var, exists_ok=True)
                         # End for
+                        # This variable should now be available in Group
+                        # But as a local variable
+                        lname = cvar.get_prop_value('local_name')
+                        prop_dict = {'standard_name':cstdname,
+                                     'local_name':lname,
+                                     'type':cvar.get_prop_value('type'),
+                                     'kind':cvar.get_prop_value('kind'),
+                                     'units':cvar.get_prop_value('units'),
+                                     'dimensions':cdims}
+                        local_var = Var(prop_dict, __api_local__)
+                        self.add_variable(local_var, exists_ok=True)
                     # End if
                 else:
                     found_var = False
@@ -893,7 +913,7 @@ class Group(SuiteObject):
         # End if
         # First, write out the subroutine header
         subname = self.name
-        call_list = ", ".join(self.call_list.prop_list('local_name'))
+        call_list = self.call_list.call_string()
         outfile.write(Group.__subhead__.format(subname=subname, args=call_list),
                       indent)
         # Write out any use statements
@@ -908,7 +928,7 @@ class Group(SuiteObject):
         logger.debug(msg.format(self.name, self.call_list.variable_list()))
         self.call_list.declare_variables(outfile, indent+1)
         subpart_var_set = {}
-        for item in self.parts:
+        for item in [self] + self.parts:
             for var in item.declarations():
                 lname = var.get_prop_value('local_name')
                 if lname in subpart_var_set:
@@ -919,15 +939,17 @@ class Group(SuiteObject):
                         raise ParseInternalError(errmsg.format(lvar))
                     # End if
                 else:
-                    subpart_var_set[lname] = var
+                    subpart_var_set[lname] = (var, item)
                 # End if
             # End for
         # End for
         if len(subpart_var_set) > 0:
             outfile.write('\n! Local Variables', indent+1)
         # Write out local variables
-        for var in subpart_var_set:
-            outfile.write(var, indent+1)
+        for key in subpart_var_set:
+            var = subpart_var_set[key][0]
+            dict = subpart_var_set[key][1]
+            var.write_def(outfile, indent+1, dict)
         # End for
         outfile.write('', 0)
         # Check state machine
@@ -987,7 +1009,7 @@ class Group(SuiteObject):
         # End for
         # Write the scheme and subcycle calls
         for item in self.parts:
-            item.write(outfile, logger, indent+1)
+            item.write(outfile, logger, indent)
         # End for
         # Deallocate suite vars
         if deallocate:
@@ -1080,9 +1102,10 @@ end module {module}
             prev_str = "({} /= '{}')".format(css, prev_state)
             check_stmts.append(("if {} then".format(prev_str), 1))
             check_stmts.append(("{errflg} = 1", 2))
-            errmsg_str = ("\"Invalid initial CCPP state, '\"//"+ css +
-                          "//\"' in {funcname}\"")
-            check_stmts.append(("{{errmsg}} = {}".format(errmsg_str), 2))
+            errmsg_str = "write({errmsg}, '(3a)') "
+            errmsg_str += "\"Invalid initial CCPP state, '\", " + css + ', '
+            errmsg_str += "\"' in {funcname}\""
+            check_stmts.append((errmsg_str, 2))
             check_stmts.append(("return", 2))
             check_stmts.append(("end if", 1))
         else:
@@ -1599,7 +1622,9 @@ end module {module}
             else_str = 'else '
         # End for
         ofile.write("else", 2)
-        ofile.write("{errmsg} = 'No suite named '//trim(suite_name)//' found'".format(errmsg=errmsg_name), 3)
+        emsg = "write({errmsg}, '(3a)')".format(errmsg=errmsg_name)
+        emsg += "'No suite named ', trim(suite_name), ' found'"
+        ofile.write(emsg, 3)
         ofile.write("{errflg} = 1".format(errflg=errflg_name), 3)
         ofile.write("end if", 2)
         ofile.write("end subroutine {}".format(API.__part_fname__), 1)

@@ -707,6 +707,11 @@ class Var(object):
 
     def write_def(self, outfile, indent, dict, allocatable=False):
         '''Write the definition line for the variable.'''
+        stdname = self.get_prop_value('standard_name')
+        if stdname in CCPP_CONSTANT_VARS:
+            # There is no declaration line for a constant
+            return
+        # End if
         vtype = self.get_prop_value('type')
         kind = self.get_prop_value('kind')
         name = self.get_prop_value('local_name')
@@ -727,7 +732,8 @@ class Var(object):
                         if None in dvars:
                             for dim in dstdnames:
                                 if dict.find_variable(dim) is None:
-                                    raise CCPPError("No variable found for dimension '{}' in {}".format(dim, name))
+                                    emsg = "No variable found for dimension '{}' in {}"
+                                    raise CCPPError(emsg.format(dim, name))
                                 # End if
                             # End for
                         # End if
@@ -747,7 +753,8 @@ class Var(object):
         constant = self.get_prop_value('constant')
         intent = self.get_prop_value('intent')
         if constant and allocatable:
-            raise CCPPError('Cannot create allocatable variable from constant, {}'.format(name))
+            errmsg = 'Cannot create allocatable variable from constant, {}'
+            raise CCPPError(errmsg.format(name))
         # End if
         if constant:
             intent_str = 'intent(in)   '
@@ -1009,30 +1016,6 @@ class VarLoopSubst(object):
         # End for
         return subst_list
 
-    def find_subst(self, dict, any_scope=False):
-        """Attempt to find or create a Var for <_missing_stdname> and add it
-        to <dict>.
-        If any_scope is True, consult parent dictionaries.
-        Also, verify that the required variable(s) is(are) in <dict>
-        If successful, return Var, otherwise, throw a CCPPError.
-        """
-        # A template for 'missing' should be in the standard variable list
-        if self.missing_stdname in CCPP_STANDARD_VARS:
-            var = CCPP_STANDARD_VARS[self.missing_stdname]
-            dict.add_variable(var, gen_unique=True)
-        else:
-            var = None
-        # End if
-        if var is None:
-            raise CCPPError('Unable to find or create missing loop variable, {}'.format(self.missing_stdname))
-        # End if
-        for stdname in self.required_stdnames:
-            if dict.find_variable(stdname, any_scope=any_scope) is None:
-                raise CCPPError("{} is required to set value for {} but is not in dictionary".format(stdname, self.missing_stdname))
-            # End if
-        # End for
-        return var
-
     def add_local(self, dict, source):
         'Add a Var created from the missing name to <dict>'
         local_name = dict.new_internal_variable_name(self._local_name)
@@ -1052,13 +1035,15 @@ class VarLoopSubst(object):
                 var = dict2.find_variable(stdname, any_scope=any_scope)
             # End if
             if var is None:
-                raise CCPPError("Required variable, {}, not found".format(stdname))
+                errmsg = "Required variable, {}, not found"
+                raise CCPPError(errmsg.format(stdname))
             # End if
             action_dict[stdname] = var.get_prop_value('local_name')
         # End for
         var = dict.find_variable(self.missing_stdname)
         if var is None:
-            raise CCPPError("Required variable, {}, not found".format(self.missing_stdname))
+            errmsg = "Required variable, {}, not found"
+            raise CCPPError(errmsg.format(self.missing_stdname))
         # End if
         action_dict[self.missing_stdname] = var.get_prop_value('local_name')
         return self._set_action.format(**action_dict)
@@ -1496,7 +1481,7 @@ class VarDictionary(OrderedDict):
         if prefix is None:
             var_prefix = '{}_var'.format(self.name)
         else:
-            var_prefix = '{}_{}_var'.format(prefix, self.name)
+            var_prefix = '{}'.format(prefix)
         # End if
         varlist = [x for x in self.prop_list('local_name') if var_prefix in x]
         newvar = None
