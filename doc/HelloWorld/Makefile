@@ -10,13 +10,14 @@ MKFILE_PATH := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 ROOT = $(shell dirname $(shell dirname $(MKFILE_PATH)))
 CAPGEN := $(ROOT)/scripts/ccpp_capgen.py
 CAPGEN_ARGS := --host-files $(MKFILE_PATH)/hello_world_host.meta,$(MKFILE_PATH)/hello_world_mod.meta
-CAPGEN_ARGS += --scheme-files $(MKFILE_PATH)/hello_scheme.meta
+CAPGEN_ARGS += --scheme-files $(MKFILE_PATH)/hello_scheme.meta,$(MKFILE_PATH)/temp_adjust.meta
 CAPGEN_ARGS += --suites $(MKFILE_PATH)/hello_world_suite.xml
 CAPGEN_ARGS += --generate-host-cap --host-name HelloWorld
 CAPGEN_ARGS += --verbose --verbose
 SRCS_META := $(MKFILE_PATH)/hello_world_host.meta
 SRCS_META += $(MKFILE_PATH)/hello_world_mod.meta
 SRCS_META += $(MKFILE_PATH)/hello_scheme.meta
+SRCS_META += $(MKFILE_PATH)/temp_adjust.meta
 SRCS_XML := $(MKFILE_PATH)/hello_world_suite.xml
 
 INCFLAG = -I
@@ -26,7 +27,8 @@ FCFLAGS += -g
 # SOURCE FILES
 SRCS_F90 = $(MKFILE_PATH)/hello_scheme.F90 $(MKFILE_PATH)/hello_world_host.F90
 SRCS_F90 += $(MKFILE_PATH)/hello_world_mod.F90
-OBJS_F90 = hello_scheme.o hello_world_mod.o hello_world_host.o
+SRCS_F90 += $(MKFILE_PATH)/temp_adjust.F90
+OBJS_F90 = hello_scheme.o temp_adjust.o hello_world_mod.o hello_world_host.o
 
 # Do we have generated CAP files?
 $(eval CAPOBJS=$(shell if [ -f caplocal.txt ]; then cat caplocal.txt; fi))
@@ -49,6 +51,9 @@ HelloWorld: capobjs $(CAPOBJS) $(OBJS_F90)
 
 hello_scheme.o: ccpp_kinds.o $(MKFILE_PATH)/hello_scheme.F90
 	$(FC) -c $(INCPATH) $(FCFLAGS) $(MKFILE_PATH)/hello_scheme.F90
+
+temp_adjust.o: ccpp_kinds.o $(MKFILE_PATH)/temp_adjust.F90
+	$(FC) -c $(INCPATH) $(FCFLAGS) $(MKFILE_PATH)/temp_adjust.F90
 
 hello_world_mod.o: ccpp_kinds.o $(MKFILE_PATH)/hello_world_mod.F90
 	$(FC) -c $(INCPATH) $(FCFLAGS) $(MKFILE_PATH)/hello_world_mod.F90

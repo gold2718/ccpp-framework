@@ -3,5 +3,6 @@
 <suite name="hello_world_suite" version="1.0">
   <group name="physics">
     <scheme>hello_scheme</scheme>
+    <scheme>temp_adjust</scheme>
   </group>
 </suite>
