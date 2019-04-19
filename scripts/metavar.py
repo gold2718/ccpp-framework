@@ -511,7 +511,7 @@ class Var(object):
         # End for
         # Check for any mismatch
         if ('constant' in prop_dict) and ('intent' in prop_dict):
-            if prop_dict['intent'].lower() != 'in':
+            if (prop_dict['intent'].lower() != 'in') and prop_dict['constant']:
                 if invalid_ok and (logger is not None):
                     ctx = context_string(self.context)
                     logger.warning("{} is marked constant but is intent {}{}".format(prop_dict['local_name'], prop_dict['intent'], ctx))
@@ -973,8 +973,10 @@ class VarLoopSubst(object):
     suite part or scheme or where a host model passes a subset of a
     dimension at run time."""
 
-    def __init__(self, missing_stdname, required_stdnames, set_action):
+    def __init__(self, missing_stdname, required_stdnames,
+                 local_name, set_action):
         self._missing_stdname = missing_stdname
+        self._local_name = local_name
         if isinstance(required_stdnames, Var):
             self._required_stdnames = (required_stdnames,)
         else:
@@ -1015,21 +1017,30 @@ class VarLoopSubst(object):
         If successful, return Var, otherwise, throw a CCPPError.
         """
         # A template for 'missing' should be in the standard variable list
-        if self._missing_stdname in CCPP_STANDARD_VARS:
-            var = CCPP_STANDARD_VARS[self._missing_stdname]
+        if self.missing_stdname in CCPP_STANDARD_VARS:
+            var = CCPP_STANDARD_VARS[self.missing_stdname]
             dict.add_variable(var, gen_unique=True)
         else:
             var = None
         # End if
         if var is None:
-            raise CCPPError('Unable to find or create missing loop variable, {}'.format(self._missing_stdname))
+            raise CCPPError('Unable to find or create missing loop variable, {}'.format(self.missing_stdname))
         # End if
         for stdname in self.required_stdnames:
             if dict.find_variable(stdname, any_scope=any_scope) is None:
-                raise CCPPError("{} is required to set value for {} but is not in dictionary".format(stdname, self._missing_stdname))
+                raise CCPPError("{} is required to set value for {} but is not in dictionary".format(stdname, self.missing_stdname))
             # End if
         # End for
         return var
+
+    def add_local(self, dict, source):
+        'Add a Var created from the missing name to <dict>'
+        local_name = dict.new_internal_variable_name(self._local_name)
+        prop_dict = {'standard_name':self.missing_stdname,
+                     'local_name':local_name,
+                     'type':'integer', 'units':'count', 'dimensions':'()'}
+        var = Var(prop_dict, source)
+        dict.add_variable(var, exists_ok=True, gen_unique=True)
 
     def write_action(self, dict, dict2=None, any_scope=False):
         """Return a string setting the correct values for our
@@ -1045,30 +1056,34 @@ class VarLoopSubst(object):
             # End if
             action_dict[stdname] = var.get_prop_value('local_name')
         # End for
-        var = dict.find_variable(self._missing_stdname)
+        var = dict.find_variable(self.missing_stdname)
         if var is None:
-            raise CCPPError("Required variable, {}, not found".format(self._missing_stdname))
+            raise CCPPError("Required variable, {}, not found".format(self.missing_stdname))
         # End if
-        action_dict[self._missing_stdname] = var.get_prop_value('local_name')
+        action_dict[self.missing_stdname] = var.get_prop_value('local_name')
         return self._set_action.format(**action_dict)
 
     @property
     def required_stdnames(self):
         return self._required_stdnames
 
+    @property
+    def missing_stdname(self):
+        return self._missing_stdname
+
 # Substitutions where a new variable must be created
 CCPP_VAR_LOOP_SUBSTS = { 'horizontal_loop_extent' :
                          VarLoopSubst('horizontal_loop_extent',
                                       ('horizontal_loop_begin',
-                                       'horizontal_loop_end'),
+                                       'horizontal_loop_end'), 'ncol',
                                       '{horizontal_loop_extent} = {horizontal_loop_end} - {horizontal_loop_begin} + 1'),
                          'horizontal_loop_begin' :
                          VarLoopSubst('horizontal_loop_begin',
-                                      ('ccpp_constant_one',),
+                                      ('ccpp_constant_one',), 'one',
                                       '{horizontal_loop_begin} = 1'),
                          'horizontal_loop_end' :
                          VarLoopSubst('horizontal_loop_end',
-                                      ('horizontal_loop_extent',),
+                                      ('horizontal_loop_extent',), 'ncol',
                                       '{horizontal_loop_end} = {horizontal_loop_extent}')
 }
 

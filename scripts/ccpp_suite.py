@@ -40,6 +40,7 @@ obj_loc_re = re.compile(r"(0x[0-9A-Fa-f]+)>")
 # Source for internally generated variables.
 __api_context__ = ParseContext(filename="ccpp_suite.py")
 __api_source__ = ParseSource("CCPP_API", "scheme", __api_context__)
+__api_local__ = ParseSource("CCPP_API", "local", __api_context__)
 
 # Allowed CCPP transitions
 CCPP_STATE_MACH = StateMachine((('initialize',       'uninitialized',
@@ -158,7 +159,7 @@ class SuiteObject(VarDictionary):
         self._logger = logger
         self._parent = parent
         if active_call_list:
-            self._call_list = CallList(name, logger)
+            self._call_list = CallList(name + '_call_list', logger)
         else:
             self._call_list = None
         self._parts = list()
@@ -373,18 +374,8 @@ class SuiteObject(VarDictionary):
         # End if
         if (local_var is None) and (call_var is None) and any_scope:
             # We do not have the variable, look to parents.
-            p_var = super(SuiteObject, self).find_variable(stdname,
-                                                           any_scope=True)
-            if p_var is not None:
-                if self.call_list is not None:
-                    self.call_list.add_variable(p_var)
-                    call_var = self.call_list.find_variable(stdname,
-                                                            any_scope=False)
-                else:
-                    # We do not have this variable, pretend it is local
-                    local_var = p_var
-                # End if
-            # End if
+            call_var = super(SuiteObject, self).find_variable(stdname,
+                                                              any_scope=True)
         # End if
         if local_var is not None:
             found_var = local_var
@@ -825,9 +816,6 @@ class Group(SuiteObject):
                                     # sure it has been added to our call list
                                     self.call_list.add_variable(dimvar,
                                                                 exists_ok=True)
-                                    msg = "Adding {} to {} call list"
-                                    logger.debug(msg.format(stdname,
-                                                            self.name))
                                 elif vmatches[index] is not None:
                                     svars = vmatches[index].has_subst(self)
                                     if svars is None:
@@ -852,7 +840,13 @@ class Group(SuiteObject):
                             # End for
                         # End for
                         # Add all the loop substitutions
-                        self._loop_var_matches.extend(vmatches)
+                        for vmatch in vmatches:
+                            if vmatch is not None:
+                                self._loop_var_matches.append(vmatch)
+                                # Add the missing dim
+                                vmatch.add_local(self, __api_local__)
+                            # End if
+                        # End for
                     else:
                         errmsg = ('Unable to convert {}, '
                                   'dimensions do not match{}')
