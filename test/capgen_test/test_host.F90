@@ -1,28 +1,28 @@
-module test_host
+module test_prog
 
   use ccpp_kinds, only: kind_phys
 
   implicit none
   private
 
-  public test_sub
+  public test_host
 
 CONTAINS
 
-  !> \section arg_table_test_sub  Argument Table
-  !! \htmlinclude arg_table_test_sub.html
+  !> \section arg_table_test_host  Argument Table
+  !! \htmlinclude arg_table_test_host.html
   !!
-  subroutine test_sub()
+  subroutine test_host()
 
-    use test_mod,     only: ncols
-    use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_initialize
-    use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_timestep_initial
-    use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_run
-    use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_timestep_final
-    use HelloWorld_ccpp_cap, only: HelloWorld_ccpp_physics_finalize
-    use HelloWorld_ccpp_cap, only: ccpp_physics_suite_list
-    use HelloWorld_ccpp_cap, only: ccpp_physics_suite_part_list
-    use test_mod,     only: init_temp, compare_temp
+    use test_host_mod,      only: ncols
+    use test_host_ccpp_cap, only: test_host_ccpp_physics_initialize
+    use test_host_ccpp_cap, only: test_host_ccpp_physics_timestep_initial
+    use test_host_ccpp_cap, only: test_host_ccpp_physics_run
+    use test_host_ccpp_cap, only: test_host_ccpp_physics_timestep_final
+    use test_host_ccpp_cap, only: test_host_ccpp_physics_finalize
+    use test_host_ccpp_cap, only: ccpp_physics_suite_list
+    use test_host_ccpp_cap, only: ccpp_physics_suite_part_list
+    use test_host_mod,      only: init_temp, compare_temp
 
 
     integer                         :: col_start, col_end
@@ -35,14 +35,14 @@ CONTAINS
     call init_temp()
 
     ! Use the suite information to setup the run
-    call HelloWorld_ccpp_physics_initialize('temp_suite', errmsg, errflg)
+    call test_host_ccpp_physics_initialize('temp_suite', errmsg, errflg)
     if (errflg /= 0) then
       write(6, *) trim(errmsg)
       stop
     end if
 
     ! Initialize the timestep
-    call HelloWorld_ccpp_physics_timestep_initial('temp_suite', errmsg, errflg)
+    call test_host_ccpp_physics_timestep_initial('temp_suite', errmsg, errflg)
     if (errflg /= 0) then
       write(6, *) trim(errmsg)
       stop
@@ -51,7 +51,7 @@ CONTAINS
     do col_start = 1, ncols, 5
       col_end = MIN(col_start + 4, ncols)
 
-      call HelloWorld_ccpp_physics_run('temp_suite', 'physics', col_start, col_end, errmsg, errflg)
+      call test_host_ccpp_physics_run('temp_suite', 'physics', col_start, col_end, errmsg, errflg)
       if (errflg /= 0) then
         write(6, *) trim(errmsg)
         call ccpp_physics_suite_part_list('temp_suite', part_names, errmsg, errflg)
@@ -63,9 +63,9 @@ CONTAINS
       end if
     end do
 
-    call HelloWorld_ccpp_physics_timestep_final('temp_suite', errmsg, errflg)
+    call test_host_ccpp_physics_timestep_final('temp_suite', errmsg, errflg)
 
-    call HelloWorld_ccpp_physics_finalize('temp_suite', errmsg, errflg)
+    call test_host_ccpp_physics_finalize('temp_suite', errmsg, errflg)
     if (errflg /= 0) then
       write(6, *) trim(errmsg)
       write(6,'(a)') 'An error occurred in ccpp_timestep_final, Exiting...'
@@ -78,11 +78,11 @@ CONTAINS
       write(6, *) 'Answers are not correct!'
     end if
 
-  end subroutine test_sub
+  end subroutine test_host
 
-end module test_host
+end module test_prog
 
 program test
-  use test_host, only: test_sub
-  call test_sub()
+  use test_prog, only: test_host
+  call test_host()
 end program test
