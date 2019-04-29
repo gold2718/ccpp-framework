@@ -108,7 +108,7 @@ def write_host_cap(host_model, api, output_dir, logger):
             stmt = "public :: {host_model}_ccpp_physics_{stage}"
             cap.write(stmt.format(host_model=host_model.name, stage=stage), 1)
         # End for
-        api.declare_inspection_interfaces(cap)
+        API.declare_inspection_interfaces(cap)
         cap.write('\ncontains\n', 0)
         for stage in CCPP_STATE_MACH.transitions():
             # Create a dict of local variables for stage

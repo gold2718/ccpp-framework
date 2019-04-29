@@ -444,10 +444,18 @@ class MetadataHeader(ParseSource):
                     # End if
                 except ValueError as ve:
                     # Not an integer, try to find the standard_name
-                    dvar = self.find_variable(item, use_local_name=True)
-                    if dvar is not None:
-                        dname = dvar.get_prop_value('standard_name')
+                    if len(item) == 0:
+                        # Naked colons are okay
+                        dname = ''
                     else:
+                        dvar = self.find_variable(item, use_local_name=True)
+                        if dvar is not None:
+                            dname = dvar.get_prop_value('standard_name')
+                        else:
+                            dname = None
+                        # End if
+                    # End if
+                    if dname is None:
                         errmsg = "Unknown dimension element, {}, in {}{}"
                         std = var.get_prop_value('local_name')
                         ctx = context_string(context)
@@ -460,9 +468,18 @@ class MetadataHeader(ParseSource):
                         # End if
                     # End if
                 # End try
-                std_dim.append(dname)
+                if dname is None:
+                    std_dim = None
+                    break
+                else: # Should be okay because if not, we broke out of loop
+                    std_dim.append(dname)
+                # End if
             # End for
-            std_dims.append(':'.join(std_dim))
+            if std_dim is None:
+                break
+            else: # Should be okay because if not, we broke out of loop
+                std_dims.append(':'.join(std_dim))
+            # End if
         # End for
 
         return std_dims

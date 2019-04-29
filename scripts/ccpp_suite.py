@@ -6,20 +6,19 @@ to implement calls to a set of suites for a given host model."""
 
 # Python library imports
 from __future__ import print_function
-import copy
 import os.path
-import sys
 import re
 import xml.etree.ElementTree as ET
 # CCPP framework imports
 from parse_tools   import ParseContext, ParseSource, context_string
-from parse_tools   import ParseInternalError, ParseSyntaxError, CCPPError
-from parse_tools   import FORTRAN_ID
+from parse_tools   import ParseInternalError, CCPPError
 from parse_tools   import read_xml_file, validate_xml_file, find_schema_version
 from metavar       import Var, VarDDT, VarDictionary, ddt_modules
 from metavar       import ccpp_standard_var, CCPP_CONSTANT_VARS
 from state_machine import StateMachine
 from fortran_tools import FortranWriter
+
+# pylint: disable=too-many-lines
 
 ###############################################################################
 # Module (global) variables
@@ -31,11 +30,7 @@ __run_st__ = r"(?:(?i)run)"
 __ts_init_st__ = r"(?:(?i)timestep_init(?:ial(?:ize)?)?)"
 __ts_final_st__ = r"(?:(?i)timestep_final(?:ize)?)"
 
-dimension_re = re.compile(FORTRAN_ID+r"_((?i)dimension)$")
-
-array_ref_re = re.compile(r"([^(]*)[(]([^)]*)[)]")
-
-obj_loc_re = re.compile(r"(0x[0-9A-Fa-f]+)>")
+OBJ_LOC_RE = re.compile(r"(0x[0-9A-Fa-f]+)>")
 
 # Source for internally generated variables.
 __api_context__ = ParseContext(filename="ccpp_suite.py")
@@ -43,6 +38,7 @@ __api_source__ = ParseSource("CCPP_API", "scheme", __api_context__)
 __api_local__ = ParseSource("CCPP_API", "local", __api_context__)
 
 # Allowed CCPP transitions
+# pylint: disable=bad-whitespace
 CCPP_STATE_MACH = StateMachine((('initialize',       'uninitialized',
                                  'initialized',       __init_st__),
                                 ('timestep_initial', 'initialized',
@@ -53,6 +49,7 @@ CCPP_STATE_MACH = StateMachine((('initialize',       'uninitialized',
                                  'initialized',       __ts_final_st__),
                                 ('finalize',         'initialized',
                                  'uninitialized',     __final_st__)))
+# pylint: enable=bad-whitespace
 
 # Required variables for inclusion in auto-generated schemes
 CCPP_REQUIRED_VARS = [ccpp_standard_var('ccpp_error_flag', 'scheme',
@@ -111,9 +108,9 @@ class CallList(VarDictionary):
             # End if
         # End for
 
-    def call_string(self, dict=None):
+    def call_string(self, cldict=None):
         """Return a dummy argument string for this call list.
-        dict may be another VarDictionary object from which to retrieve
+        <cldict> may be another VarDictionary object from which to retrieve
         local_names (default is to use self).
         """
         arg_str = ""
@@ -121,18 +118,18 @@ class CallList(VarDictionary):
             # Do not include constants
             stdname = var.get_prop_value('standard_name')
             if stdname not in CCPP_CONSTANT_VARS:
-                if dict is not None:
-                    dvar = dict.find_variable(stdname)
+                if cldict is not None:
+                    dvar = cldict.find_variable(stdname)
                     if dvar is None:
                         errmsg = "Variable, '{}', not found in {}"
-                        raise CCPPError(errmsg.format(stdname, dict.name))
+                        raise CCPPError(errmsg.format(stdname, cldict.name))
                     else:
                         lname = dvar.get_prop_value('local_name')
                     # End if
                 else:
                     lname = var.get_prop_value('local_name')
                 # End if
-                if len(arg_str) > 0:
+                if arg_str:
                     arg_str = arg_str + ", "
                 # End if
                 arg_str = arg_str + lname
@@ -157,7 +154,8 @@ class SuiteObject(VarDictionary):
                             'ccpp_constant_one:horizontal_dimension',
                             'horizontal_loop_begin:horizontal_loop_end']
 
-    def __init__(self, name, context, parent, logger, active_call_list=False):
+    def __init__(self, name, context, parent, logger,
+                 active_call_list=False): # pylint: disable=too-many-arguments
         self.__name = name
         self._context = context
         self._logger = logger
@@ -166,6 +164,7 @@ class SuiteObject(VarDictionary):
             self._call_list = CallList(name + '_call_list', logger)
         else:
             self._call_list = None
+        # End if
         self._parts = list()
         # Initialize our dictionary
         super(SuiteObject, self).__init__(self.name, parent_dict=parent)
@@ -273,9 +272,8 @@ class SuiteObject(VarDictionary):
         # End if
         if loop_check:
             return match, new_dims, vmatch_list
-        else:
-            return match, new_dims
         # End if
+        return match, new_dims
 
     def dimension_permute(self, need_dims, have_dims, loop_check=False):
         """Compare dimensions between <need_dims> and <have_dims>.
@@ -290,17 +288,16 @@ class SuiteObject(VarDictionary):
         new_dims = list(need_dims)
         if set(need_dims) == set(have_dims):
             perm = list()
-            for nindex in range(len(need_dims)):
-                perm.append(have_dims.index(need_dims[nindex]))
+            for ndim in need_dims:
+                perm.append(have_dims.index(ndim))
             # End if
         elif loop_check and (len(need_dims) == len(have_dims)):
             perm = [None]*len(need_dims)
-            for nindex in range(len(need_dims)):
-                dim = need_dims[nindex]
+            for nindex, dim in enumerate(need_dims):
                 try:
                     hindex = have_dims.index(dim)
                     perm[nindex] = hindex
-                except ValueError as ve:
+                except ValueError:
                     # No match, look for a loop match
                     vmatch = VarDictionary.loop_var_match(dim)
                     if vmatch is None:
@@ -313,9 +310,8 @@ class SuiteObject(VarDictionary):
                             perm[nindex] = hindex
                             new_dims[nindex] = ldim
                             vmatch_list[nindex] = vmatch
-                        except ValueError as ve:
-                            for hindex in range(len(have_dims)):
-                                hdim = have_dims[index]
+                        except ValueError:
+                            for hindex, hdim in enumerate(have_dims):
                                 pdim = self.horiz_dim_match(ldim, hdim, vmatch)
                                 if pdim is not None:
                                     perm[nindex] = hindex
@@ -335,9 +331,8 @@ class SuiteObject(VarDictionary):
         # End if
         if loop_check:
             return perm, new_dims, vmatch_list
-        else:
-            return perm, new_dims
         # End if
+        return perm, new_dims
 
     def match_dimensions(self, need_dims, have_dims):
         """Attempt to find match for all the dimensions in need_dims.
@@ -354,7 +349,7 @@ class SuiteObject(VarDictionary):
         # End if
         return match, perm, vmatch_list, new_dims
 
-    def find_variable(self, var, any_scope=True, clone=False):
+    def find_variable(self, standard_name, any_scope=True, clone=False):
         """Find a matching variable to <var>, create a local clone (if
         <clone> is True), or return None.
         First search the SuiteObject's internal dictionary, then its
@@ -362,11 +357,10 @@ class SuiteObject(VarDictionary):
         <var> can be a Var object or a standard_name string.
 
         """
-        if isinstance(var, str):
-            stdname = var
-            var = None
+        if isinstance(standard_name, Var):
+            stdname = standard_name.get_prop_value('standard_name')
         else:
-            stdname = var.get_prop_value('standard_name')
+            stdname = standard_name
         # End if
         # First, search our local dictionary
         local_var = super(SuiteObject, self).find_variable(stdname,
@@ -429,41 +423,38 @@ class SuiteObject(VarDictionary):
 
     @property
     def call_list(self):
+        "Return the SuiteObject's call_list"
         return self._call_list
 
     @property
     def parts(self):
+        "Return the component parts of this SuiteObject"
         return self._parts
 
     def __repr__(self):
         'Create a unique readable string for this Object'
-        repr = super(SuiteObject, self).__repr__()
-        olmatch = obj_loc_re.search(repr)
+        so_repr = super(SuiteObject, self).__repr__()
+        olmatch = OBJ_LOC_RE.search(so_repr)
         if olmatch is not None:
             loc = ' at {}'.format(olmatch.group(1))
         else:
             loc = ""
         # End if
-        if self._subroutine_name is None:
-            substr = ''
-        else:
-            substr = ': {}'.format(self._subroutine_name)
-        # End if
         return '<{} {}{}>'.format(self.__class__.__name__, self.name, loc)
 
     def __format__(self, spec):
         """Return a string representing the SuiteObject, including its children.
-        <sep> is used between subitems.
+        <spec> is used between subitems.
         <ind_level> is the indent level for multi-line output.
         """
-        if len(spec) > 0:
+        if spec:
             sep = spec[0]
         else:
             sep = '\n'
         # End if
         try:
             ind_level = int(spec[1:])
-        except (ValueError, IndexError) as ve:
+        except (ValueError, IndexError):
             ind_level = 0
         # End try
         if sep == '\n':
@@ -484,7 +475,7 @@ class SuiteObject(VarDictionary):
         for part in self.parts:
             subout = substr.format(o=subout, s=sep, p=part)
         # End for
-        if len(subout) > 0:
+        if subout:
             output = "{}{}{}{}</{}>".format(output, subout, sep,
                                             indent*ind_level,
                                             self.__class__.__name__)
@@ -504,10 +495,14 @@ class Scheme(SuiteObject):
         self._context = context
         self._version = scheme_xml.get('version', None)
         self._lib = scheme_xml.get('lib', None)
+        self._has_vertical_dimension = False
         super(Scheme, self).__init__(name, context, parent,
                                      logger, active_call_list=True)
 
     def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+        # Unused arguments are for consistent analyze interface
+        # pylint: disable=unused-argument
+        "Analyze the scheme's interface to prepare for writing"
         self._group = group
         my_header = None
         if self.name in scheme_library:
@@ -532,17 +527,30 @@ class Scheme(SuiteObject):
                                                self._subroutine_name)
         scheme_mods.add(scheme_use)
         for var in my_header.variable_list():
+            cdims = var.get_dimensions()
+            if not self.has_vertical_dim:
+                self._has_vertical_dimension = var.has_vertical_dimension()
+            # End if
             self.call_list.add_variable(var)
         # End for
         return scheme_mods
 
     def write(self, outfile, logger, indent):
-        my_args = self.call_list.call_string(dict=self)
-        outfile.write('call {}({})'.format(self._subroutine_name, my_args), indent)
+        my_args = self.call_list.call_string(cldict=self)
+        stmt = 'call {}({})'
+        outfile.write(stmt.format(self._subroutine_name, my_args), indent)
 
     def schemes(self):
         'Return self as a list for consistency with subcycle'
         return [self]
+
+    @property
+    def has_vertical_dim(self):
+        """Return True if at least one of this Scheme's variables has
+        a vertical dimension (vertical_layer_dimension or
+        vertical_level_dimension)
+        """
+        return self._has_vertical_dimension
 
     def __str__(self):
         'Create a readable string for this Scheme'
@@ -560,7 +568,7 @@ class Subcycle(SuiteObject):
         try:
             loop_int = int(self.loop)
             self._loop_var_int = True
-        except ValueError as ve:
+        except ValueError:
             self._loop_var_int = False
             lvar = parent.find_variable(self.loop, any_scope=True)
             if lvar is None:
@@ -568,13 +576,14 @@ class Subcycle(SuiteObject):
                 raise CCPPError(emsg.format(name, self.loop, self.loop))
             # End if
         # End try
-        for scheme in sub_xml:
-            new_item = new_suite_item(item, context)
+        for item in sub_xml:
+            new_item = new_suite_object(item, context, parent, logger)
             self.add_part(new_item)
         # End for
         super(Subcycle, self).__init__(name, context, parent, logger)
 
     def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+        "Analyze the Subcycle's interface to prepare for writing"
         if self.name is None:
             self.name = "subcycle_index{}".format(level)
         # End if
@@ -586,7 +595,8 @@ class Subcycle(SuiteObject):
         # Handle all the suite objects inside of this subcycle
         scheme_mods = set()
         for item in self.parts:
-            smods = item.analyze(phase, group, scheme_library, suite_vars, level+1, logger)
+            smods = item.analyze(phase, group, scheme_library,
+                                 suite_vars, level+1, logger)
             for smod in smods:
                 scheme_mods.add(smod)
             # End for
@@ -615,13 +625,16 @@ class TimeSplit(SuiteObject):
     """
 
     def __init__(self, sub_xml, context, parent, logger):
-        for scheme in sub_xml:
-            new_item = new_suite_item(item, context)
+        for part in sub_xml:
+            new_item = new_suite_object(part, context, parent, logger)
             self.add_part(new_item)
         # End for
         super(TimeSplit, self).__init__('TimeSplit', context, parent, logger)
 
     def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+        # Unused arguments are for consistent analyze interface
+        # pylint: disable=unused-argument
+        "Analyze the TimeSplit's interface to prepare for writing"
         # Handle all the suite objects inside of this group
         scheme_mods = set()
         for item in self.parts:
@@ -648,9 +661,14 @@ class ProcessSplit(SuiteObject):
     """
 
     def __init__(self, sub_xml, context, parent, logger):
+        super(ProcessSplit, self).__init__('ProcessSplit', context,
+                                           parent, logger)
         raise CCPPError('ProcessSplit not yet implemented')
 
     def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+        # Unused arguments are for consistent analyze interface
+        # pylint: disable=unused-argument
+        "Analyze the ProcessSplit's interface to prepare for writing"
         # Handle all the suite objects inside of this group
         raise CCPPError('ProcessSplit not yet implemented')
 
@@ -695,8 +713,7 @@ class Group(SuiteObject):
                                     logger, active_call_list=True)
         # Add the items but first make sure we know the process tpye for
         # the group (e.g., TimeSplit or ProcessSplit).
-        if (len(group_xml) == 0) or (group_xml[0].tag not in
-                                     Group.__process_types__):
+        if (not group_xml) or (group_xml[0].tag not in Group.__process_types__):
             # Default is TimeSplit
             tsxml = ET.fromstring(Group.__process_xml__['timesplit'])
             ts = new_suite_object(tsxml, context, parent, logger)
@@ -740,9 +757,8 @@ class Group(SuiteObject):
                                                         transition=self.phase)
         if tid is not None:
             return self, fid
-        else:
-            return None, None
         # End if
+        return None, None
 
     def move_to_call_list(self, standard_name):
         '''Move a variable from the group internal dictionary to the call list.
@@ -759,6 +775,7 @@ class Group(SuiteObject):
         # End if
 
     def analyze(self, phase, suite_vars, scheme_library, logger):
+        "Analyze the Group's interface to prepare for writing"
         parent = self.parent
         self._phase = phase
         for item in self.parts:
@@ -781,6 +798,7 @@ class Group(SuiteObject):
             # vector dimensions
             var_list = scheme.call_list.variable_list()
             var_list.sort(key=lambda x: len(x.get_dimensions()))
+            has_vdim = scheme.has_vertical_dim
             for cvar in var_list:
                 cstdname = cvar.get_prop_value('standard_name')
                 cdims = cvar.get_dimensions()
@@ -793,17 +811,11 @@ class Group(SuiteObject):
                 # Do we already have this variable?
                 local_var = self.find_variable(cstdname, any_scope=False)
                 if local_var is None:
-                    host_var = self.find_variable(cstdname, any_scope=True)
-                else:
-                    host_var = None
-                # End if
+                    local_var = self.find_variable(cstdname, any_scope=True)
                 if local_var is not None:
                     found_var = True
-                    # We already have the variable, assume it has been checked
-                elif host_var is not None:
-                    found_var = True
                     # Check dimensions
-                    host_dims = host_var.get_dimensions()
+                    host_dims = local_var.get_dimensions()
                     args = self.match_dimensions(cdims, host_dims)
                     match, perm, vmatches, new_dims = args
                     if match:
@@ -816,7 +828,7 @@ class Group(SuiteObject):
                             self.call_list.add_variable(clone, exists_ok=True)
                         # End if
                         # Do we have a source for all the dimensions?
-                        for index in range(len(new_dims)):
+                        for index, dim in enumerate(new_dims):
                             dim = new_dims[index]
                             for stdname in dim.split(':'):
                                 dimvar = self.find_variable(stdname)
@@ -850,7 +862,17 @@ class Group(SuiteObject):
                         # End for
                         # Add all the loop substitutions
                         for dim_vmatch in vmatches:
-                            if dim_vmatch is not None:
+                            need_dim_vmatch = dim_vmatch is not None
+                            # Make sure we do not already have this substitution
+                            if need_dim_vmatch:
+                                for dvmatch in self._loop_var_matches:
+                                    if dvmatch.equiv(dim_vmatch):
+                                        need_dim_vmatch = False
+                                        break
+                                    # End if
+                                # End for
+                            # End if
+                            if need_dim_vmatch:
                                 self._loop_var_matches.append(dim_vmatch)
                                 # Add the missing dim
                                 dim_vmatch.add_local(self, __api_local__)
@@ -904,7 +926,8 @@ class Group(SuiteObject):
 
     def write(self, outfile, logger, host_arglist, indent,
               suite_vars=None, allocate=False, deallocate=False):
-        local_subs = ''
+        # Unused arguments are for consistent write interface
+        # pylint: disable=unused-argument
         # group type for (de)allocation
         if 'timestep' in self._phase:
             group_type = 'timestep'
@@ -936,20 +959,20 @@ class Group(SuiteObject):
                         pass # We already are going to declare this variable
                     else:
                         errmsg = "Duplicate suite part variable, {}"
-                        raise ParseInternalError(errmsg.format(lvar))
+                        raise ParseInternalError(errmsg.format(lname))
                     # End if
                 else:
                     subpart_var_set[lname] = (var, item)
                 # End if
             # End for
         # End for
-        if len(subpart_var_set) > 0:
+        if subpart_var_set:
             outfile.write('\n! Local Variables', indent+1)
         # Write out local variables
         for key in subpart_var_set:
             var = subpart_var_set[key][0]
-            dict = subpart_var_set[key][1]
-            var.write_def(outfile, indent+1, dict)
+            spdict = subpart_var_set[key][1]
+            var.write_def(outfile, indent+1, spdict)
         # End for
         outfile.write('', 0)
         # Check state machine
@@ -968,7 +991,7 @@ class Group(SuiteObject):
             raise CCPPError(errmsg.format(self.name))
         # End if
         for stmt in self._phase_check_stmts:
-            text = stmt[0].format(errflg=errflg , errmsg=errmsg,
+            text = stmt[0].format(errflg=errflg, errmsg=errmsg,
                                   funcname=self.name)
             outfile.write(text, indent + stmt[1])
         # End for
@@ -1027,11 +1050,14 @@ class Group(SuiteObject):
 ###############################################################################
 
 class Suite(VarDictionary):
+    """Class to hold, process, and output a CAP for an entire CCPP suite.
+    The Suite includes initialization and finalization Group objects as
+    well as a Group for every suite part."""
 
-    ___state_machine_initial_state__ = 'uninitialized'
-    __state_machine_var_name__     = 'ccpp_suite_state'
+    __state_machine_initial_state__ = 'uninitialized'
+    __state_machine_var_name__ = 'ccpp_suite_state'
 
-    __header__ ='''
+    __header__ = '''
 !>
 !! @brief Auto-generated cap module for the CCPP suite
 !!
@@ -1039,7 +1065,7 @@ class Suite(VarDictionary):
 module {module}
 '''
 
-    __state_machine_init__ ='''
+    __state_machine_init__ = '''
 character(len=16) :: {css_var_name} = '{state}'
 '''
 
@@ -1068,6 +1094,9 @@ end module {module}
         self._timestep_init_group = None
         self._timestep_final_group = None
         self._context = None
+        self._host_arg_list_full = None
+        self._host_arg_list_noloop = None
+        self._module = None
         # Full phases/groups are special groups where the entire state is passed
         self._full_groups = {}
         self._full_phases = {}
@@ -1115,10 +1144,12 @@ end module {module}
 
     @classmethod
     def set_suite_state(cls, phase):
+        "Return the code string to set the current suite state to <phase>"
         final = CCPP_STATE_MACH.final_state(phase)
         return ("ccpp_suite_state = '{}'".format(final), 1)
 
     def new_group(self, group_string, transition):
+        """Create a new Group object from the a XML description"""
         gxml = ET.fromstring(group_string)
         group = Group(gxml, transition, self, self._context, self._logger)
         for svar in CCPP_REQUIRED_VARS:
@@ -1132,7 +1163,7 @@ end module {module}
         '''Parse the suite definition file.'''
         success = True
 
-        tree, suite_xml = read_xml_file(self._sdf_name, self._logger)
+        _, suite_xml = read_xml_file(self._sdf_name, self._logger)
         # We do not have line number information for the XML file
         self._context = ParseContext(filename=self._sdf_name)
         # Validate the XML file
@@ -1164,16 +1195,20 @@ end module {module}
             # Suite item is a group or a suite-wide init or final method
             if item_type == 'group':
                 # Parse a group
-                self._groups.append(Group(suite_item, 'run', self, self._context, self._logger))
+                self._groups.append(Group(suite_item, 'run', self,
+                                          self._context, self._logger))
             else:
                 match_trans = CCPP_STATE_MACH.function_match(item_type)
                 if match_trans is None:
                     raise CCPPError("Unknown CCPP suite component tag type, '{}'".format(item_type))
                 elif match_trans in self._full_phases:
                     # Parse a suite-wide initialization scheme
-                    self._full_phases[match_trans].add_item(Scheme(suite_item, self._context))
+                    scheme = Scheme(suite_item, self._context,
+                                    self, self._logger)
+                    self._full_phases[match_trans].add_item(scheme)
                 else:
-                    raise ParseInternalError("Unhandled CCPP suite component tag type, '{}'".format(match_trans))
+                    emsg = "Unhandled CCPP suite component tag type, '{}'"
+                    raise ParseInternalError(emsg.format(match_trans))
                 # End if
         # End for
         self._groups.append(self._timestep_final_group)
@@ -1206,7 +1241,9 @@ end module {module}
                 # Promote variable to suite level
                 var = group.find_variable(standard_name, any_scope=False)
                 if var is None:
-                    raise CCPPError("Group, {}, claimed it had created {} but variable was not found".format(group.name, standard_name))
+                    emsg = ("Group, {}, claimed it had created {} "
+                            "but variable was not found")
+                    raise CCPPError(emsg.format(group.name, standard_name))
                 else:
                     # Remove this entry to avoid looping back here
                     del self._gvar_stdnames[standard_name]
@@ -1290,7 +1327,6 @@ end module {module}
         ('foo', 'timestep_finalize', 'timestep_final')
         '''
         # Collect all relevant schemes
-        mgroups = self._full_groups.values()
         # For run groups, find associated init and final methods
         for group in self.groups:
             if group.name not in self._full_groups:
@@ -1326,7 +1362,9 @@ end module {module}
             else:
                 phase = 'run'
             # End if
-            logger.debug("Group {}, schemes = {}".format(item.name, [x.name for x in item.schemes()]))
+            lmsg = "Group {}, schemes = {}"
+            logger.debug(lmsg.format(item.name,
+                                     [x.name for x in item.schemes()]))
             item.analyze(phase, self, scheme_library, logger)
             # Look for group variables that need to be promoted to the suite
             # We need to promote any variable used later to the suite, however,
@@ -1383,7 +1421,6 @@ end module {module}
         filename = '{module_name}.F90'.format(module_name=self._module)
         logger.debug('Writing CCPP suite file, {}'.format(filename))
         # Init
-        module_use = None
         output_file_name = os.path.join(output_dir, filename)
         with FortranWriter(output_file_name, 'w') as outfile:
             # Write suite header
@@ -1392,7 +1429,11 @@ end module {module}
             # Write module 'use' statements here
             outfile.write('use {}'.format(KINDS_MODULE), 1)
             outfile.write('implicit none\nprivate\n\n! Suite interfaces', 1)
-            outfile.write(Suite.__state_machine_init__.format(css_var_name=Suite.__state_machine_var_name__, state=Suite.___state_machine_initial_state__), 1)
+            line = Suite.__state_machine_init__
+            var_name = Suite.__state_machine_var_name__
+            var_state = Suite.__state_machine_initial_state__
+            outfile.write(line.format(css_var_name=var_name,
+                                      state=var_state), 1)
             for group in self._groups:
                 outfile.write('public :: {}'.format(group.name), 1)
             # End for
@@ -1419,9 +1460,11 @@ end module {module}
 ###############################################################################
 
 class API(VarDictionary):
+    """Class representing the API for the CCPP framework.
+    The API class organizes the suites for which CAPS will be generated"""
 
     __suite_fname__ = 'ccpp_physics_suite_list'
-    __part_fname__  = 'ccpp_physics_suite_part_list'
+    __part_fname__ = 'ccpp_physics_suite_part_list'
 
     __header__ = '''
 !>
@@ -1463,9 +1506,9 @@ end module {module}
                           'dimensions':'()'}, __api_source__)
 
     def __init__(self, sdfs, host_model, scheme_headers, logger):
-        self._module        = 'ccpp_physics_api'
-        self._host          = host_model
-        self._suites        = list()
+        self._module = 'ccpp_physics_api'
+        self._host = host_model
+        self._suites = list()
         super(API, self).__init__(self.module, parent_dict=host_model, logger=logger)
         self._host_arg_list_full = host_model.argument_list()
         self._host_arg_list_noloop = host_model.argument_list(loop_vars=False)
@@ -1478,13 +1521,14 @@ end module {module}
             if header.type != 'scheme':
                 continue
             # End if
-            func_id, ftrans, match_trans = CCPP_STATE_MACH.function_match(header.title)
+            func_id, _, match_trans = CCPP_STATE_MACH.function_match(header.title)
             if func_id not in scheme_library:
                 scheme_library[func_id] = {}
             # End if
             func_entry = scheme_library[func_id]
             if match_trans in func_entry:
-                raise CCPPError("Duplicate scheme entry, {}".format(header.title))
+                errmsg = "Duplicate scheme entry, {}"
+                raise CCPPError(errmsg.format(header.title))
             else:
                 func_entry[match_trans] = header
             # End if
@@ -1533,14 +1577,17 @@ end module {module}
 
     @property
     def suite_name_var(self):
+        "Return the name of the variable specifying the suite to run"
         return self.__class__.__suite_name__
 
     @property
     def suite_part_var(self):
+        "Return the name of the variable specifying the suite group to run"
         return self.__class__.__suite_part__
 
     @property
     def suites(self):
+        "Return the list of this API's suites"
         return self._suites
 
     @classmethod
@@ -1558,12 +1605,10 @@ end module {module}
 
     def write(self, output_dir, logger):
         """Write CCPP API module"""
-        if len(self.suites) == 0:
+        if not self.suites:
             raise CCPPError("No suite specified for generating API")
         # End if
-        filename = os.path.join(output_dir, self.module + '.F90')
         api_filenames = list()
-        module_use = 'use {}'.format(KINDS_MODULE)
         # Write out the suite files
         for suite in self.suites:
             out_file_name = suite.write(output_dir, logger)
@@ -1571,7 +1616,8 @@ end module {module}
         # End for
         return api_filenames
 
-    def declare_inspection_interfaces(self, ofile):
+    @classmethod
+    def declare_inspection_interfaces(cls, ofile):
         "Declare the API interfaces for the suite inquiry functions"
         ofile.write("public :: {}".format(API.__suite_fname__), 1)
         ofile.write("public :: {}".format(API.__part_fname__), 1)
@@ -1631,21 +1677,22 @@ end module {module}
 
 ###############################################################################
 if __name__ == "__main__":
+    # pylint: disable=ungrouped-imports
     from parse_tools import init_log, set_log_to_null
-    logger = init_log('ccpp_suite')
-    set_log_to_null(logger)
+    LOGGING = init_log('ccpp_suite')
+    set_log_to_null(LOGGING)
     try:
         # First, run doctest
         import doctest
         doctest.testmod()
-        frame_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        cpf = os.path.dirname(frame_root)
-        kessler = os.path.join(cpf, 'cam_driver', 'suites',
-                               'suite_cam_kessler_test_simple1.xml')
-        if os.path.exists(kessler):
-            foo = Suite(kessler, VarDictionary('foo'), logger)
+        FRAME_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        CPF = os.path.dirname(FRAME_ROOT)
+        KESSLER = os.path.join(CPF, 'cam_driver', 'suites',
+                               'suite_cam_KESSLER_test_simple1.xml')
+        if os.path.exists(KESSLER):
+            _ = Suite(KESSLER, VarDictionary('Kessler'), LOGGING)
         else:
-            raise CCPPError("Cannot find test file, '{}'".format(kessler))
-    except CCPPError as sa:
-        print("{}".format(sa))
-# No else
+            raise CCPPError("Cannot find test file, '{}'".format(KESSLER))
+    except CCPPError as suite_error:
+        print("{}".format(suite_error))
+# End if (no else)

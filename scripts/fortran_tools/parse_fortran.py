@@ -646,9 +646,11 @@ def parse_fortran_var_decl(line, source, logger=None):
                 if (begin < 0) or (end < 0):
                     if logger is not None:
                         ctx = context_string(context)
-                        logger.warning("WARNING: Invalid variable declaration, {}{}".format(var, ctx))
+                        errmsg = "WARNING: Invalid variable declaration, {}{}"
+                        logger.warning(errmsg.format(var, ctx))
                     else:
-                        raise ParseSyntaxError('variable declaration', token=var, context=context)
+                        raise ParseSyntaxError('variable declaration',
+                                               token=var, context=context)
                     # End if
                 else:
                     dimspec = var[begin:end+1]

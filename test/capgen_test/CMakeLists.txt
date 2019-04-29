@@ -110,19 +110,23 @@ endif()
 
 # Create metadata and source file lists
 FOREACH(FILE ${SCHEME_FILES})
-  LIST(APPEND SCHEME_SOURCE   "${FILE}.F90")
+  # target_sources prefers absolute pathnames
+  get_filename_component(ABS_PATH "${FILE}.F90" ABSOLUTE)
+  LIST(APPEND SCHEME_SOURCE   "${ABS_PATH}")
 ENDFOREACH(FILE)
+target_sources(${HOST} PUBLIC ${SCHEME_SOURCE})
 string(REPLACE ";" ".meta," SCHEME_METADATA "${SCHEME_FILES}")
 set(SCHEME_METADATA "${SCHEME_METADATA}.meta")
-target_sources(${HOST} PUBLIC ${SCHEME_SOURCE})
 
 FOREACH(FILE ${HOST_FILES})
   LIST(APPEND HOST_METADATA "${FILE}.meta")
-  LIST(APPEND HOST_SOURCE   "${FILE}.F90")
+  # target_sources prefers absolute pathnames
+  get_filename_component(ABS_PATH "${FILE}.F90" ABSOLUTE)
+  LIST(APPEND HOST_SOURCE   "${ABS_PATH}")
 ENDFOREACH(FILE)
+target_sources(${HOST} PUBLIC ${HOST_SOURCE})
 string(REPLACE ";" ".meta," HOST_METADATA "${HOST_FILES}")
 set(HOST_METADATA "${HOST_METADATA}.meta,${HOST}.meta")
-target_sources(${HOST} PUBLIC ${HOST_SOURCE})
 
 # Run ccpp_capgen
 set(CAPGEN_CMD "${CCPP_FRAMEWORK}/ccpp_capgen.py")

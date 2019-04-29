@@ -20,6 +20,11 @@ from parse_tools import ParseInternalError, ParseSyntaxError, CCPPError
 real_subst_re = re.compile(r"(.*\d)p(\d.*)")
 list_re = re.compile(r"[(]([^)]*)[)]\s*$")
 
+###############################################################################
+# Supported vertical dimensions
+CCPP_VERTICAL_DIMENSIONS = ['ccpp_constant_one:vertical_layer_dimension',
+                            'ccpp_constant_one:vertical_level_dimension']
+
 ########################################################################
 def standard_name_to_long_name(prop_dict, context=None):
 ########################################################################
@@ -705,6 +710,17 @@ class Var(object):
         dims = self.get_dimensions()
         return len(dims)
 
+    def has_vertical_dimension(self):
+        "Return True iff <self> has a vertical dimension"
+        has_vdim = False
+        for vdimname in CCPP_VERTICAL_DIMENSIONS:
+            if vdimname in cdims:
+                has_vdim = True
+                break
+            # End if
+        # End for
+        return has_vdim
+
     def write_def(self, outfile, indent, dict, allocatable=False):
         '''Write the definition line for the variable.'''
         stdname = self.get_prop_value('standard_name')
@@ -1024,6 +1040,22 @@ class VarLoopSubst(object):
                      'type':'integer', 'units':'count', 'dimensions':'()'}
         var = Var(prop_dict, source)
         dict.add_variable(var, exists_ok=True, gen_unique=True)
+
+    def equiv(self, vmatch):
+        """Return True iff <vmatch> is equivalent to <self>.
+        Equivalence is determined by matching the missing standard name
+        and the required standard names"""
+        is_equiv = vmatch.missing_stdname == self.missing_stdname
+        if is_equiv:
+            for dim1, dim2 in zip(vmatch.required_stdnames,
+                                  self.required_stdnames):
+                if dim1 != dim2:
+                    is_equiv = False
+                    break
+                # End if
+            # End for
+        # End if
+        return is_equiv
 
     def write_action(self, dict, dict2=None, any_scope=False):
         """Return a string setting the correct values for our

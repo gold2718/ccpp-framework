@@ -209,6 +209,7 @@ def create_kinds_file(kind_phys, output_dir, logger):
 def var_comp(prop_name, mvar, fvar, title, logger, case_sensitive=False):
 ###############################################################################
     "Compare a property between two variables"
+    num_errors = 0
     mprop = mvar.get_prop_value(prop_name)
     fprop = fvar.get_prop_value(prop_name)
     if not case_sensitive:
@@ -220,13 +221,15 @@ def var_comp(prop_name, mvar, fvar, title, logger, case_sensitive=False):
         errmsg = '{} mismatch ({} != {}) in {}{}'
         ctx = context_string(mvar.context)
         logger.error(errmsg.format(prop_name, mprop, fprop, title, ctx))
+        num_errors += 1
     # End if
-    return comp
+    return comp, num_errors
 
 ###############################################################################
 def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
 ###############################################################################
     "Compare the dimensions attribute of two variables"
+    num_errors = 0
     mdims = mvar.get_dimensions()
     fdims = mheader.convert_dims_to_standard_names(fvar, logger=logger)
     comp = len(mdims) == len(fdims)
@@ -235,9 +238,9 @@ def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
         stdname = mvar.get_prop_value('standard_name')
         ctx = context_string(mvar.context)
         logger.error(errmsg.format(title, stdname, len(mdims), len(fdims), ctx))
+        num_errors += 1
     # End if
     if comp:
-        # First, convert fdims to use standard names
         # Now, compare the dims
         for dim_ind in range(len(mdims)):
             mdim = mdims[dim_ind]
@@ -246,17 +249,19 @@ def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
                 mdim = mdim.lower()
                 fdim = fdim.lower()
             # End if
-            comp = mdim == fdim
+            # Naked colon is okay for Fortran side
+            comp = (fdim == ':') or (mdim == fdim)
             if not comp:
                 errmsg = 'Error: dim {} mismatch ({} != {}) in {}/{}{}'
                 stdname = mvar.get_prop_value('standard_name')
                 ctx = context_string(mvar.context)
                 logger.error(errmsg.format(dim_ind+1, mdim, fdims[dim_ind],
                                            title, stdname, ctx))
+                num_errors += 1
             # End if
         # End for
     # End if
-    return comp
+    return comp, num_errors
 
 ###############################################################################
 def check_fortran_against_metadata(meta_headers, fort_headers,

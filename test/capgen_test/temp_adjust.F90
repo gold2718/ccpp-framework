@@ -17,30 +17,22 @@ CONTAINS
 !> \section arg_table_temp_adjust_run  Argument Table
 !! \htmlinclude arg_table_temp_adjust_run.html
 !!
-  SUBROUTINE temp_adjust_run(ncol, lev, temp_layer,    &
-    timestep, errmsg, errflg)
-!----------------------------------------------------------------
-   IMPLICIT NONE
-!----------------------------------------------------------------
+  SUBROUTINE temp_adjust_run(ncol, temp_layer, timestep, errmsg, errflg)
 
-   integer,            intent(in)    :: ncol, lev
-   REAL(kind_phys),    intent(inout) :: temp_layer(ncol, lev)
+   integer,            intent(in)    :: ncol
+   REAL(kind_phys),    intent(inout) :: temp_layer(:)
    real(kind_phys),    intent(in)    :: timestep
    character(len=512), intent(out)   :: errmsg
    integer,            intent(out)   :: errflg
 !----------------------------------------------------------------
 
    integer :: col_index
-   integer :: lev_index
 
     errmsg = ''
     errflg = 0
 
     do col_index = 1, ncol
-       do lev_index = 1, lev
-          temp_layer(col_index, lev_index) = temp_layer(col_index, lev_index) &
-               + 1.0_kind_phys
-       end do
+      temp_layer(col_index) = temp_layer(col_index) + 1.0_kind_phys
     end do
 
   END SUBROUTINE temp_adjust_run

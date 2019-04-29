@@ -644,7 +644,13 @@ def parse_scheme_metadata(statements, pobj, spec_name, table_name, logger):
                     for var in vars:
                         lname = var.get_prop_value('local_name').lower()
                         if lname in vdict:
-                            vdict[lname] = var
+                            if vdict[lname] is not None:
+                                emsg = "Error: duplicate dummy argument, {}"
+                                raise ParseSyntaxError(emsg.format(lname),
+                                                       context=pobj)
+                            else:
+                                vdict[lname] = var
+                            # End if
                         else:
                             raise ParseSyntaxError('dummy argument',
                                                    token=lname, context=pobj)
