@@ -21,9 +21,10 @@ real_subst_re = re.compile(r"(.*\d)p(\d.*)")
 list_re = re.compile(r"[(]([^)]*)[)]\s*$")
 
 ###############################################################################
-# Supported vertical dimensions
+# Supported vertical dimensions (should be defined in CCPP_CONSTANT_VARS)
 CCPP_VERTICAL_DIMENSIONS = ['ccpp_constant_one:vertical_layer_dimension',
-                            'ccpp_constant_one:vertical_level_dimension']
+                            'ccpp_constant_one:vertical_level_dimension',
+                            'vertical_layer_index', 'vertical_level_index']
 
 ########################################################################
 def standard_name_to_long_name(prop_dict, context=None):
@@ -712,14 +713,14 @@ class Var(object):
 
     def has_vertical_dimension(self):
         "Return True iff <self> has a vertical dimension"
-        has_vdim = False
+        var_vdim = None
         for vdimname in CCPP_VERTICAL_DIMENSIONS:
             if vdimname in cdims:
-                has_vdim = True
+                var_vdim = vdimname
                 break
             # End if
         # End for
-        return has_vdim
+        return var_vdim
 
     def write_def(self, outfile, indent, dict, allocatable=False):
         '''Write the definition line for the variable.'''
@@ -950,17 +951,33 @@ CCPP_STANDARD_VARS = {
     {'local_name' : 'errmsg', 'standard_name' : 'ccpp_error_message',
      'units' : '1', 'dimensions' : '()', 'type' : 'character',
      'kind' : 'len=512'},
+    'horizontal_dimension' :
+    {'local_name' : 'total_columns',
+     'standard_name' : 'horizontal_dimension', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
     'horizontal_loop_extent' :
     {'local_name' : 'horz_loop_ext',
-     'standard_name' : 'horizontal_loop_extent', 'units' : '1',
+     'standard_name' : 'horizontal_loop_extent', 'units' : 'count',
      'dimensions' : '()', 'type' : 'integer'},
     'horizontal_loop_begin' :
     {'local_name' : 'horz_col_beg',
-     'standard_name' : 'horizontal_loop_begin', 'units' : '1',
+     'standard_name' : 'horizontal_loop_begin', 'units' : 'count',
      'dimensions' : '()', 'type' : 'integer'},
     'horizontal_loop_end' :
     {'local_name' : 'horz_col_end',
-     'standard_name' : 'horizontal_loop_end', 'units' : '1',
+     'standard_name' : 'horizontal_loop_end', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'vertical_layer_dimension' :
+    {'local_name' : 'num_model_layers',
+     'standard_name' : 'vertical_layer_dimension', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'vertical_level_dimension' :
+    {'local_name' : 'num_model_interfaces',
+     'standard_name' : 'vertical_level_dimension', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'vertical_level_index' :
+    {'local_name' : 'layer_index',
+     'standard_name' : 'vertical_level_index', 'units' : 'count',
      'dimensions' : '()', 'type' : 'integer'}
 }
 
@@ -1061,23 +1078,25 @@ class VarLoopSubst(object):
         """Return a string setting the correct values for our
         replacement variable. Variables must be in <dict> or <dict2>"""
         action_dict = {}
-        for stdname in self.required_stdnames:
-            var = dict.find_variable(stdname, any_scope=any_scope)
-            if (var is None) and (dict2 is not None):
-                var = dict2.find_variable(stdname, any_scope=any_scope)
-            # End if
+        if self._set_action:
+            for stdname in self.required_stdnames:
+                var = dict.find_variable(stdname, any_scope=any_scope)
+                if (var is None) and (dict2 is not None):
+                    var = dict2.find_variable(stdname, any_scope=any_scope)
+                # End if
+                if var is None:
+                    errmsg = "Required variable, {}, not found"
+                    raise CCPPError(errmsg.format(stdname))
+                # End if
+                action_dict[stdname] = var.get_prop_value('local_name')
+            # End for
+            var = dict.find_variable(self.missing_stdname)
             if var is None:
                 errmsg = "Required variable, {}, not found"
-                raise CCPPError(errmsg.format(stdname))
+                raise CCPPError(errmsg.format(self.missing_stdname))
             # End if
-            action_dict[stdname] = var.get_prop_value('local_name')
-        # End for
-        var = dict.find_variable(self.missing_stdname)
-        if var is None:
-            errmsg = "Required variable, {}, not found"
-            raise CCPPError(errmsg.format(self.missing_stdname))
+            action_dict[self.missing_stdname] = var.get_prop_value('local_name')
         # End if
-        action_dict[self.missing_stdname] = var.get_prop_value('local_name')
         return self._set_action.format(**action_dict)
 
     @property
@@ -1089,19 +1108,24 @@ class VarLoopSubst(object):
         return self._missing_stdname
 
 # Substitutions where a new variable must be created
-CCPP_VAR_LOOP_SUBSTS = { 'horizontal_loop_extent' :
-                         VarLoopSubst('horizontal_loop_extent',
-                                      ('horizontal_loop_begin',
-                                       'horizontal_loop_end'), 'ncol',
-                                      '{horizontal_loop_extent} = {horizontal_loop_end} - {horizontal_loop_begin} + 1'),
-                         'horizontal_loop_begin' :
-                         VarLoopSubst('horizontal_loop_begin',
-                                      ('ccpp_constant_one',), 'one',
-                                      '{horizontal_loop_begin} = 1'),
-                         'horizontal_loop_end' :
-                         VarLoopSubst('horizontal_loop_end',
-                                      ('horizontal_loop_extent',), 'ncol',
-                                      '{horizontal_loop_end} = {horizontal_loop_extent}')
+CCPP_VAR_LOOP_SUBSTS = {
+    'horizontal_loop_extent' :
+    VarLoopSubst('horizontal_loop_extent',
+                 ('horizontal_loop_begin', 'horizontal_loop_end'), 'ncol',
+                 '{} = {} - {} + 1'.format('{horizontal_loop_extent}',
+                                           '{horizontal_loop_end}',
+                                           '{horizontal_loop_begin}')),
+    'horizontal_loop_begin' :
+    VarLoopSubst('horizontal_loop_begin',
+                 ('ccpp_constant_one',), 'one', '{horizontal_loop_begin} = 1'),
+    'horizontal_loop_end' :
+    VarLoopSubst('horizontal_loop_end',
+                 ('horizontal_loop_extent',), 'ncol',
+                 '{} = {}'.format('{horizontal_loop_end}',
+                                  '{horizontal_loop_extent}')),
+    'vertical_layer_dimension' :
+    VarLoopSubst('vertical_layer_dimension',
+                 ('vertical_layer_index',), 'layer_index', '')
 }
 
 # Substituions for run time dimension control

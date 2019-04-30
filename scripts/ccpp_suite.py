@@ -473,95 +473,68 @@ class SuiteObject(VarDictionary):
                                                gen_unique=gen_unique)
         # End if
 
-    def match_variable(self, var):
+    def match_variable(self, var, vstdname=None, vdims=None):
         """Try to find a source for <var> in this SuiteObject's dictionary
         tree. Several items are returned:
         found_var: True if a match was found
+        vert_dim: The vertical dimension in <var>, or None
+        call_dims: How this variable should be called (or None if no match)
+        missing_vert: Vertical dim in parent but not in <var>
+        horiz_match: a VarLoopSubst if <var>'s horizontal dimension does
+                     not match parent
+        perm: Permutation (XXgoldyXX: Not yet implemented)
         """
-        cstdname = var.get_prop_value('standard_name')
-        cdims = var.get_dimensions()
-        if not cdims:
-            vmatch = VarDictionary.loop_var_match(cstdname)
+        if vstdname is None:
+            vstdname = var.get_prop_value('standard_name')
+        # End if
+        if vdims is None:
+            vdims = var.get_dimensions()
+        # End if
+        if not vdims:
+            vmatch = VarDictionary.loop_var_match(vstdname)
         else:
             vmatch = None
         # End if
+        var_vdim = var.has_vertical_dimension()
         found_var = False
+        missing_vert = None
         # Do we already have this variable?
-        dict_var = self.find_variable(cstdname, any_scope=False)
+        dict_var = self.find_variable(vstdname, any_scope=False)
         if dict_var is None:
-            dict_var = self.find_variable(cstdname, any_scope=True)
+            dict_var = self.find_variable(vstdname, any_scope=True)
         if dict_var is not None:
             found_var = True
             # Check dimensions
             dict_dims = dict_var.get_dimensions()
-            args = self.match_dimensions(cdims, dict_dims)
+            args = self.match_dimensions(vdims, dict_dims)
             match, perm, vmatches, new_dims = args
+            if perm is not None:
+                raise CCPPError("Permuted indices are not yet supported")
+            # End if
             if match:
-                # We have a match, make sure var is in call list
-                if new_dims == cdims:
-                    self.add_call_list_variable(cvar, exists_ok=True)
-                        else:
-                            subst_dict = {'dimensions':new_dims}
-                            clone = cvar.clone(subst_dict)
-                            self.add_call_list_variable(clone, exists_ok=True)
-                        # End if
-                        # Do we have a source for all the dimensions?
-                        for index, dim in enumerate(new_dims):
-                            dim = new_dims[index]
-                            for stdname in dim.split(':'):
-                                dimvar = self.find_variable(stdname)
-                                if dimvar is not None:
-                                    # This is already a local group var, make
-                                    # sure it has been added to our call list
-                                    self.add_call_list_variable(dimvar,
-                                                                exists_ok=True)
-                                elif vmatches[index] is not None:
-                                    svars = vmatches[index].has_subst(self)
-                                    if svars is None:
-                                        found_var = False
-                                    else:
-                                        clist = self.call_list
-                                        for var in svars:
-                                            clist.add_variable(var,
-                                                               exists_ok=True)
-                                        # End for
-                                    # End if
-                                else:
-                                    found_var = False
-                                # End if
-                                if not found_var:
-                                    errmsg = ('Unable to convert {}, {} '
-                                              'not found{}')
-                                    ctx = context_string(cvar.context)
-                                    raise CCPPError(errmsg.format(cstdname,
-                                                                  stdname, ctx))
-                                # End if
-                            # End for
-                        # End for
-                        # Add all the loop substitutions
-                        for dim_vmatch in vmatches:
-                            need_dim_vmatch = dim_vmatch is not None
-                            # Make sure we do not already have this substitution
-                            if need_dim_vmatch:
-                                for dvmatch in self._loop_var_matches:
-                                    if dvmatch.equiv(dim_vmatch):
-                                        need_dim_vmatch = False
-                                        break
-                                    # End if
-                                # End for
-                            # End if
-                            if need_dim_vmatch:
-                                self._loop_var_matches.append(dim_vmatch)
-                                # Add the missing dim
-                                dim_vmatch.add_local(self, __api_local__)
-                            # End if
-                        # End for
+                dim_subst = [x for x in vmatches if x is not None]
+                if vmatch is None:
+                    vmatch = dim_subst
+                else:
+                    if dim_subst:
+                        emsg = 'Error, dimension variable ({}) has dimensions'
+                        raise CCPPError(emsg.format(vstdname))
                     else:
-                        errmsg = ('Unable to convert {}, '
-                                  'dimensions do not match{}')
-                        ctx = context_string(cvar.context)
-                        raise CCPPError(errmsg.format(cstdname, ctx))
+                        vmatch = [vmatch]
                     # End if
+                # End if
+            else:
+                new_dims = None
+                found_var = False
+                dict_vdim = dict_var.has_vertical_dimension()
+                if (dict_vdim is not None) and (var_vdim is None):
+                    missing_vert = dict_vdim
+                elif dict_dim != var_vdim:
+                    emsg = "Vertical dimension mismatch, {} calling {}"
+                    raise CCPPError(emsg.format(dict_dim, var_vdim))
+                # End if
+            # End if
+        return found_var, var_vdim, new_dims, missing_vert, vmatch
 
     def in_process_split(self):
         "Find out if we are in a process-split region"
@@ -696,6 +669,7 @@ class Scheme(SuiteObject):
         self._lib = scheme_xml.get('lib', None)
         self._has_vertical_dimension = False
         self._group = None
+        self._analyzed = False # Make analyze re-entrant
         super(Scheme, self).__init__(name, context, parent,
                                      logger, active_call_list=True)
 
@@ -727,11 +701,30 @@ class Scheme(SuiteObject):
                                                self._subroutine_name)
         scheme_mods.add(scheme_use)
         for var in my_header.variable_list():
-            if not self.has_vertical_dim:
-                self._has_vertical_dimension = var.has_vertical_dimension()
-            # End if
-            self.add_call_list_variable(var)
+            vstdname = var.get_prop_value('standard_name')
+            vdims = var.get_dimensions()
+            args = self.match_variable(var, vstdname, vdims)
+            found, vert_dim, new_dims, missing_vert, vmatches  = args
+            if found:
+                if not self.has_vertical_dim:
+                    self._has_vertical_dimension = vert_dim is not None
+                # End if
+                # We have a match, make sure var is in call list
+                if new_dims == vdims:
+                    self.add_call_list_variable(cvar, exists_ok=True)
+                else:
+                    subst_dict = {'dimensions':new_dims}
+                    clone = var.clone(subst_dict)
+                    self.add_call_list_variable(clone, exists_ok=True)
+                # End if
+            else:
+                if missing_vert is not None:
+                    # This Scheme needs to be in a VerticalLoop
+# XXgoldyXX: v debug only
+                    raise ParseInteralError('Need VerticalLoop for {}'.format(vstdname))
+# XXgoldyXX: ^ debug only
         # End for
+        self._analyzed = True
         return scheme_mods
 
     def write(self, outfile, logger, indent):
@@ -998,7 +991,8 @@ class Group(SuiteObject):
                                     logger, active_call_list=True)
         # Add the items but first make sure we know the process tpye for
         # the group (e.g., TimeSplit or ProcessSplit).
-        if (not group_xml) or (group_xml[0].tag not in Group.__process_types__):
+        if (len(group_xml) == 0) or (group_xml[0].tag not in
+                                     Group.__process_types__):
             # Default is TimeSplit
             tsxml = ET.fromstring(Group.__process_xml__['timesplit'])
             time_split = new_suite_object(tsxml, context, self, logger)
@@ -1102,76 +1096,78 @@ class Group(SuiteObject):
                     local_var = self.find_variable(cstdname, any_scope=True)
                 if local_var is not None:
                     found_var = True
-                    # Check dimensions
-                    host_dims = local_var.get_dimensions()
-                    args = self.match_dimensions(cdims, host_dims)
-                    match, perm, vmatches, new_dims = args
-                    if match:
-                        # We have a match, make sure var is in call list
-                        if new_dims == cdims:
-                            self.add_call_list_variable(cvar, exists_ok=True)
-                        else:
-                            subst_dict = {'dimensions':new_dims}
-                            clone = cvar.clone(subst_dict)
-                            self.add_call_list_variable(clone, exists_ok=True)
-                        # End if
-                        # Do we have a source for all the dimensions?
-                        for index, dim in enumerate(new_dims):
-                            dim = new_dims[index]
-                            for stdname in dim.split(':'):
-                                dimvar = self.find_variable(stdname)
-                                if dimvar is not None:
-                                    # This is already a local group var, make
-                                    # sure it has been added to our call list
-                                    self.add_call_list_variable(dimvar,
-                                                                exists_ok=True)
-                                elif vmatches[index] is not None:
-                                    svars = vmatches[index].has_subst(self)
-                                    if svars is None:
-                                        found_var = False
-                                    else:
-                                        clist = self.call_list
-                                        for var in svars:
-                                            clist.add_variable(var,
-                                                               exists_ok=True)
-                                        # End for
-                                    # End if
-                                else:
-                                    found_var = False
-                                # End if
-                                if not found_var:
-                                    errmsg = ('Unable to convert {}, {} '
-                                              'not found{}')
-                                    ctx = context_string(cvar.context)
-                                    raise CCPPError(errmsg.format(cstdname,
-                                                                  stdname, ctx))
-                                # End if
-                            # End for
-                        # End for
-                        # Add all the loop substitutions
-                        for dim_vmatch in vmatches:
-                            need_dim_vmatch = dim_vmatch is not None
-                            # Make sure we do not already have this substitution
-                            if need_dim_vmatch:
-                                for dvmatch in self._loop_var_matches:
-                                    if dvmatch.equiv(dim_vmatch):
-                                        need_dim_vmatch = False
-                                        break
-                                    # End if
-                                # End for
-                            # End if
-                            if need_dim_vmatch:
-                                self._loop_var_matches.append(dim_vmatch)
-                                # Add the missing dim
-                                dim_vmatch.add_local(self, __api_local__)
-                            # End if
-                        # End for
-                    else:
-                        errmsg = ('Unable to convert {}, '
-                                  'dimensions do not match{}')
-                        ctx = context_string(cvar.context)
-                        raise CCPPError(errmsg.format(cstdname, ctx))
-                    # End if
+# XXgoldyXX: v debug only
+# # Check dimensions
+# host_dims = local_var.get_dimensions()
+# args = self.match_dimensions(cdims, host_dims)
+# match, perm, vmatches, new_dims = args
+# if match:
+#     # We have a match, make sure var is in call list
+#     if new_dims == cdims:
+#         self.add_call_list_variable(cvar, exists_ok=True)
+#     else:
+#         subst_dict = {'dimensions':new_dims}
+#         clone = cvar.clone(subst_dict)
+#         self.add_call_list_variable(clone, exists_ok=True)
+#     # End if
+#     # Do we have a source for all the dimensions?
+#     for index, dim in enumerate(new_dims):
+#         dim = new_dims[index]
+#         for stdname in dim.split(':'):
+#             dimvar = self.find_variable(stdname)
+#             if dimvar is not None:
+#                 # This is already a local group var, make
+#                 # sure it has been added to our call list
+#                 self.add_call_list_variable(dimvar,
+#                                             exists_ok=True)
+#             elif vmatches[index] is not None:
+#                 svars = vmatches[index].has_subst(self)
+#                 if svars is None:
+#                     found_var = False
+#                 else:
+#                     clist = self.call_list
+#                     for var in svars:
+#                         clist.add_variable(var,
+#                                            exists_ok=True)
+#                     # End for
+#                 # End if
+#             else:
+#                 found_var = False
+#             # End if
+#             if not found_var:
+#                 errmsg = ('Unable to convert {}, {} '
+#                           'not found{}')
+#                 ctx = context_string(cvar.context)
+#                 raise CCPPError(errmsg.format(cstdname,
+#                                               stdname, ctx))
+#             # End if
+#         # End for
+#     # End for
+#     # Add all the loop substitutions
+#     for dim_vmatch in vmatches:
+#         need_dim_vmatch = dim_vmatch is not None
+#         # Make sure we do not already have this substitution
+#         if need_dim_vmatch:
+#             for dvmatch in self._loop_var_matches:
+#                 if dvmatch.equiv(dim_vmatch):
+#                     need_dim_vmatch = False
+#                     break
+#                 # End if
+#             # End for
+#         # End if
+#         if need_dim_vmatch:
+#             self._loop_var_matches.append(dim_vmatch)
+#             # Add the missing dim
+#             dim_vmatch.add_local(self, __api_local__)
+#         # End if
+#     # End for
+# else:
+#     errmsg = ('Unable to convert {}, '
+#               'dimensions do not match{}')
+#     ctx = context_string(cvar.context)
+#     raise CCPPError(errmsg.format(cstdname, ctx))
+# # End if
+# XXgoldyXX: ^ debug only
                 elif cvar.get_prop_value('intent') == 'out':
                     self.add_variable(cvar, exists_ok=True)
                 elif vmatch is not None:
@@ -1318,7 +1314,9 @@ class Group(SuiteObject):
         # Write any loop match calculations
         for vmatch in self._loop_var_matches:
             action = vmatch.write_action(self, dict2=self.call_list)
-            outfile.write(action, indent+1)
+            if action:
+                outfile.write(action, indent+1)
+            # End if
         # End for
         # Write the scheme and subcycle calls
         for item in self.parts:
@@ -1633,7 +1631,7 @@ end module {module}
                                     sstr = Suite.__scheme_template__.format(scheme.name)
                                     sxml = ET.fromstring(sstr)
                                     scheme = Scheme(sxml, self._context,
-                                                    pgroup, logger)
+                                                    pgroup, self._logger)
                                     pgroup.add_part(scheme)
                                 # End if (no else needed)
                             # End if
