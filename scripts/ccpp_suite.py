@@ -166,6 +166,8 @@ class SuiteObject(VarDictionary):
             self._call_list = None
         # End if
         self._parts = list()
+        self._needs_vertical = None
+        self._needs_horizontal = None
         # Initialize our dictionary
         super(SuiteObject, self).__init__(self.name, parent_dict=parent)
 
@@ -177,7 +179,50 @@ class SuiteObject(VarDictionary):
 
     def add_part(self, item):
         'Add an object (e.g., Suite, Subcycle) to this SuiteObject'
+        # Does this item need to be in a VerticalLoop?
+        if item.needs_vertical is not None:
+            iparent = item.parent
+            if isinstance(self, VerticalLoop):
+                # It is being added to a VerticalLoop, call it good
+                pass
+            elif isinstance(iparent, VerticalLoop):
+                # Why are we doing this?
+                emsg = ('Trying to add {} {} to {} {} but it is already '
+                        'in VerticalLoop {}')
+                raise ParseInternalError(emsg.format(item.__class__.__name__,
+                                                     item,name,
+                                                     self.__class__.__name__,
+                                                     self.name, iparent.name))
+            else:
+                pitem = iparent.part(-1, error=False)
+                if isinstance(pitem, VerticalLoop):
+                    # Can we attach item to this loop?
+                    if pitem.dimension_name == item.needs_vertical:
+                        pitem.add_part(item)
+                    else:
+                        # Need to add item to a new VerticalLoop
+                        new_vl = VerticalLoop(item.needs_vertical,
+                                              self._context, self,
+                                              self._logger, items=[item])
+                        self.add_part(new_vl)
+                    # End if
+        # End if (no else, just add item)
         self._parts.append(item)
+        item.reset_parent(self)
+
+    def remove_part(self, index):
+        'Remove the part at index'
+        plen = len(self._parts)
+        if ((index >= 0) and (index < plen)) or (abs(index) <= plen):
+            del self._parts[index]
+        else:
+            errmsg = "Invalid index for remove_part, {}, ".format(index)
+            if plen > 0:
+                errmsg += "SuiteObject only has {} parts".format(plen)
+            else:
+                errmsg += "SuiteObject only has no parts"
+            raise ParseInternalError(errmsg, context=self._context)
+        # End if
 
     def schemes(self):
         "Return a flattened list of schemes for this group"
@@ -186,6 +231,33 @@ class SuiteObject(VarDictionary):
             schemes.extend(item.schemes())
         # End for
         return schemes
+
+    def move_part(self, part, source_object, loc=-1):
+        """Operator to move <part> from <source_object> to <self>.
+        If <loc> is -1, <part> is appended to <self>,
+        otherwise, <part> is inserted at <loc>.
+        """
+        if part in source_object:
+            # Sanitize loc
+            try:
+                iloc = int(loc)
+            except ValueError:
+                errmsg = "Invalid loc value for move_part, {}".format(loc)
+                raise ParseInternalError(errmsg, context=self._context)
+            # End try
+            if iloc == -1:
+                self._parts.append(part)
+            else:
+                self._parts.insert(iloc, part)
+            # End if
+            index = source_object.index(part)
+            source_object.remove_part(index)
+            # <part> now has a new parent
+            part.reset_parent(self)
+
+    def reset_parent(self, new_parent):
+        'Reset the parent of this SuiteObject (which has been moved)'
+        self._parent = new_parent
 
     @classmethod
     def is_horiz_dim(cls, dim):
@@ -387,6 +459,110 @@ class SuiteObject(VarDictionary):
         # End if
         return found_var
 
+    def add_call_list_variable(self, newvar, exists_ok=False, gen_unique=False):
+        """Add <newvar> to this SuiteObject's call_list. If this SuiteObject
+        does not have a call list, recursively try the SuiteObject's parent"""
+        if self.call_list is not None:
+            self.call_list.add_variable(newvar, exists_ok=exists_ok,
+                                        gen_unique=gen_unique)
+        elif self.parent is None:
+            errmsg = 'No call_list found for {}'.format(newvar)
+            raise ParseInternalError(errmsg)
+        else:
+            self.parent.add_call_list_variable(newvar, exists_ok=exists_ok,
+                                               gen_unique=gen_unique)
+        # End if
+
+    def match_variable(self, var):
+        """Try to find a source for <var> in this SuiteObject's dictionary
+        tree. Several items are returned:
+        found_var: True if a match was found
+        """
+        cstdname = var.get_prop_value('standard_name')
+        cdims = var.get_dimensions()
+        if not cdims:
+            vmatch = VarDictionary.loop_var_match(cstdname)
+        else:
+            vmatch = None
+        # End if
+        found_var = False
+        # Do we already have this variable?
+        dict_var = self.find_variable(cstdname, any_scope=False)
+        if dict_var is None:
+            dict_var = self.find_variable(cstdname, any_scope=True)
+        if dict_var is not None:
+            found_var = True
+            # Check dimensions
+            dict_dims = dict_var.get_dimensions()
+            args = self.match_dimensions(cdims, dict_dims)
+            match, perm, vmatches, new_dims = args
+            if match:
+                # We have a match, make sure var is in call list
+                if new_dims == cdims:
+                    self.add_call_list_variable(cvar, exists_ok=True)
+                        else:
+                            subst_dict = {'dimensions':new_dims}
+                            clone = cvar.clone(subst_dict)
+                            self.add_call_list_variable(clone, exists_ok=True)
+                        # End if
+                        # Do we have a source for all the dimensions?
+                        for index, dim in enumerate(new_dims):
+                            dim = new_dims[index]
+                            for stdname in dim.split(':'):
+                                dimvar = self.find_variable(stdname)
+                                if dimvar is not None:
+                                    # This is already a local group var, make
+                                    # sure it has been added to our call list
+                                    self.add_call_list_variable(dimvar,
+                                                                exists_ok=True)
+                                elif vmatches[index] is not None:
+                                    svars = vmatches[index].has_subst(self)
+                                    if svars is None:
+                                        found_var = False
+                                    else:
+                                        clist = self.call_list
+                                        for var in svars:
+                                            clist.add_variable(var,
+                                                               exists_ok=True)
+                                        # End for
+                                    # End if
+                                else:
+                                    found_var = False
+                                # End if
+                                if not found_var:
+                                    errmsg = ('Unable to convert {}, {} '
+                                              'not found{}')
+                                    ctx = context_string(cvar.context)
+                                    raise CCPPError(errmsg.format(cstdname,
+                                                                  stdname, ctx))
+                                # End if
+                            # End for
+                        # End for
+                        # Add all the loop substitutions
+                        for dim_vmatch in vmatches:
+                            need_dim_vmatch = dim_vmatch is not None
+                            # Make sure we do not already have this substitution
+                            if need_dim_vmatch:
+                                for dvmatch in self._loop_var_matches:
+                                    if dvmatch.equiv(dim_vmatch):
+                                        need_dim_vmatch = False
+                                        break
+                                    # End if
+                                # End for
+                            # End if
+                            if need_dim_vmatch:
+                                self._loop_var_matches.append(dim_vmatch)
+                                # Add the missing dim
+                                dim_vmatch.add_local(self, __api_local__)
+                            # End if
+                        # End for
+                    else:
+                        errmsg = ('Unable to convert {}, '
+                                  'dimensions do not match{}')
+                        ctx = context_string(cvar.context)
+                        raise CCPPError(errmsg.format(cstdname, ctx))
+                    # End if
+
     def in_process_split(self):
         "Find out if we are in a process-split region"
         proc_split = False
@@ -402,6 +578,21 @@ class SuiteObject(VarDictionary):
         # End while
         return proc_split
 
+    def part(self, index, error=True):
+        """Return one of this SuiteObject's parts raise an exception, or,
+        if <error> is False, just return None"""
+        plen = len(self._parts)
+        if ((index >= 0) and (index < plen)) or (abs(index) <= plen):
+            return self._parts[index]
+        elif error:
+            errmsg = 'No part {} in {} {}'.format(index,
+                                                  self.__class__.__name__,
+                                                  self.name)
+            raise ParseInternalError(errmsg)
+        else:
+            return None
+        # End if
+
     @property
     def name(self):
         '''Return the name of the element'''
@@ -413,7 +604,8 @@ class SuiteObject(VarDictionary):
         if self.__name is None:
             self.__name = value
         else:
-            raise ParseInternalError('Attempt to change name of {} to {}'.format(self, value))
+            errmsg = 'Attempt to change name of {} to {}'
+            raise ParseInternalError(errmsg.format(self, value))
         # End if
 
     @property
@@ -428,8 +620,15 @@ class SuiteObject(VarDictionary):
 
     @property
     def parts(self):
-        "Return the component parts of this SuiteObject"
-        return self._parts
+        """Return a copy the component parts of this SuiteObject.
+        Returning a copy allows for the part list to be changed during
+        processing of the return value"""
+        return self._parts[:]
+
+    @property
+    def needs_vertical(self):
+        'Return the vertical dimension this SuiteObject is missing or None'
+        return self._needs_vertical
 
     def __repr__(self):
         'Create a unique readable string for this Object'
@@ -496,10 +695,11 @@ class Scheme(SuiteObject):
         self._version = scheme_xml.get('version', None)
         self._lib = scheme_xml.get('lib', None)
         self._has_vertical_dimension = False
+        self._group = None
         super(Scheme, self).__init__(name, context, parent,
                                      logger, active_call_list=True)
 
-    def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+    def analyze(self, phase, group, scheme_library, suite_vars, level):
         # Unused arguments are for consistent analyze interface
         # pylint: disable=unused-argument
         "Analyze the scheme's interface to prepare for writing"
@@ -527,15 +727,17 @@ class Scheme(SuiteObject):
                                                self._subroutine_name)
         scheme_mods.add(scheme_use)
         for var in my_header.variable_list():
-            cdims = var.get_dimensions()
             if not self.has_vertical_dim:
                 self._has_vertical_dimension = var.has_vertical_dimension()
             # End if
-            self.call_list.add_variable(var)
+            self.add_call_list_variable(var)
         # End for
         return scheme_mods
 
     def write(self, outfile, logger, indent):
+        # Unused arguments are for consistent write interface
+        # pylint: disable=unused-argument
+        "Write code to call this Scheme to <outfile>"
         my_args = self.call_list.call_string(cldict=self)
         stmt = 'call {}({})'
         outfile.write(stmt.format(self._subroutine_name, my_args), indent)
@@ -558,15 +760,81 @@ class Scheme(SuiteObject):
 
 ###############################################################################
 
+class VerticalLoop(SuiteObject):
+    """Class to call a group of schemes or scheme collections called in a
+    loop over a vertical dimension"""
+
+    def __init__(self, dim_name, context, parent, logger, items=None):
+        self._dim_name = dim_name
+        name = dim_name.lower().replace('dimension', 'index') # Iteration count
+        self._loop = dim_name # Number of iterations
+        lvar = parent.find_variable(self.loop, any_scope=True)
+        if lvar is None:
+            emsg = "VerticalLoop, {}, specifies {} iterations but {} not found"
+            raise CCPPError(emsg.format(name, self.loop, self.loop))
+        # End if
+        super(VerticalLoop, self).__init__(name, context, parent, logger)
+        # Add any items
+        if not isinstance(items, list):
+            if items is None:
+                items = list()
+            else:
+                items = [items]
+            # End if
+        # End if
+        for item in items:
+            self.add_part(item)
+        # End for
+
+    def analyze(self, phase, group, scheme_library, suite_vars, level):
+        "Analyze the VerticalLoop's interface to prepare for writing"
+        # Create a variable for the loop index
+        self.add_variable(Var({'local_name':self.name,
+                               'standard_name':'loop_variable',
+                               'type':'integer', 'units':'count',
+                               'dimensions':'()'}, __api_source__))
+        # Handle all the suite objects inside of this subcycle
+        scheme_mods = set()
+        for item in self.parts:
+            smods = item.analyze(phase, group, scheme_library,
+                                 suite_vars, level+1)
+            for smod in smods:
+                scheme_mods.add(smod)
+            # End for
+        # End for
+        return scheme_mods
+
+    def write(self, outfile, logger, indent):
+        "Write code for the vertical loop, including contents, to <outfile>"
+        outfile.write('do {} = 1, {}'.format(self.name, self.loop), indent)
+        # Note that 'scheme' may be a sybcycle or other construct
+        for item in self.parts:
+            item.write(outfile, logger, indent+1)
+        # End for
+        outfile.write('end do', 2)
+
+    @property
+    def loop(self):
+        '''Return the loop variable local_name'''
+        return self._loop
+
+    @property
+    def dimension_name(self):
+        'Return the vertical dimension over which this VerticalLoop loops'
+        return self._dim_name
+
+###############################################################################
+
 class Subcycle(SuiteObject):
     "Class to represent a subcycled group of schemes or scheme collections"
 
     def __init__(self, sub_xml, context, parent, logger):
-        name = sub_xml.get('name', None)
-        self._loop = sub_xml.get('loop', "1")
+        name = sub_xml.get('name', None) # Iteration count
+        loop_extent = sub_xml.get('loop', "1") # Number of iterations
         # See if our loop variable is an interger or a variable
         try:
-            loop_int = int(self.loop)
+            loop_int = int(loop_extent) # pylint: disable=unused-variable
+            self._loop = loop_extent
             self._loop_var_int = True
         except ValueError:
             self._loop_var_int = False
@@ -574,15 +842,17 @@ class Subcycle(SuiteObject):
             if lvar is None:
                 emsg = "Subcycle, {}, specifies {} iterations but {} not found"
                 raise CCPPError(emsg.format(name, self.loop, self.loop))
+            else:
+                parent.add_call_list_variable(lvar)
             # End if
         # End try
+        super(Subcycle, self).__init__(name, context, parent, logger)
         for item in sub_xml:
-            new_item = new_suite_object(item, context, parent, logger)
+            new_item = new_suite_object(item, context, self, logger)
             self.add_part(new_item)
         # End for
-        super(Subcycle, self).__init__(name, context, parent, logger)
 
-    def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+    def analyze(self, phase, group, scheme_library, suite_vars, level):
         "Analyze the Subcycle's interface to prepare for writing"
         if self.name is None:
             self.name = "subcycle_index{}".format(level)
@@ -596,7 +866,7 @@ class Subcycle(SuiteObject):
         scheme_mods = set()
         for item in self.parts:
             smods = item.analyze(phase, group, scheme_library,
-                                 suite_vars, level+1, logger)
+                                 suite_vars, level+1)
             for smod in smods:
                 scheme_mods.add(smod)
             # End for
@@ -604,6 +874,7 @@ class Subcycle(SuiteObject):
         return scheme_mods
 
     def write(self, outfile, logger, indent):
+        "Write code for the subcycle loop, including contents, to <outfile>"
         outfile.write('do {} = 1, {}'.format(self.name, self.loop), indent)
         # Note that 'scheme' may be a sybcycle or other construct
         for item in self.parts:
@@ -613,8 +884,15 @@ class Subcycle(SuiteObject):
 
     @property
     def loop(self):
-        '''Get the loop value or variable standard_name'''
-        return self._loop
+        '''Return the loop value or variable local_name'''
+        lvar = self.find_variable(self.loop, any_scope=True)
+        if lvar is None:
+            emsg = "Subcycle, {}, specifies {} iterations but {} not found"
+            raise CCPPError(emsg.format(self.name, self.loop, self.loop))
+        else:
+            lname = lvar.get_prop_value('local_name')
+        # End if
+        return lname
 
 ###############################################################################
 
@@ -625,13 +903,13 @@ class TimeSplit(SuiteObject):
     """
 
     def __init__(self, sub_xml, context, parent, logger):
+        super(TimeSplit, self).__init__('TimeSplit', context, parent, logger)
         for part in sub_xml:
-            new_item = new_suite_object(part, context, parent, logger)
+            new_item = new_suite_object(part, context, self, logger)
             self.add_part(new_item)
         # End for
-        super(TimeSplit, self).__init__('TimeSplit', context, parent, logger)
 
-    def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+    def analyze(self, phase, group, scheme_library, suite_vars, level):
         # Unused arguments are for consistent analyze interface
         # pylint: disable=unused-argument
         "Analyze the TimeSplit's interface to prepare for writing"
@@ -639,7 +917,7 @@ class TimeSplit(SuiteObject):
         scheme_mods = set()
         for item in self.parts:
             smods = item.analyze(phase, group, scheme_library,
-                                 suite_vars, level+1, logger)
+                                 suite_vars, level+1)
             for smod in smods:
                 scheme_mods.add(smod)
             # End for
@@ -647,6 +925,8 @@ class TimeSplit(SuiteObject):
         return scheme_mods
 
     def write(self, outfile, logger, indent):
+        """Write code for this TimeSplit section, including contents,
+        to <outfile>"""
         for item in self.parts:
             item.write(outfile, logger, indent+1)
         # End for
@@ -661,11 +941,13 @@ class ProcessSplit(SuiteObject):
     """
 
     def __init__(self, sub_xml, context, parent, logger):
+        # Unused arguments are for consistent __init__ interface
+        # pylint: disable=unused-argument
         super(ProcessSplit, self).__init__('ProcessSplit', context,
                                            parent, logger)
         raise CCPPError('ProcessSplit not yet implemented')
 
-    def analyze(self, phase, group, scheme_library, suite_vars, level, logger):
+    def analyze(self, phase, group, scheme_library, suite_vars, level):
         # Unused arguments are for consistent analyze interface
         # pylint: disable=unused-argument
         "Analyze the ProcessSplit's interface to prepare for writing"
@@ -673,6 +955,8 @@ class ProcessSplit(SuiteObject):
         raise CCPPError('ProcessSplit not yet implemented')
 
     def write(self, outfile, logger, indent):
+        """Write code for this ProcessSplit section, including contents,
+        to <outfile>"""
         raise CCPPError('ProcessSplit not yet implemented')
 
 ###############################################################################
@@ -705,7 +989,8 @@ class Group(SuiteObject):
     def __init__(self, group_xml, transition, parent, context, logger):
         name = parent.name + '_' + group_xml.get('name')
         if transition not in CCPP_STATE_MACH.transitions():
-            raise ParseInternalError("Bad transition argument to Group, '{}'".format(transition))
+            errmsg = "Bad transition argument to Group, '{}'"
+            raise ParseInternalError(errmsg.format(transition))
         # End if
         self._transition = transition
         # Initialize the dictionary of variables internal to group
@@ -716,21 +1001,24 @@ class Group(SuiteObject):
         if (not group_xml) or (group_xml[0].tag not in Group.__process_types__):
             # Default is TimeSplit
             tsxml = ET.fromstring(Group.__process_xml__['timesplit'])
-            ts = new_suite_object(tsxml, context, parent, logger)
-            add_to = ts
-            self.add_part(ts)
+            time_split = new_suite_object(tsxml, context, self, logger)
+            add_to = time_split
+            self.add_part(time_split)
         else:
             add_to = self
         # End if
         # Add the sub objects either directly to the Group or to the TimeSplit
         for item in group_xml:
-            new_item = new_suite_object(item, context, parent, logger)
+            new_item = new_suite_object(item, context, add_to, logger)
             add_to.add_part(new_item)
         # End for
         self._local_schemes = set()
         self._host_vars = None
         self._host_ddts = None
         self._loop_var_matches = list()
+        self._phase = None
+        self._phase_check_stmts = list()
+        self._set_state = None
         logger.debug("{}".format(self))
 
     def has_item(self, item_name):
@@ -753,8 +1041,8 @@ class Group(SuiteObject):
         '''If scheme_name matches the group phase, return the group and
             function ID. Otherwise, return None
         '''
-        fid, tid, mt = CCPP_STATE_MACH.transition_match(scheme_name,
-                                                        transition=self.phase)
+        fid, tid, _ = CCPP_STATE_MACH.transition_match(scheme_name,
+                                                       transition=self.phase)
         if tid is not None:
             return self, fid
         # End if
@@ -770,11 +1058,11 @@ class Group(SuiteObject):
             errmsg = "Group {}, cannot move {}, variable not found"
             raise ParseInternalError(errmsg.format(self.name, standard_name))
         else:
-            self.call_list.add_variable(gvar, exists_ok=True)
+            self.add_call_list_variable(gvar, exists_ok=True)
             self.remove_variable(standard_name)
         # End if
 
-    def analyze(self, phase, suite_vars, scheme_library, logger):
+    def analyze(self, phase, suite_vars, scheme_library):
         "Analyze the Group's interface to prepare for writing"
         parent = self.parent
         self._phase = phase
@@ -783,7 +1071,7 @@ class Group(SuiteObject):
             # All have the same interface and return a set of module use
             # statements (lschemes)
             lschemes = item.analyze(phase, self, scheme_library,
-                                    suite_vars, 1, logger)
+                                    suite_vars, 1)
             for lscheme in lschemes:
                 self._local_schemes.add(lscheme)
             # End for
@@ -802,7 +1090,7 @@ class Group(SuiteObject):
             for cvar in var_list:
                 cstdname = cvar.get_prop_value('standard_name')
                 cdims = cvar.get_dimensions()
-                if len(cdims) == 0:
+                if not cdims:
                     vmatch = VarDictionary.loop_var_match(cstdname)
                 else:
                     vmatch = None
@@ -821,11 +1109,11 @@ class Group(SuiteObject):
                     if match:
                         # We have a match, make sure var is in call list
                         if new_dims == cdims:
-                            self.call_list.add_variable(cvar, exists_ok=True)
+                            self.add_call_list_variable(cvar, exists_ok=True)
                         else:
                             subst_dict = {'dimensions':new_dims}
                             clone = cvar.clone(subst_dict)
-                            self.call_list.add_variable(clone, exists_ok=True)
+                            self.add_call_list_variable(clone, exists_ok=True)
                         # End if
                         # Do we have a source for all the dimensions?
                         for index, dim in enumerate(new_dims):
@@ -835,7 +1123,7 @@ class Group(SuiteObject):
                                 if dimvar is not None:
                                     # This is already a local group var, make
                                     # sure it has been added to our call list
-                                    self.call_list.add_variable(dimvar,
+                                    self.add_call_list_variable(dimvar,
                                                                 exists_ok=True)
                                 elif vmatches[index] is not None:
                                     svars = vmatches[index].has_subst(self)
@@ -893,7 +1181,7 @@ class Group(SuiteObject):
                     else:
                         found_var = True
                         for var in svars:
-                            self.call_list.add_variable(var, exists_ok=True)
+                            self.add_call_list_variable(var, exists_ok=True)
                         # End for
                         # This variable should now be available in Group
                         # But as a local variable
@@ -926,6 +1214,8 @@ class Group(SuiteObject):
 
     def write(self, outfile, logger, host_arglist, indent,
               suite_vars=None, allocate=False, deallocate=False):
+        """Write code for this subroutine (Group), including contents,
+        to <outfile>"""
         # Unused arguments are for consistent write interface
         # pylint: disable=unused-argument
         # group type for (de)allocation
@@ -1153,7 +1443,7 @@ end module {module}
         gxml = ET.fromstring(group_string)
         group = Group(gxml, transition, self, self._context, self._logger)
         for svar in CCPP_REQUIRED_VARS:
-            group.call_list.add_variable(svar)
+            group.add_call_list_variable(svar)
         # End for
         self._full_groups[group.name] = group
         self._full_phases[group.phase] = group
@@ -1259,7 +1549,7 @@ end module {module}
         # End if
         return var
 
-    def analyze(self, host_model, scheme_library, logger):
+    def analyze(self, host_model, scheme_library):
         '''Collect all information needed to write a suite file
         >>> CCPP_STATE_MACH.transition_match('init')
         'initialize'
@@ -1363,9 +1653,9 @@ end module {module}
                 phase = 'run'
             # End if
             lmsg = "Group {}, schemes = {}"
-            logger.debug(lmsg.format(item.name,
-                                     [x.name for x in item.schemes()]))
-            item.analyze(phase, self, scheme_library, logger)
+            self._logger.debug(lmsg.format(item.name,
+                                           [x.name for x in item.schemes()]))
+            item.analyze(phase, self, scheme_library)
             # Look for group variables that need to be promoted to the suite
             # We need to promote any variable used later to the suite, however,
             # we do not yet know if it will be used.
@@ -1536,7 +1826,7 @@ end module {module}
         # Turn the SDF files into Suites
         for sdf in sdfs:
             suite = Suite(sdf, self, logger)
-            suite.analyze(host_model, scheme_library, logger)
+            suite.analyze(host_model, scheme_library)
             self._suites.append(suite)
         # End for
         # Find DDTs for use statements
