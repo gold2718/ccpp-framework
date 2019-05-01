@@ -11,8 +11,13 @@ To build the interface files, run `ccpp_capgen`:
 cd <ccpp_framework>/doc/HelloWorld
 mkdir build
 cd build
-../../../scripts/ccpp_capgen.py --host-files ../hello_world_host.meta \
-                                --scheme-files ../hello_scheme.meta   \
-                                --suites ../hello_world_suite.xml     \
-                                --generate-host-cap
+make -f ../Makefile
+./HelloWorld
+```
+In particular, the capgen step is:
+```
+../../../scripts/ccpp_capgen.py                                       \
+        --host-files ../hello_world_host.meta,../hello_world_mod.meta \
+        --scheme-files ../hello_scheme.meta,../temp_adjust.meta       \
+        --suites ../hello_world_suite.xml --generate-host-cap
 ```
