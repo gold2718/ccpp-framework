@@ -177,8 +177,29 @@ class SuiteObject(VarDictionary):
         """
         return self.variable_list()
 
-    def add_part(self, item):
-        'Add an object (e.g., Suite, Subcycle) to this SuiteObject'
+    def add_part(self, item, replace=False):
+        """Add an object (e.g., Scheme, Subcycle) to this SuiteObject.
+        If <item> needs to be in a VerticalLoop, look for an appropriate
+        VerticalLoop object or create one.
+        if <replace> is True, replace <item> in its current position in self.
+        Note that if <item> is not to be inserted in a VerticalLoop,
+        <replace> has no effect.
+        """
+        if replace:
+            if item in self._parts:
+                index = self._parts.index(item)
+            else:
+                emsg = 'Cannot replace {} in {}, not a member'
+                raise ParseInternalError(emsg.format(item.name, self.name))
+            # End if
+        else:
+            if item in self._parts:
+                emsg = 'Cannot add {} to {}, already a member'
+                raise ParseInternalError(emsg.format(item.name, self.name))
+            else:
+                index = len(self._parts)
+            # End if
+        # End if
         # Does this item need to be in a VerticalLoop?
         if item.needs_vertical is not None:
             iparent = item.parent
@@ -199,16 +220,28 @@ class SuiteObject(VarDictionary):
                     # Can we attach item to this loop?
                     if pitem.dimension_name == item.needs_vertical:
                         pitem.add_part(item)
+                        if replace:
+                            self.remove_part(index)
+                        # End if (no else, we already added it)
                     else:
                         # Need to add item to a new VerticalLoop
                         new_vl = VerticalLoop(item.needs_vertical,
                                               self._context, self,
                                               self._logger, items=[item])
-                        self.add_part(new_vl)
+                        if replace:
+                            self.remove_part(index)
+                        # End if (no else, adding the loop below)
+                        # Add item to new loop
+                        new_vl.add_part(item)
+                        self._parts.insert(index, new_vl)
                     # End if
-        # End if (no else, just add item)
-        self._parts.append(item)
-        item.reset_parent(self)
+                # End if
+            # End if
+        else:
+            # Just add <item>
+            self._parts.insert(index, item)
+            item.reset_parent(self)
+        # End if
 
     def remove_part(self, index):
         'Remove the part at index'
@@ -237,7 +270,7 @@ class SuiteObject(VarDictionary):
         If <loc> is -1, <part> is appended to <self>,
         otherwise, <part> is inserted at <loc>.
         """
-        if part in source_object:
+        if part in source_object.parts:
             # Sanitize loc
             try:
                 iloc = int(loc)
@@ -498,19 +531,33 @@ class SuiteObject(VarDictionary):
         var_vdim = var.has_vertical_dimension()
         found_var = False
         missing_vert = None
-        # Do we already have this variable?
-        dict_var = self.find_variable(vstdname, any_scope=False)
+        new_dims = None
+        # Does this variable exist in the calling tree?
+        dict_var = self.find_variable(vstdname, any_scope=True)
         if dict_var is None:
-            dict_var = self.find_variable(vstdname, any_scope=True)
-        if dict_var is not None:
+            if vmatch is not None:
+                svars = vmatch.has_subst(self)
+                if svars is not None:
+                    found_var = True
+                    for svar in svars:
+                        self.add_call_list_variable(svar, exists_ok=True)
+                    # End for
+                # End if
+            # End if
+        else:
             found_var = True
             # Check dimensions
-            dict_dims = dict_var.get_dimensions()
-            args = self.match_dimensions(vdims, dict_dims)
-            match, perm, vmatches, new_dims = args
-            if perm is not None:
-                raise CCPPError("Permuted indices are not yet supported")
-            # End if
+            if vdims:
+                dict_dims = dict_var.get_dimensions()
+                args = self.match_dimensions(vdims, dict_dims)
+                match, perm, vmatches, new_dims = args
+                if perm is not None:
+                    raise CCPPError("Permuted indices are not yet supported")
+                # End if
+            else:
+                vmatches = list()
+                new_dims = list()
+                match = True
             if match:
                 dim_subst = [x for x in vmatches if x is not None]
                 if vmatch is None:
@@ -534,6 +581,7 @@ class SuiteObject(VarDictionary):
                     raise CCPPError(emsg.format(dict_dim, var_vdim))
                 # End if
             # End if
+        # End if
         return found_var, var_vdim, new_dims, missing_vert, vmatch
 
     def in_process_split(self):
@@ -669,7 +717,6 @@ class Scheme(SuiteObject):
         self._lib = scheme_xml.get('lib', None)
         self._has_vertical_dimension = False
         self._group = None
-        self._analyzed = False # Make analyze re-entrant
         super(Scheme, self).__init__(name, context, parent,
                                      logger, active_call_list=True)
 
@@ -711,7 +758,7 @@ class Scheme(SuiteObject):
                 # End if
                 # We have a match, make sure var is in call list
                 if new_dims == vdims:
-                    self.add_call_list_variable(cvar, exists_ok=True)
+                    self.add_call_list_variable(var, exists_ok=True)
                 else:
                     subst_dict = {'dimensions':new_dims}
                     clone = var.clone(subst_dict)
@@ -720,11 +767,17 @@ class Scheme(SuiteObject):
             else:
                 if missing_vert is not None:
                     # This Scheme needs to be in a VerticalLoop
-# XXgoldyXX: v debug only
-                    raise ParseInteralError('Need VerticalLoop for {}'.format(vstdname))
-# XXgoldyXX: ^ debug only
+                    self._needs_vertical = missing_vert
+                    self.parent.add_part(self, replace=True)
+                    if isinstance(self.parent, VerticalLoop):
+                        # Retart the loop analysis
+                        scheme_mods = self.parent.analyze(phase, group,
+                                                          scheme_library,
+                                                          suite_vars, level)
+                    # End if
+                # End if
+            # End if
         # End for
-        self._analyzed = True
         return scheme_mods
 
     def write(self, outfile, logger, indent):
@@ -991,8 +1044,9 @@ class Group(SuiteObject):
                                     logger, active_call_list=True)
         # Add the items but first make sure we know the process tpye for
         # the group (e.g., TimeSplit or ProcessSplit).
-        if (len(group_xml) == 0) or (group_xml[0].tag not in
-                                     Group.__process_types__):
+        if (transition == 'run') and ((len(group_xml) == 0) or
+                                      (group_xml[0].tag not in
+                                       Group.__process_types__)):
             # Default is TimeSplit
             tsxml = ET.fromstring(Group.__process_xml__['timesplit'])
             time_split = new_suite_object(tsxml, context, self, logger)
@@ -1671,7 +1725,8 @@ end module {module}
         """Method to separate out run-loop groups from special initial
         and final groups
         """
-        return (group.name not in self._beg_groups) and (group.name not in self._end_groups)
+        return ((group.name not in self._beg_groups) and
+                (group.name not in self._end_groups))
 
     def max_part_len(self):
         "What is the longest suite subroutine name?"

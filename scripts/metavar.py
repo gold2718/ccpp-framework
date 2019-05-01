@@ -714,8 +714,9 @@ class Var(object):
     def has_vertical_dimension(self):
         "Return True iff <self> has a vertical dimension"
         var_vdim = None
+        vdims = self.get_dimensions()
         for vdimname in CCPP_VERTICAL_DIMENSIONS:
-            if vdimname in cdims:
+            if vdimname in vdims:
                 var_vdim = vdimname
                 break
             # End if
@@ -1378,6 +1379,10 @@ class VarDictionary(OrderedDict):
         except Exception as e:
             pass # python does not guarantee object state during finalization
         # End try
+
+    def __eq__(self, other):
+        'Override == to restore object equality, not dictionary list equality'
+        return self is other
 
     @classmethod
     def loop_var_match(cls, standard_name):
