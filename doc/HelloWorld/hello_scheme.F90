@@ -17,16 +17,16 @@ CONTAINS
 !> \section arg_table_hello_scheme_run  Argument Table
 !! \htmlinclude arg_table_hello_scheme_run.html
 !!
-  SUBROUTINE hello_scheme_run(ncol, lev, ilev, temp_layer, temp_level,   &
-    timestep, errmsg, errflg)
+  SUBROUTINE hello_scheme_run(ncol, lev, ilev, timestep, temp_level,          &
+       temp_layer, errmsg, errflg)
 !----------------------------------------------------------------
    IMPLICIT NONE
 !----------------------------------------------------------------
 
    integer,            intent(in)    :: ncol, lev, ilev
-   REAL(kind_phys),    intent(inout) :: temp_layer(ncol, lev)
+   REAL(kind_phys),    intent(inout) :: temp_level(ncol, lev)
    real(kind_phys),    intent(in)    :: timestep
-   REAL(kind_phys),    INTENT(out)   :: temp_level(ncol, ilev)
+   REAL(kind_phys),    INTENT(out)   :: temp_layer(ncol, ilev)
    character(len=512), intent(out)   :: errmsg
    integer,            intent(out)   :: errflg
 !----------------------------------------------------------------

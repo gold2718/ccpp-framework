@@ -20,11 +20,71 @@ from parse_tools import ParseInternalError, ParseSyntaxError, CCPPError
 real_subst_re = re.compile(r"(.*\d)p(\d.*)")
 list_re = re.compile(r"[(]([^)]*)[)]\s*$")
 
+# Dictionary of standard CCPP variables
+CCPP_STANDARD_VARS = {
+    # Variable representing the constant integer, 1
+    'ccpp_constant_one' :
+    {'local_name' : '1', 'constant' : 'True',
+     'standard_name' : 'ccpp_constant_one',
+     'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
+    'ccpp_error_flag' :
+    {'local_name' : 'errflg', 'standard_name' : 'ccpp_error_flag',
+     'units' : 'flag', 'dimensions' : '()', 'type' : 'integer'},
+    'ccpp_error_message' :
+    {'local_name' : 'errmsg', 'standard_name' : 'ccpp_error_message',
+     'units' : '1', 'dimensions' : '()', 'type' : 'character',
+     'kind' : 'len=512'},
+    'horizontal_dimension' :
+    {'local_name' : 'total_columns',
+     'standard_name' : 'horizontal_dimension', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'horizontal_loop_extent' :
+    {'local_name' : 'horz_loop_ext',
+     'standard_name' : 'horizontal_loop_extent', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'horizontal_loop_begin' :
+    {'local_name' : 'horz_col_beg',
+     'standard_name' : 'horizontal_loop_begin', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'horizontal_loop_end' :
+    {'local_name' : 'horz_col_end',
+     'standard_name' : 'horizontal_loop_end', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'vertical_layer_dimension' :
+    {'local_name' : 'num_model_layers',
+     'standard_name' : 'vertical_layer_dimension', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'vertical_level_dimension' :
+    {'local_name' : 'num_model_interfaces',
+     'standard_name' : 'vertical_level_dimension', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'},
+    'vertical_level_index' :
+    {'local_name' : 'layer_index',
+     'standard_name' : 'vertical_level_index', 'units' : 'count',
+     'dimensions' : '()', 'type' : 'integer'}
+}
+
+# Pythonic version of a forward reference (CCPP_CONSTANT_VARS defined below)
+CCPP_CONSTANT_VARS = {}
+# Pythonic version of a forward reference (CCPP_VAR_LOOP_SUBST defined below)
+CCPP_VAR_LOOP_SUBSTS = {}
+
 ###############################################################################
-# Supported vertical dimensions (should be defined in CCPP_CONSTANT_VARS)
+# Supported horizontal dimensions (should be defined in CCPP_STANDARD_VARS)
+CCPP_HORIZONTAL_DIMENSIONS = ['ccpp_constant_one:horizontal_dimension',
+                              'ccpp_constant_one:horizontal_loop_extent',
+                              'horizontal_loop_extent']
+
+###############################################################################
+# Supported vertical dimensions (should be defined in CCPP_STANDARD_VARS)
 CCPP_VERTICAL_DIMENSIONS = ['ccpp_constant_one:vertical_layer_dimension',
                             'ccpp_constant_one:vertical_level_dimension',
                             'vertical_layer_index', 'vertical_level_index']
+
+###############################################################################
+# Substituions for run time dimension control
+CCPP_LOOP_DIM_SUBSTS = { 'ccpp_constant_one:horizontal_dimension' :
+                         'horizontal_loop_begin:horizontal_loop_end' }
 
 ########################################################################
 def standard_name_to_long_name(prop_dict, context=None):
@@ -603,12 +663,59 @@ class Var(object):
 
     @classmethod
     def get_prop(cls, name, spec_type=None):
+        "Return VariableProperty object for <name> or None"
         if (spec_type is None) and (name in Var.__var_propdict):
             return Var.__var_propdict[name]
         elif (spec_type is not None) and (name in Var.__spec_propdict):
             return Var.__spec_propdict[name]
         else:
             return None
+
+    @classmethod
+    def is_horizontal_dimension(cls, dim_name):
+        """Return True if it is a recognized horizontal
+        dimension or index, otherwise, return False"""
+        return dim_name in CCPP_HORIZONTAL_DIMENSIONS
+
+    @classmethod
+    def is_vertical_dimension(cls, dim_name):
+        """Return True if it is a recognized vertical
+        dimension or index, otherwise, return False"""
+        return dim_name in CCPP_VERTICAL_DIMENSIONS
+
+    @classmethod
+    def find_horizontal_dimension(cls, dims):
+        """Return the horizontal dimension string and location in <dims>
+        or (None, -1).
+        Return form is (horizontal_dimension, index) where index is the
+        location of horizontal_dimension in <dims>"""
+        var_hdim = None
+        hindex = -1
+        for index, dimname in enumerate(dims):
+            if Var.is_horizontal_dimension(dimname):
+                var_hdim = dimname
+                hindex = index
+                break
+            # End if
+        # End for
+        return (var_hdim, hindex)
+
+    @classmethod
+    def find_vertical_dimension(self, dims):
+        """Return the vertical dimension string and location in <dims>
+        or (None, -1).
+        Return form is (vertical_dimension, index) where index is the
+        location of vertical_dimension in <dims>"""
+        var_vdim = None
+        vindex = -1
+        for index, dimname in enumerate(dims):
+            if Var.is_vertical_dimension(dimname):
+                var_vdim = dimname
+                vindex = index
+                break
+            # End if
+        # End for
+        return (var_vdim, vindex)
 
     def clone(self, subst_dict, source_name=None, source_type=None,
               context=None, loop_match=False, internal=True):
@@ -711,17 +818,29 @@ class Var(object):
         dims = self.get_dimensions()
         return len(dims)
 
-    def has_vertical_dimension(self):
-        "Return True iff <self> has a vertical dimension"
+    def has_horizontal_dimension(self, dims=None):
+        """Return horizontal dimension standard name string for
+        <self> or <dims> (if present) if a horizontal dimension is
+        present in the list"""
+        var_hdim = None
+        if dims is None:
+            vdims = self.get_dimensions()
+        else:
+            vdims = dims
+        # End if
+        return Var.find_horizontal_dimension(vdims)[0]
+
+    def has_vertical_dimension(self, dims=None):
+        """Return vertical dimension standard name string for
+        <self> or <dims> (if present) if a vertical dimension is
+        present in the list"""
         var_vdim = None
-        vdims = self.get_dimensions()
-        for vdimname in CCPP_VERTICAL_DIMENSIONS:
-            if vdimname in vdims:
-                var_vdim = vdimname
-                break
-            # End if
-        # End for
-        return var_vdim
+        if dims is None:
+            vdims = self.get_dimensions()
+        else:
+            vdims = dims
+        # End if
+        return Var.find_vertical_dimension(vdims)[0]
 
     def write_def(self, outfile, indent, dict, allocatable=False):
         '''Write the definition line for the variable.'''
@@ -938,53 +1057,6 @@ __ccpp_registry_parse_source__ = ParseSource('VarDictionary', 'module',
 __ccpp_scheme_parse_source__ = ParseSource('VarDictionary', 'scheme',
                                            __ccpp_parse_context__)
 
-# Dictionary of standard CCPP variables
-CCPP_STANDARD_VARS = {
-    # Variable representing the constant integer, 1
-    'ccpp_constant_one' :
-    {'local_name' : '1', 'constant' : 'True',
-     'standard_name' : 'ccpp_constant_one',
-     'units' : '1', 'dimensions' : '()', 'type' : 'integer'},
-    'ccpp_error_flag' :
-    {'local_name' : 'errflg', 'standard_name' : 'ccpp_error_flag',
-     'units' : 'flag', 'dimensions' : '()', 'type' : 'integer'},
-    'ccpp_error_message' :
-    {'local_name' : 'errmsg', 'standard_name' : 'ccpp_error_message',
-     'units' : '1', 'dimensions' : '()', 'type' : 'character',
-     'kind' : 'len=512'},
-    'horizontal_dimension' :
-    {'local_name' : 'total_columns',
-     'standard_name' : 'horizontal_dimension', 'units' : 'count',
-     'dimensions' : '()', 'type' : 'integer'},
-    'horizontal_loop_extent' :
-    {'local_name' : 'horz_loop_ext',
-     'standard_name' : 'horizontal_loop_extent', 'units' : 'count',
-     'dimensions' : '()', 'type' : 'integer'},
-    'horizontal_loop_begin' :
-    {'local_name' : 'horz_col_beg',
-     'standard_name' : 'horizontal_loop_begin', 'units' : 'count',
-     'dimensions' : '()', 'type' : 'integer'},
-    'horizontal_loop_end' :
-    {'local_name' : 'horz_col_end',
-     'standard_name' : 'horizontal_loop_end', 'units' : 'count',
-     'dimensions' : '()', 'type' : 'integer'},
-    'vertical_layer_dimension' :
-    {'local_name' : 'num_model_layers',
-     'standard_name' : 'vertical_layer_dimension', 'units' : 'count',
-     'dimensions' : '()', 'type' : 'integer'},
-    'vertical_level_dimension' :
-    {'local_name' : 'num_model_interfaces',
-     'standard_name' : 'vertical_level_dimension', 'units' : 'count',
-     'dimensions' : '()', 'type' : 'integer'},
-    'vertical_level_index' :
-    {'local_name' : 'layer_index',
-     'standard_name' : 'vertical_level_index', 'units' : 'count',
-     'dimensions' : '()', 'type' : 'integer'}
-}
-
-# Pythonic version of a forward reference (CCPP_CONSTANT_VARS defined below)
-CCPP_CONSTANT_VARS = {}
-
 ###############################################################################
 
 def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
@@ -1128,10 +1200,6 @@ CCPP_VAR_LOOP_SUBSTS = {
     VarLoopSubst('vertical_layer_dimension',
                  ('vertical_layer_index',), 'layer_index', '')
 }
-
-# Substituions for run time dimension control
-CCPP_LOOP_DIM_SUBSTS = { 'ccpp_constant_one:horizontal_dimension' :
-                         'horizontal_loop_begin:horizontal_loop_end' }
 
 ###############################################################################
 

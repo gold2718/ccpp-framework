@@ -149,11 +149,6 @@ class SuiteObject(VarDictionary):
     are passed to callable SuiteObjects (e.g., Scheme).
     """
 
-    ## SuiteObjects recognize horizontal dimensions as special
-    __horiz_dimensions__ = ['ccpp_constant_one:horizontal_loop_extent',
-                            'ccpp_constant_one:horizontal_dimension',
-                            'horizontal_loop_begin:horizontal_loop_end']
-
     def __init__(self, name, context, parent, logger,
                  active_call_list=False): # pylint: disable=too-many-arguments
         self.__name = name
@@ -292,10 +287,24 @@ class SuiteObject(VarDictionary):
         'Reset the parent of this SuiteObject (which has been moved)'
         self._parent = new_parent
 
-    @classmethod
-    def is_horiz_dim(cls, dim):
-        """Is <dim> a horizontal dimension??"""
-        return dim in SuiteObject.__horiz_dimensions__
+    def add_variable_to_call_tree(self, var, vmatch=None):
+        found_dims = False
+        if var is not None:
+            self.add_call_list_variable(var, exists_ok=True)
+            found_dims = True
+        # End if
+        if vmatch is not None:
+            svars = vmatch.has_subst(self)
+            if svars is None:
+                found_dims = False
+            else:
+                found_dims = True
+                for svar in svars:
+                    self.add_call_list_variable(svar, exists_ok=True)
+                # End for
+            # End if
+        # End if
+        return found_dims
 
     def horiz_dim_match(self, ndim, hdim, nloop_subst):
         """Find a match between <ndim> and <hdim>, if they are both
@@ -306,79 +315,90 @@ class SuiteObject(VarDictionary):
         Otherwise, return None.
         """
         dim_match = None
-        if SuiteObject.is_horiz_dim(ndim) and SuiteObject.is_horiz_dim(hdim):
+        nis_hdim = Var.is_horizontal_dimension(ndim)
+        his_hdim = Var.is_horizontal_dimension(hdim)
+        if nis_hdim and his_hdim:
             if ndim == hdim:
                 dim_match = ndim
             elif nloop_subst is not None:
-                stdnames = nloop_subst.required_stdnames
-                match = True
-                for stdname in stdnames:
-                    svar = self.find_variable(stdname, any_scope=True)
-                    if svar is None:
-                        match = False
-                        break
-                    elif self.call_list is not None:
-                        self.call_list.add_variable(svar, exists_ok=True)
-                    # End if
-                # End for
+                svars = nloop_subst.has_subst(self, any_scope=True)
+                match = svars is not None
                 if match:
-                    dim_match = ':'.join(stdnames)
+                    if isinstance(self, Scheme):
+                        obj = self.parent
+                    else:
+                        obj = self
+                    # End if
+                    for svar in svars:
+                        obj.add_call_list_variable(svar, exists_ok=True)
+                    # End for
+                    dim_match = ':'.join(nloop_subst.required_stdnames)
                 # End if
             # End if (no else, there is no match)
         # End if (no else, there is no match)
         return dim_match
 
-    def dimension_match(self, need_dims, have_dims, loop_check=False):
+    def dimension_match(self, need_dims, have_dims):
         """Compare dimensions between <need_dims> and <have_dims>.
+        A match is declared even if <have_dims> has a vertical dimension
+        and <need_dims> does not (as long as all other dimensions match).
         Return True if all dims match.
+        Return <need_dims> and <have_dims> modified, if necessary to
+        reflect the available limits.
+        Also return any horizontal VarLoopSubst matches that are needed
         """
-        if loop_check:
-            vmatch_list = [None]*len(need_dims)
-        # End if
-        new_dims = list(need_dims)
+        new_need_dims = list(need_dims)
+        new_have_dims = list(have_dims)
         match = True
+        vmatch_list = list()
         nlen = len(need_dims)
         hlen = len(have_dims)
-        if nlen != hlen:
-            if loop_check:
-                vmatch_list = None
-            # End if
+        nhas_vdim, nvdim_index = Var.find_vertical_dimension(need_dims)
+        hhas_vdim, hvdim_index = Var.find_vertical_dimension(have_dims)
+        if (hvdim_index >= 0) and (nvdim_index < 0):
+            nlen_check = nlen + 1
+        else:
+            nlen_check = nlen
+        # End if
+        if nlen_check != hlen:
             match = False
         else:
-            for index in range(nlen):
-                if need_dims[index] != have_dims[index]:
-                    if loop_check:
-                        # No match, look for a loop match
-                        dim = need_dims[index]
-                        vmatch = VarDictionary.loop_var_match(dim)
-                        if vmatch is None:
-                            match = False
-                            vmatch_list = None
-                            break
-                        else:
-                            ldim = self.horiz_dim_match(need_dims[index],
-                                                        have_dims[index],
-                                                        vmatch)
-                            if ldim is not None:
-                                new_dims[index] = ldim
-                                vmatch_list[index] = vmatch
-                            else:
-                                match = False
-                                vmatch_list = None
-                                break
-                            # End if
-                        # End if
+            for hindex in range(nlen):
+                # Compare each dimension unless <need_dims> is missing
+                # a vertical dimension.
+                if nvdim_index >= 0:
+                    nindex = hindex
+                else:
+                    if hindex == hvdim_index:
+                        continue # Skip the missing dimension
+                    elif hindex > hvdim_index:
+                        nindex = hindex - 1
                     else:
+                        nindex = hindex
+                    # End if
+                # End if
+                if need_dims[nindex] != have_dims[hindex]:
+                    # No match, look for a loop match
+                    dim = need_dims[nindex]
+                    vmatch = VarDictionary.loop_var_match(dim)
+                    if vmatch is None:
                         match = False
                         break
+                    else:
+                        ldim = self.horiz_dim_match(need_dims[nindex],
+                                                    have_dims[hindex], vmatch)
+                        if ldim is not None:
+                            new_have_dims[hindex] = ldim
+                            vmatch_list.append(vmatch)
+                        else:
+                            match = False
+                            break
+                        # End if
                     # End if
                 # End if
             # End for
         # End if
-        if loop_check:
-            return match, new_dims, vmatch_list
-        # End if
-        return match, new_dims
+        return match, new_need_dims, new_have_dims, vmatch_list
 
     def dimension_permute(self, need_dims, have_dims, loop_check=False):
         """Compare dimensions between <need_dims> and <have_dims>.
@@ -407,7 +427,6 @@ class SuiteObject(VarDictionary):
                     vmatch = VarDictionary.loop_var_match(dim)
                     if vmatch is None:
                         perm = None
-                        break
                     else:
                         ldim = ':'.join(vmatch.required_stdnames)
                         try:
@@ -430,6 +449,9 @@ class SuiteObject(VarDictionary):
                         # End try
                     # End if (vmatch)
                 # End try
+                if perm is None:
+                    break
+                # End if
             # End for
         else:
             perm = None
@@ -442,17 +464,24 @@ class SuiteObject(VarDictionary):
     def match_dimensions(self, need_dims, have_dims):
         """Attempt to find match for all the dimensions in need_dims.
         For a loop variable, a match can be created using a VarLoopSubst object.
+        Return values are:
+        match: True iff a matching variable was found
+        perm: A permutation if the match is permuted
+        new_need_dims: The dimension standard names to be used in a call
+        new_have_dims: The dimension standard names to be used as input
+        vmatches: Any VarLoopSubst objects needed to generate dimensions
         """
         # Note, should handle missing vertical dimension here
-        args = self.dimension_match(need_dims, have_dims, loop_check=True)
-        match, new_dims, vmatch_list = args
+        args = self.dimension_match(need_dims, have_dims)
+        match, new_need_dims, new_have_dims, vmatches = args
         perm = None
         if not match:
+            new_have_dims = have_dims
             args = self.dimension_permute(need_dims, have_dims, loop_check=True)
-            perm, new_dims, vmatch_list = args
+            perm, new_need_dims, vmatches = args
             match = perm is not None
         # End if
-        return match, perm, vmatch_list, new_dims
+        return match, perm, new_need_dims, new_have_dims, vmatches
 
     def find_variable(self, standard_name, any_scope=True, clone=False):
         """Find a matching variable to <var>, create a local clone (if
@@ -513,8 +542,6 @@ class SuiteObject(VarDictionary):
         vert_dim: The vertical dimension in <var>, or None
         call_dims: How this variable should be called (or None if no match)
         missing_vert: Vertical dim in parent but not in <var>
-        horiz_match: a VarLoopSubst if <var>'s horizontal dimension does
-                     not match parent
         perm: Permutation (XXgoldyXX: Not yet implemented)
         """
         if vstdname is None:
@@ -528,61 +555,51 @@ class SuiteObject(VarDictionary):
         else:
             vmatch = None
         # End if
-        var_vdim = var.has_vertical_dimension()
         found_var = False
         missing_vert = None
-        new_dims = None
+        new_vdims = None
+        var_vdim = None
+        var_hdim = None
         # Does this variable exist in the calling tree?
         dict_var = self.find_variable(vstdname, any_scope=True)
         if dict_var is None:
-            if vmatch is not None:
-                svars = vmatch.has_subst(self)
-                if svars is not None:
-                    found_var = True
-                    for svar in svars:
-                        self.add_call_list_variable(svar, exists_ok=True)
-                    # End for
-                # End if
-            # End if
+            found_var = self.parent.add_variable_to_call_tree(dict_var,
+                                                              vmatch=vmatch)
+            vmatches = list()
         else:
-            found_var = True
             # Check dimensions
+            dict_dims = dict_var.get_dimensions()
             if vdims:
-                dict_dims = dict_var.get_dimensions()
-                args = self.match_dimensions(vdims, dict_dims)
-                match, perm, vmatches, new_dims = args
+                args = self.parent.match_dimensions(vdims, dict_dims)
+                match, perm, new_vdims, new_dict_dims, vmatches = args
                 if perm is not None:
                     raise CCPPError("Permuted indices are not yet supported")
                 # End if
             else:
                 vmatches = list()
-                new_dims = list()
+                new_vdims = list()
+                new_dict_dims = dict_dims
                 match = True
-            if match:
-                dim_subst = [x for x in vmatches if x is not None]
-                if vmatch is None:
-                    vmatch = dim_subst
-                else:
-                    if dim_subst:
-                        emsg = 'Error, dimension variable ({}) has dimensions'
-                        raise CCPPError(emsg.format(vstdname))
-                    else:
-                        vmatch = [vmatch]
-                    # End if
-                # End if
-            else:
-                new_dims = None
+            # End if
+            # Add the variable to the parent call tree
+            subst_dict = {'dimensions':new_dict_dims}
+            clone = var.clone(subst_dict)
+            found_var = self.parent.add_variable_to_call_tree(clone)
+            if not match:
+                new_vdims = None
                 found_var = False
-                dict_vdim = dict_var.has_vertical_dimension()
+                var_vdim = var.has_vertical_dimension(dims=vdims)
+                var_hdim = var.has_horizontal_dimension(dims=vdims)
+                dict_vdim = dict_var.has_vertical_dimension(dims=dict_dims)
                 if (dict_vdim is not None) and (var_vdim is None):
                     missing_vert = dict_vdim
-                elif dict_dim != var_vdim:
+                elif dict_vdim != var_vdim:
                     emsg = "Vertical dimension mismatch, {} calling {}"
-                    raise CCPPError(emsg.format(dict_dim, var_vdim))
+                    raise CCPPError(emsg.format(dict_vdim, var_vdim))
                 # End if
             # End if
         # End if
-        return found_var, var_vdim, new_dims, missing_vert, vmatch
+        return found_var, var_vdim, new_vdims, missing_vert, vmatches
 
     def in_process_split(self):
         "Find out if we are in a process-split region"
@@ -751,7 +768,7 @@ class Scheme(SuiteObject):
             vstdname = var.get_prop_value('standard_name')
             vdims = var.get_dimensions()
             args = self.match_variable(var, vstdname, vdims)
-            found, vert_dim, new_dims, missing_vert, vmatches  = args
+            found, vert_dim, new_dims, missing_vert, vmatches = args
             if found:
                 if not self.has_vertical_dim:
                     self._has_vertical_dimension = vert_dim is not None
@@ -768,16 +785,18 @@ class Scheme(SuiteObject):
                 if missing_vert is not None:
                     # This Scheme needs to be in a VerticalLoop
                     self._needs_vertical = missing_vert
-                    self.parent.add_part(self, replace=True)
-                    if isinstance(self.parent, VerticalLoop):
-                        # Retart the loop analysis
-                        scheme_mods = self.parent.analyze(phase, group,
-                                                          scheme_library,
-                                                          suite_vars, level)
-                    # End if
+                    break # Deal with this and come back
                 # End if
             # End if
         # End for
+        if self._needs_vertical is not None:
+            self.parent.add_part(self, replace=True)
+            if isinstance(self.parent, VerticalLoop):
+                # Retart the loop analysis
+                scheme_mods = self.parent.analyze(phase, group, scheme_library,
+                                                  suite_vars, level)
+            # End if
+        # End if
         return scheme_mods
 
     def write(self, outfile, logger, indent):
@@ -1374,7 +1393,7 @@ class Group(SuiteObject):
         # End for
         # Write the scheme and subcycle calls
         for item in self.parts:
-            item.write(outfile, logger, indent)
+            item.write(outfile, logger, indent+1)
         # End for
         # Deallocate suite vars
         if deallocate:
@@ -1492,7 +1511,11 @@ end module {module}
 
     def new_group(self, group_string, transition):
         """Create a new Group object from the a XML description"""
-        gxml = ET.fromstring(group_string)
+        if isinstance(group_string, str):
+            gxml = ET.fromstring(group_string)
+        else:
+            gxml = group_string
+        # End if
         group = Group(gxml, transition, self, self._context, self._logger)
         for svar in CCPP_REQUIRED_VARS:
             group.add_call_list_variable(svar)
@@ -1537,8 +1560,7 @@ end module {module}
             # Suite item is a group or a suite-wide init or final method
             if item_type == 'group':
                 # Parse a group
-                self._groups.append(Group(suite_item, 'run', self,
-                                          self._context, self._logger))
+                self._groups.append(self.new_group(suite_item, 'run'))
             else:
                 match_trans = CCPP_STATE_MACH.function_match(item_type)
                 if match_trans is None:
@@ -2031,11 +2053,11 @@ if __name__ == "__main__":
         FRAME_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         CPF = os.path.dirname(FRAME_ROOT)
         KESSLER = os.path.join(CPF, 'cam_driver', 'suites',
-                               'suite_cam_KESSLER_test_simple1.xml')
+                               'suite_cam_kessler_test_simple1.xml')
         if os.path.exists(KESSLER):
             _ = Suite(KESSLER, VarDictionary('Kessler'), LOGGING)
         else:
-            raise CCPPError("Cannot find test file, '{}'".format(KESSLER))
+            print("Cannot find test file, '{}', skipping test".format(KESSLER))
     except CCPPError as suite_error:
         print("{}".format(suite_error))
 # End if (no else)
