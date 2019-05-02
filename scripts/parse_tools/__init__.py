@@ -13,6 +13,7 @@ __all__ = [
     'check_local_name',
     'context_string',
     'find_schema_version',
+    'flush_log',
     'FORTRAN_DP_RE',
     'FORTRAN_ID',
     'FORTRAN_SCALAR_REF',
@@ -46,7 +47,7 @@ from parse_checkers import check_fortran_type, check_balanced_paren
 from parse_checkers import registered_fortran_ddt_name
 from parse_checkers import register_fortran_ddt_name
 from parse_checkers import check_dimensions, check_cf_standard_name
-from parse_log      import init_log, set_log_level
+from parse_log      import init_log, set_log_level, flush_log
 from parse_log      import set_log_to_stdout, set_log_to_null
 from parse_log      import set_log_to_file
 from preprocess     import PreprocStack

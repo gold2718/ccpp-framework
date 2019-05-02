@@ -6,6 +6,7 @@
 import collections
 import copy
 import os.path
+import logging
 # CCPP framework imports
 
 __sname_num__ = 0 # Counter for unique standard names
@@ -87,6 +88,7 @@ def context_string(context=None, with_comma=True, nodir=False):
 class CCPPError(ValueError):
     "Class so programs can log user errors without backtrace"
     def __init__(self, message):
+        logging.shutdown()
         super(CCPPError, self).__init__(message)
 
 ########################################################################
@@ -94,6 +96,7 @@ class CCPPError(ValueError):
 class ParseSyntaxError(CCPPError):
     """Exception that is aware of parsing context"""
     def __init__(self, token_type, token=None, context=None):
+        logging.shutdown()
         cstr = context_string(context)
         if token is None:
             message = "{}{}".format(token_type, cstr)
@@ -109,6 +112,7 @@ class ParseInternalError(Exception):
     Note that this error will not be trapped by programs such as ccpp_capgen
     """
     def __init__(self, errmsg, context=None):
+        logging.shutdown()
         message = "{}{}".format(errmsg, context_string(context))
         super(ParseInternalError, self).__init__(message)
 
@@ -117,6 +121,7 @@ class ParseInternalError(Exception):
 class ParseContextError(CCPPError):
     """Exception for errors using ParseContext"""
     def __init__(self, errmsg, context):
+        logging.shutdown()
         message = "{}{}".format(errmsg, context_string(context))
         super(ParseContextError, self).__init__(message)
 

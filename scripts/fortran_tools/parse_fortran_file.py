@@ -317,14 +317,17 @@ def scan_free_line(line, in_continue, in_single_char, in_double_char, context):
             if match is not None:
                 continue_out_col = index
             else:
-                raise ParseSyntaxError("Invalid continue, ampersand not followed by comment character", context=context)
+                errmsg = ("Invalid continue, ampersand not followed by "
+                          "comment character")
+                raise ParseSyntaxError(errmsg, context=context)
             # End if
         # End if
         index = index + 1
     # End while
     # A final check
     if (in_single_char or in_double_char) and (continue_out_col < 0):
-        raise ParseSyntaxError("Cannot end non-continued line in a character context", context=context)
+        errmsg = "Cannot end non-continued line in a character context"
+        raise ParseSyntaxError(errmsg, context=context)
 
     return continue_in_col, continue_out_col, in_single_char, in_double_char, comment_col
 
@@ -627,6 +630,10 @@ def parse_scheme_metadata(statements, pobj, spec_name, table_name, logger):
                         if len(arg) == 0:
                             errmsg = 'Empty argument{}'
                             raise ParseInternalError(errmsg.format(pobj))
+                        elif arg in vdict:
+                            errmsg = 'Duplicate dummy argument, {}'
+                            raise ParseSyntaxError(errmsg.format(arg),
+                                                   context=pobj)
                         # End if
                         vdict[arg] = None
                     # End for

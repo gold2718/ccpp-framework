@@ -11,6 +11,7 @@ import sys
 import os
 import os.path
 import logging
+import re
 # CCPP framework imports
 from fortran_tools import parse_fortran_file, FortranWriter
 from host_model import HostModel
@@ -206,10 +207,20 @@ def create_kinds_file(kind_phys, output_dir, logger):
     return kinds_filepath
 
 ###############################################################################
-def var_comp(prop_name, mvar, fvar, title, logger, case_sensitive=False):
+def add_error(error_string, new_error):
+###############################################################################
+    '''Add an error (<new_error>) to <error_string>, separating errors by a
+    newline'''
+    if error_string:
+        error_string += '\n'
+    # End if
+    return error_string + new_error
+
+###############################################################################
+def var_comp(prop_name, mvar, fvar, title, case_sensitive=False):
 ###############################################################################
     "Compare a property between two variables"
-    num_errors = 0
+    errors = ''
     mprop = mvar.get_prop_value(prop_name)
     fprop = fvar.get_prop_value(prop_name)
     if not case_sensitive:
@@ -220,16 +231,16 @@ def var_comp(prop_name, mvar, fvar, title, logger, case_sensitive=False):
     if not comp:
         errmsg = '{} mismatch ({} != {}) in {}{}'
         ctx = context_string(mvar.context)
-        logger.error(errmsg.format(prop_name, mprop, fprop, title, ctx))
-        num_errors += 1
+        errors = add_error(errors,
+                           errmsg.format(prop_name, mprop, fprop, title, ctx))
     # End if
-    return comp, num_errors
+    return errors
 
 ###############################################################################
 def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
 ###############################################################################
     "Compare the dimensions attribute of two variables"
-    num_errors = 0
+    errors = ''
     mdims = mvar.get_dimensions()
     fdims = mheader.convert_dims_to_standard_names(fvar, logger=logger)
     comp = len(mdims) == len(fdims)
@@ -237,8 +248,8 @@ def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
         errmsg = 'Error: rank mismatch in {}/{} ({} != {}){}'
         stdname = mvar.get_prop_value('standard_name')
         ctx = context_string(mvar.context)
-        logger.error(errmsg.format(title, stdname, len(mdims), len(fdims), ctx))
-        num_errors += 1
+        errors = add_error(errors, errmsg.format(title, stdname,
+                                                 len(mdims), len(fdims), ctx))
     # End if
     if comp:
         # Now, compare the dims
@@ -255,13 +266,13 @@ def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
                 errmsg = 'Error: dim {} mismatch ({} != {}) in {}/{}{}'
                 stdname = mvar.get_prop_value('standard_name')
                 ctx = context_string(mvar.context)
-                logger.error(errmsg.format(dim_ind+1, mdim, fdims[dim_ind],
-                                           title, stdname, ctx))
-                num_errors += 1
+                errmsg = errmsg.format(dim_ind+1, mdim, fdims[dim_ind],
+                                       title, stdname, ctx)
+                errors = add_error(errors, errmsg)
             # End if
         # End for
     # End if
-    return comp, num_errors
+    return errors
 
 ###############################################################################
 def check_fortran_against_metadata(meta_headers, fort_headers,
@@ -303,7 +314,7 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
         raise CCPPError(errmsg)
     # End if
     # We have a one-to-one set, compare headers
-    errors_found = 0
+    errors_found = ''
     for mheader in header_dict.keys():
         title = mheader.title
         fheader = header_dict[mheader]
@@ -325,7 +336,7 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
             flen = len(flist)
             if len(mlist) != len(flist):
                 errmsg = 'Variable mismatch in {}'
-                logger.error(errmsg.format(title))
+                errors_found = add_error(errors_found, errmsg.format(title))
             # End if
             for mind in range(mlen):
                 mvar = mlist[mind]
@@ -334,36 +345,43 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
                 if mind >= flen:
                     if fheader.find_variable(name, use_local_name=True) is None:
                         errmsg = 'No Fortran variable for {} in {}'
-                        logger.error(errmsg.format(lname, title))
+                        errors_found = add_error(errors_found,
+                                                errmsg.format(lname, title))
                     # End if (no else, we already reported an out-of-place error
                 else:
                     fvar = flist[mind]
-                    if var_comp('local_name', mvar, fvar, title, logger):
-                        if not var_comp('type', mvar, fvar, title, logger):
-                            errors_found = errors_found + 1
+                    errs = var_comp('local_name', mvar, fvar, title)
+                    if errs:
+                        errors_found = add_error(errors_found, errs)
+                    else:
+                        errs = var_comp('type', mvar, fvar, title)
+                        if errs:
+                            errors_found = add_error(errors_found, errs)
                         # End if
-                        if not var_comp('kind', mvar, fvar, title, logger):
-                            errors_found = errors_found + 1
+                        errs = var_comp('kind', mvar, fvar, title)
+                        if errs:
+                            errors_found = add_error(errors_found, errs)
                         # End if
                         if mheader.header_type == 'scheme':
-                            if not var_comp('intent', mvar, fvar,
-                                            title, logger):
-                                errors_found = errors_found + 1
+                            errs = var_comp('intent', mvar, fvar, title)
+                            if errs:
+                                errors_found = add_error(errors_found, errs)
                             # End if
                         # End if
                         # Compare dimensions
-                        if not dims_comp(mheader, mvar, fvar, title, logger):
-                            errors_found = errors_found + 1
+                        errs = dims_comp(mheader, mvar, fvar, title, logger)
+                        if errs:
+                            errors_found = add_error(errors_found, errs)
                         # End if
-                    else:
-                        errors_found = errors_found + 1
                     # End if
             # End for
         # End if
     # End for
-    if errors_found > 0:
-        errmsg = "{} errors found comparing {} to {}"
-        raise CCPPError(errmsg.format(errors_found, mfilename, ffilename))
+    if errors_found:
+        num_errors = len(re.findall(r'\n', errors_found)) + 1
+        errmsg = "{}\n{} errors found comparing {} to {}"
+        raise CCPPError(errmsg.format(errors_found, num_errors,
+                                      mfilename, ffilename))
     # End if
 
     return header_dict
@@ -544,5 +562,7 @@ if __name__ == "__main__":
         else:
             logger.error(ca)
         # End if
-        sys.exit(-1)
+        sys.exit(1)
+    finally:
+        logging.shutdown()
     # End try

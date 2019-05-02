@@ -19,20 +19,6 @@
   units = count
   dimensions = ()
   intent = in
-[ temp_layer ]
-  standard_name = potential_temperature
-  units = K
-  dimensions = (horizontal_loop_extent, vertical_layer_dimension)
-  type = real
-  kind = kind_phys
-  intent = inout
-[ temp_level ]
-  standard_name = potential_temperature_at_interface
-  units = K
-  dimensions = (ccpp_constant_one:horizontal_loop_extent, vertical_level_dimension)
-  type = real
-  kind = kind_phys
-  intent = out
 [ timestep ]
   standard_name = time_step_for_physics
   long_name = time step
@@ -41,6 +27,20 @@
   type = real
   kind = kind_phys
   intent = in
+[ temp_level ]
+  standard_name = potential_temperature_at_interface
+  units = K
+  dimensions = (ccpp_constant_one:horizontal_loop_extent, vertical_level_dimension)
+  type = real
+  kind = kind_phys
+  intent = inout
+[ temp_layer ]
+  standard_name = potential_temperature
+  units = K
+  dimensions = (horizontal_loop_extent, vertical_layer_dimension)
+  type = real
+  kind = kind_phys
+  intent = out
 [ errmsg ]
   standard_name = ccpp_error_message
   long_name = Error message for error handling in CCPP
