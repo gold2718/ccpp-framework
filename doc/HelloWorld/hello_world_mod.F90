@@ -29,7 +29,7 @@ contains
       temp_midpoints = 0.0_kind_phys
       do lev = 1, pverp
          do col = 1, ncols
-            temp_interfaces = real(((lev - 1) * ncols) + col, kind=kind_phys)
+            temp_interfaces(col, lev) = real(((lev - 1) * ncols) + col, kind=kind_phys)
          end do
       end do
 

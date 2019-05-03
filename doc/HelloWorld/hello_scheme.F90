@@ -24,9 +24,9 @@ CONTAINS
 !----------------------------------------------------------------
 
    integer,            intent(in)    :: ncol, lev, ilev
-   REAL(kind_phys),    intent(inout) :: temp_level(ncol, lev)
+   REAL(kind_phys),    intent(inout) :: temp_level(ncol, ilev)
    real(kind_phys),    intent(in)    :: timestep
-   REAL(kind_phys),    INTENT(out)   :: temp_layer(ncol, ilev)
+   REAL(kind_phys),    INTENT(out)   :: temp_layer(ncol, lev)
    character(len=512), intent(out)   :: errmsg
    integer,            intent(out)   :: errflg
 !----------------------------------------------------------------
