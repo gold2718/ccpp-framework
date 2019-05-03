@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from parse_tools   import ParseContext, ParseSource, context_string
 from parse_tools   import ParseInternalError, CCPPError
 from parse_tools   import read_xml_file, validate_xml_file, find_schema_version
-from metavar       import Var, VarDDT, VarDictionary, ddt_modules
+from metavar       import Var, VarDDT, VarDictionary, VarLoopSubst, ddt_modules
 from metavar       import ccpp_standard_var, CCPP_CONSTANT_VARS
 from state_machine import StateMachine
 from fortran_tools import FortranWriter
@@ -150,7 +150,8 @@ class SuiteObject(VarDictionary):
     """
 
     def __init__(self, name, context, parent, logger,
-                 active_call_list=False): # pylint: disable=too-many-arguments
+                 active_call_list=False, variables=None):
+        # pylint: disable=too-many-arguments
         self.__name = name
         self._context = context
         self._logger = logger
@@ -164,7 +165,8 @@ class SuiteObject(VarDictionary):
         self._needs_vertical = None
         self._needs_horizontal = None
         # Initialize our dictionary
-        super(SuiteObject, self).__init__(self.name, parent_dict=parent)
+        super(SuiteObject, self).__init__(self.name, variables=variables,
+                                          parent_dict=parent)
 
     def declarations(self):
         """Return a list of local variables to be declared in parent Group
@@ -287,14 +289,49 @@ class SuiteObject(VarDictionary):
         'Reset the parent of this SuiteObject (which has been moved)'
         self._parent = new_parent
 
+    def register_action(self, vaction):
+        """Register (i.e., save information for processing during write stage)
+        <vaction> and return True or pass <vaction> up to the parent of
+        <self>. Return True if any level registers <vaction>, False otherwise.
+        The base class will not register any action, it must be registered in
+        an override of this method.
+        """
+        if self.parent is not None:
+            return self.parent.register_action(vaction)
+        # End if
+        return False
+
+    def add_call_list_variable(self, newvar, exists_ok=False, gen_unique=False):
+        """Add <newvar> to this SuiteObject's call_list. If this SuiteObject
+        does not have a call list, recursively try the SuiteObject's parent
+        Do not add <newvar> if it exists as a local variable."""
+        stdname = newvar.get_prop_value('standard_name')
+        if self.call_list is not None:
+            self.call_list.add_variable(newvar, exists_ok=exists_ok,
+                                        gen_unique=gen_unique)
+        elif self.parent is None:
+            errmsg = 'No call_list found for {}'.format(newvar)
+            raise ParseInternalError(errmsg)
+        elif self.parent.find_variable(stdname, any_scope=False):
+            pass # We have the variable, no need to add it to a call list
+        else:
+            self.parent.add_call_list_variable(newvar, exists_ok=exists_ok,
+                                               gen_unique=gen_unique)
+        # End if
+
     def add_variable_to_call_tree(self, var, vmatch=None):
+        """Add <var> to <self>'s call_list (or a parent if <self> does not
+        have an active call_list).
+        if <vmatch> is not None, also add the loop substitution variables
+        which must be present.
+        """
         found_dims = False
         if var is not None:
             self.add_call_list_variable(var, exists_ok=True)
             found_dims = True
         # End if
         if vmatch is not None:
-            svars = vmatch.has_subst(self)
+            svars = vmatch.has_subst(self, any_scope=True)
             if svars is None:
                 found_dims = False
             else:
@@ -302,6 +339,8 @@ class SuiteObject(VarDictionary):
                 for svar in svars:
                     self.add_call_list_variable(svar, exists_ok=True)
                 # End for
+                # Register the action
+                self.register_action(vmatch)
             # End if
         # End if
         return found_dims
@@ -346,11 +385,16 @@ class SuiteObject(VarDictionary):
         Return <need_dims> and <have_dims> modified, if necessary to
         reflect the available limits.
         Also return any horizontal VarLoopSubst matches that are needed
+        >>> SuiteObject('foo', __api_context__, None, None).dimension_match(['horizontal_loop_extent'], ['horizontal_loop_extent'])
+        (True, ['horizontal_loop_extent'], ['horizontal_loop_extent'])
+        >>> SuiteObject('foo', __api_context__,None, None,variables=[Var({'local_name':'beg','standard_name':'horizontal_loop_begin','units':'count','dimensions':'()','type':'integer'}, __api_local__),Var({'local_name':'end','standard_name':'horizontal_loop_end','units':'count','dimensions':'()','type':'integer'}, __api_local__)],active_call_list=True).dimension_match(['ccpp_constant_one:horizontal_loop_extent'], ['ccpp_constant_one:horizontal_dimension'])
+        (True, ['ccpp_constant_one:horizontal_loop_extent'], ['horizontal_loop_begin:horizontal_loop_end'])
+        >>> SuiteObject('foo', __api_context__,None,None,variables=[Var({'local_name':'beg','standard_name':'horizontal_loop_begin','units':'count','dimensions':'()','type':'integer'}, __api_local__),Var({'local_name':'end','standard_name':'horizontal_loop_end','units':'count','dimensions':'()','type':'integer'}, __api_local__)],active_call_list=True).dimension_match(['ccpp_constant_one:horizontal_loop_extent'], ['horizontal_loop_begin:horizontal_loop_end'])
+        (True, ['ccpp_constant_one:horizontal_loop_extent'], ['horizontal_loop_begin:horizontal_loop_end'])
         """
         new_need_dims = list(need_dims)
         new_have_dims = list(have_dims)
         match = True
-        vmatch_list = list()
         nlen = len(need_dims)
         hlen = len(have_dims)
         nhas_vdim, nvdim_index = Var.find_vertical_dimension(need_dims)
@@ -388,8 +432,10 @@ class SuiteObject(VarDictionary):
                         ldim = self.horiz_dim_match(need_dims[nindex],
                                                     have_dims[hindex], vmatch)
                         if ldim is not None:
+                            # Fix the subroutine dummy argument
                             new_have_dims[hindex] = ldim
-                            vmatch_list.append(vmatch)
+                            # Make sure we have the correct local variable
+                            self.register_action(vmatch)
                         else:
                             match = False
                             break
@@ -398,7 +444,7 @@ class SuiteObject(VarDictionary):
                 # End if
             # End for
         # End if
-        return match, new_need_dims, new_have_dims, vmatch_list
+        return match, new_need_dims, new_have_dims
 
     def dimension_permute(self, need_dims, have_dims, loop_check=False):
         """Compare dimensions between <need_dims> and <have_dims>.
@@ -473,7 +519,7 @@ class SuiteObject(VarDictionary):
         """
         # Note, should handle missing vertical dimension here
         args = self.dimension_match(need_dims, have_dims)
-        match, new_need_dims, new_have_dims, vmatches = args
+        match, new_need_dims, new_have_dims = args
         perm = None
         if not match:
             new_have_dims = have_dims
@@ -481,7 +527,7 @@ class SuiteObject(VarDictionary):
             perm, new_need_dims, vmatches = args
             match = perm is not None
         # End if
-        return match, perm, new_need_dims, new_have_dims, vmatches
+        return match, perm, new_need_dims, new_have_dims
 
     def find_variable(self, standard_name, any_scope=True, clone=False):
         """Find a matching variable to <var>, create a local clone (if
@@ -521,20 +567,6 @@ class SuiteObject(VarDictionary):
         # End if
         return found_var
 
-    def add_call_list_variable(self, newvar, exists_ok=False, gen_unique=False):
-        """Add <newvar> to this SuiteObject's call_list. If this SuiteObject
-        does not have a call list, recursively try the SuiteObject's parent"""
-        if self.call_list is not None:
-            self.call_list.add_variable(newvar, exists_ok=exists_ok,
-                                        gen_unique=gen_unique)
-        elif self.parent is None:
-            errmsg = 'No call_list found for {}'.format(newvar)
-            raise ParseInternalError(errmsg)
-        else:
-            self.parent.add_call_list_variable(newvar, exists_ok=exists_ok,
-                                               gen_unique=gen_unique)
-        # End if
-
     def match_variable(self, var, vstdname=None, vdims=None):
         """Try to find a source for <var> in this SuiteObject's dictionary
         tree. Several items are returned:
@@ -557,7 +589,7 @@ class SuiteObject(VarDictionary):
         # End if
         found_var = False
         missing_vert = None
-        new_vdims = None
+        new_vdims = list()
         var_vdim = None
         var_hdim = None
         # Does this variable exist in the calling tree?
@@ -565,18 +597,16 @@ class SuiteObject(VarDictionary):
         if dict_var is None:
             found_var = self.parent.add_variable_to_call_tree(dict_var,
                                                               vmatch=vmatch)
-            vmatches = list()
         else:
             # Check dimensions
             dict_dims = dict_var.get_dimensions()
             if vdims:
                 args = self.parent.match_dimensions(vdims, dict_dims)
-                match, perm, new_vdims, new_dict_dims, vmatches = args
+                match, perm, new_vdims, new_dict_dims = args
                 if perm is not None:
                     raise CCPPError("Permuted indices are not yet supported")
                 # End if
             else:
-                vmatches = list()
                 new_vdims = list()
                 new_dict_dims = dict_dims
                 match = True
@@ -599,7 +629,7 @@ class SuiteObject(VarDictionary):
                 # End if
             # End if
         # End if
-        return found_var, var_vdim, new_vdims, missing_vert, vmatches
+        return found_var, var_vdim, new_vdims, missing_vert
 
     def in_process_split(self):
         "Find out if we are in a process-split region"
@@ -633,12 +663,12 @@ class SuiteObject(VarDictionary):
 
     @property
     def name(self):
-        '''Return the name of the element'''
+        """Return the name of the element"""
         return self.__name
 
     @name.setter
     def name(self, value):
-        '''Set the name of the element if it has not been set'''
+        """Set the name of the element if it has not been set"""
         if self.__name is None:
             self.__name = value
         else:
@@ -648,7 +678,7 @@ class SuiteObject(VarDictionary):
 
     @property
     def parent(self):
-        '''Element parent (or none)'''
+        """Element parent (or none)"""
         return self._parent
 
     @property
@@ -767,8 +797,8 @@ class Scheme(SuiteObject):
         for var in my_header.variable_list():
             vstdname = var.get_prop_value('standard_name')
             vdims = var.get_dimensions()
-            args = self.match_variable(var, vstdname, vdims)
-            found, vert_dim, new_dims, missing_vert, vmatches = args
+            args = self.match_variable(var, vstdname=vstdname, vdims=vdims)
+            found, vert_dim, new_dims, missing_vert = args
             if found:
                 if not self.has_vertical_dim:
                     self._has_vertical_dimension = vert_dim is not None
@@ -786,6 +816,9 @@ class Scheme(SuiteObject):
                     # This Scheme needs to be in a VerticalLoop
                     self._needs_vertical = missing_vert
                     break # Deal with this and come back
+                else:
+                    errmsg = 'Input argument for {}, {} not found'
+                    raise CCPPError(errmsg.format(self.name, vstdname))
                 # End if
             # End if
         # End for
@@ -803,7 +836,7 @@ class Scheme(SuiteObject):
         # Unused arguments are for consistent write interface
         # pylint: disable=unused-argument
         "Write code to call this Scheme to <outfile>"
-        my_args = self.call_list.call_string(cldict=self)
+        my_args = self.call_list.call_string(cldict=self.parent)
         stmt = 'call {}({})'
         outfile.write(stmt.format(self._subroutine_name, my_args), indent)
 
@@ -880,7 +913,7 @@ class VerticalLoop(SuiteObject):
 
     @property
     def loop(self):
-        '''Return the loop variable local_name'''
+        """Return the loop variable local_name"""
         return self._loop
 
     @property
@@ -949,7 +982,7 @@ class Subcycle(SuiteObject):
 
     @property
     def loop(self):
-        '''Return the loop value or variable local_name'''
+        """Return the loop value or variable local_name"""
         lvar = self.find_variable(self.loop, any_scope=True)
         if lvar is None:
             emsg = "Subcycle, {}, specifies {} iterations but {} not found"
@@ -1105,9 +1138,9 @@ class Group(SuiteObject):
         return self._transition
 
     def phase_match(self, scheme_name):
-        '''If scheme_name matches the group phase, return the group and
+        """If scheme_name matches the group phase, return the group and
             function ID. Otherwise, return None
-        '''
+        """
         fid, tid, _ = CCPP_STATE_MACH.transition_match(scheme_name,
                                                        transition=self.phase)
         if tid is not None:
@@ -1116,10 +1149,10 @@ class Group(SuiteObject):
         return None, None
 
     def move_to_call_list(self, standard_name):
-        '''Move a variable from the group internal dictionary to the call list.
+        """Move a variable from the group internal dictionary to the call list.
         This is done when the variable, <standard_name>, will be allocated by
         the suite.
-        '''
+        """
         gvar = self.find_variable(standard_name, any_scope=False)
         if gvar is None:
             errmsg = "Group {}, cannot move {}, variable not found"
@@ -1128,6 +1161,18 @@ class Group(SuiteObject):
             self.add_call_list_variable(gvar, exists_ok=True)
             self.remove_variable(standard_name)
         # End if
+
+    def register_action(self, vaction):
+        """Register any recognized <vaction> type for use during self.write.
+        Return True iff <vaction> is handled.
+        """
+        if isinstance(vaction, VarLoopSubst):
+            self._loop_var_matches = vaction.add_to_list(self._loop_var_matches)
+            # Add the missing dim
+            vaction.add_local(self, __api_local__)
+            return True
+        # End if
+        return False
 
     def analyze(self, phase, suite_vars, scheme_library):
         "Analyze the Group's interface to prepare for writing"
@@ -1473,12 +1518,12 @@ end module {module}
 
     @property
     def name(self):
-        '''Get the name of the suite.'''
+        """Get the name of the suite."""
         return self._name
 
     @property
     def sdf_name(self):
-        '''Get the name of the suite definition file.'''
+        """Get the name of the suite definition file."""
         return self._sdf_name
 
     @classmethod
@@ -1525,7 +1570,7 @@ end module {module}
         return group
 
     def parse(self):
-        '''Parse the suite definition file.'''
+        """Parse the suite definition file."""
         success = True
 
         _, suite_xml = read_xml_file(self._sdf_name, self._logger)
@@ -1581,12 +1626,12 @@ end module {module}
 
     @property
     def module(self):
-        '''Get the list of the module generated for this suite.'''
+        """Get the list of the module generated for this suite."""
         return self._module
 
     @property
     def groups(self):
-        '''Get the list of groups in this suite.'''
+        """Get the list of groups in this suite."""
         return self._groups
 
     def find_variable(self, standard_name, any_scope=True, clone=None):
@@ -1624,7 +1669,7 @@ end module {module}
         return var
 
     def analyze(self, host_model, scheme_library):
-        '''Collect all information needed to write a suite file
+        """Collect all information needed to write a suite file
         >>> CCPP_STATE_MACH.transition_match('init')
         'initialize'
         >>> CCPP_STATE_MACH.transition_match('init', transition='finalize')
@@ -1689,7 +1734,7 @@ end module {module}
         ('foo', 'timestep_final', 'timestep_final')
         >>> CCPP_STATE_MACH.function_match('foo_timestep_finalize')
         ('foo', 'timestep_finalize', 'timestep_final')
-        '''
+        """
         # Collect all relevant schemes
         # For run groups, find associated init and final methods
         for group in self.groups:
@@ -1910,13 +1955,18 @@ end module {module}
         host_vars = host_model.variable_list(loop_vars=False)
         self._host_ddt_list_noloop = ddt_modules(host_vars)
         # We will need the correct names for errmsg and errflg
-        self._errmsg_var = host_model.find_variable('ccpp_error_message')
-        if self._errmsg_var is None:
+        evar = host_model.find_variable('ccpp_error_message')
+        subst_dict = {'intent':'out'}
+        if evar is None:
             raise CCPPError('Required variable, ccpp_error_message, not found')
+        else:
+            self._errmsg_var = evar.clone(subst_dict)
         # End if
-        self._errflg_var = host_model.find_variable('ccpp_error_flag')
-        if self._errflg_var is None:
+        evar = host_model.find_variable('ccpp_error_flag')
+        if evar is None:
             raise CCPPError('Required variable, ccpp_error_flag, not found')
+        else:
+            self._errflg_var = evar.clone(subst_dict)
         # End if
         # We need a call list for every phase
         self.__call_lists = {}
@@ -1937,7 +1987,7 @@ end module {module}
 
     @property
     def module(self):
-        '''Get the module name of the API.'''
+        """Get the module name of the API."""
         return self._module
 
     @property

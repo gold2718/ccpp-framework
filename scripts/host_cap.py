@@ -165,7 +165,10 @@ def write_host_cap(host_model, api, output_dir, logger):
             cap.write('', 0)
             # Write out the body clauses
             errmsg_name, errflg_name = api.get_errinfo_names()
-            else_str = '\n'
+            # Initialize err variables
+            cap.write('{errflg} = 0'.format(errflg=errflg_name), 2)
+            cap.write('{errmsg} = ""'.format(errmsg=errmsg_name), 2)
+            else_str = ''
             for suite in api.suites:
                 stmt = "{}if (trim(suite_name) == '{}') then"
                 cap.write(stmt.format(else_str, suite.name), 2)

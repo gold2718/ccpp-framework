@@ -73,6 +73,7 @@ CCPP_VAR_LOOP_SUBSTS = {}
 # Supported horizontal dimensions (should be defined in CCPP_STANDARD_VARS)
 CCPP_HORIZONTAL_DIMENSIONS = ['ccpp_constant_one:horizontal_dimension',
                               'ccpp_constant_one:horizontal_loop_extent',
+                              'horizontal_loop_begin:horizontal_loop_end',
                               'horizontal_loop_extent']
 
 ###############################################################################
@@ -674,13 +675,41 @@ class Var(object):
     @classmethod
     def is_horizontal_dimension(cls, dim_name):
         """Return True if it is a recognized horizontal
-        dimension or index, otherwise, return False"""
+        dimension or index, otherwise, return False
+        >>> Var.is_horizontal_dimension('horizontal_loop_extent')
+        True
+        >>> Var.is_horizontal_dimension('ccpp_constant_one:horizontal_loop_extent')
+        True
+        >>> Var.is_horizontal_dimension('ccpp_constant_one:horizontal_dimension')
+        True
+        >>> Var.is_horizontal_dimension('horizontal_loop_begin:horizontal_loop_end')
+        True
+        >>> Var.is_horizontal_dimension('horizontal_loop_begin:horizontal_loop_extent')
+        False
+        >>> Var.is_horizontal_dimension('ccpp_constant_one')
+        False
+        """
         return dim_name in CCPP_HORIZONTAL_DIMENSIONS
 
     @classmethod
     def is_vertical_dimension(cls, dim_name):
         """Return True if it is a recognized vertical
-        dimension or index, otherwise, return False"""
+        dimension or index, otherwise, return False
+        >>> Var.is_vertical_dimension('ccpp_constant_one:vertical_layer_dimension')
+        True
+        >>> Var.is_vertical_dimension('ccpp_constant_one:vertical_level_dimension')
+        True
+        >>> Var.is_vertical_dimension('vertical_layer_index')
+        True
+        >>> Var.is_vertical_dimension('vertical_level_index')
+        True
+        >>> Var.is_vertical_dimension('ccpp_constant_one:vertical_layer_index')
+        False
+        >>> Var.is_vertical_dimension('ccpp_constant_one:vertical_level_index')
+        False
+        >>> Var.is_vertical_dimension('horizontal_loop_extent')
+        False
+        """
         return dim_name in CCPP_VERTICAL_DIMENSIONS
 
     @classmethod
@@ -1080,7 +1109,51 @@ def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
 
 ###############################################################################
 
-class VarLoopSubst(object):
+class VarAction(object):
+    """A base class for variable actions such as loop substitutions or
+    temporary variable handling."""
+
+    def __init__(self):
+        pass # Nothing general here yet
+
+    def add_local(self, dict, source):
+        '''Add any variables needed by this action to <dict>.
+        Variable(s) will appear to originate from <source>.'''
+        raise ParseInternalError('VarAction add_local method must be overriden')
+
+    def write_action(self, dict, dict2=None, any_scope=False):
+        """Return a string setting implementing the action of <self>.
+        Variables must be in <dict> or <dict2>"""
+        errmsg = 'VarAction write_action method must be overriden'
+        raise ParseInternalError(errmsg)
+
+    def equiv(self, vaction):
+        """Return True iff <vaction> is equivalent to <self>.
+        Equivalence at this level is tested by comparing the type
+        of the objects.
+        equiv should be overridden with a method that first calls this
+        method and then tests class-specific object data."""
+        return vaction.__class__ == self.__class__
+
+    def add_to_list(self, vlist):
+        """Add <self> to <vlist> unless <self> or its equivalent is
+        already in <vlist>. This method should not need to be overriden.
+        Return the (possibly modified) list"""
+        ok_to_add = True
+        for vlist_action in vlist:
+            if vlist_action.equiv(self):
+                ok_to_add = False
+                break
+            # End if
+        # End for
+        if ok_to_add:
+            vlist.append(self)
+        # End if
+        return vlist
+
+###############################################################################
+
+class VarLoopSubst(VarAction):
     """A class to handle required loop substitutions where the host model
     (or a suite part) does not provide a loop-like variable used by a
     suite part or scheme or where a host model passes a subset of a
@@ -1102,6 +1175,7 @@ class VarLoopSubst(object):
             # End try
         # End if
         self._set_action = set_action
+        super(VarLoopSubst, self).__init__()
 
     def has_subst(self, dict, any_scope=False):
         """Determine if variables for the required standard names of this
@@ -1124,18 +1198,23 @@ class VarLoopSubst(object):
 
     def add_local(self, dict, source):
         'Add a Var created from the missing name to <dict>'
-        local_name = dict.new_internal_variable_name(self._local_name)
-        prop_dict = {'standard_name':self.missing_stdname,
-                     'local_name':local_name,
-                     'type':'integer', 'units':'count', 'dimensions':'()'}
-        var = Var(prop_dict, source)
-        dict.add_variable(var, exists_ok=True, gen_unique=True)
+        if self.missing_stdname not in dict:
+            local_name = dict.new_internal_variable_name(self._local_name)
+            prop_dict = {'standard_name':self.missing_stdname,
+                         'local_name':local_name,
+                         'type':'integer', 'units':'count', 'dimensions':'()'}
+            var = Var(prop_dict, source)
+            dict.add_variable(var, exists_ok=True, gen_unique=True)
+        # End if
 
     def equiv(self, vmatch):
         """Return True iff <vmatch> is equivalent to <self>.
         Equivalence is determined by matching the missing standard name
         and the required standard names"""
-        is_equiv = vmatch.missing_stdname == self.missing_stdname
+        is_equiv = super(VarLoopSubst, self).equiv(vmatch)
+        if is_equiv:
+            is_equiv = vmatch.missing_stdname == self.missing_stdname
+        # End if
         if is_equiv:
             for dim1, dim2 in zip(vmatch.required_stdnames,
                                   self.required_stdnames):
@@ -1228,7 +1307,7 @@ class VarDictionary(OrderedDict):
     >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()))]).new_internal_variable_name()
     'who_var2'
     >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()))]).new_internal_variable_name('bar')
-    'bar_who_var1'
+    'bar1'
     >>> VarDictionary('glitch', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()))).add_variable(Var({'local_name' : 'bar', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname2', 'DDT', ParseContext()))) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid Duplicate standard name, 'hi_mom', at <standard input>:
