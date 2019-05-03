@@ -17,9 +17,9 @@ CONTAINS
 !> \section arg_table_temp_calc_adjust_run  Argument Table
 !! \htmlinclude arg_table_temp_calc_adjust_run.html
 !!
-  SUBROUTINE temp_calc_adjust_run(ncol, timestep, temp_calc, errmsg, errflg)
+  SUBROUTINE temp_calc_adjust_run(nbox, timestep, temp_calc, errmsg, errflg)
 
-   integer,            intent(in)    :: ncol
+   integer,            intent(in)    :: nbox
    real(kind_phys),    intent(in)    :: timestep
    REAL(kind_phys),    intent(out)   :: temp_calc(:)
    character(len=512), intent(out)   :: errmsg
