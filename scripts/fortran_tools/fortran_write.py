@@ -23,7 +23,7 @@ class FortranWriter(object):
     ###########################################################################
     INDENT          =   3 # Spaces per indent level
     CONTINUE_INDENT =   5 # Extra spaces on continuation line
-    LINE_FILL       =  78 # Target line length
+    LINE_FILL       =  97 # Target line length
     LINE_MAX        = 130 # Max line length
 
     ###########################################################################

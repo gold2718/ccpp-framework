@@ -1056,7 +1056,7 @@ class VarDDT(Var):
         return self._var_ref_list[0].source
 
     def get_dimensions(self, index=0):
-        """Return the dimensions of the indicated var, defauling to the
+        """Return the dimensions of the indicated DDT var, defauling to the
         top-level DDT"""
         if abs(index) >= self._vlen:
             errmsg = "VarDDT.get_prop_value index ({}) out of range"
@@ -1065,7 +1065,7 @@ class VarDDT(Var):
         return self._var_ref_list[index].get_dimensions()
 
     def write_def(self, outfile, indent, dict, allocatable=False):
-        '''Write the definition line for the variable.'''
+        '''Write the definition line for the DDT variable.'''
         raise CCPPError('{}.write_def not implemented'.format(self.__class__.__name__))
 
     def is_ddt(self):

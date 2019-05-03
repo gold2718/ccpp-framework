@@ -1,5 +1,5 @@
 [ccpp-arg-table]
-  name = temp_adjust_run
+  name = temp_calc_adjust_run
   type = scheme
 [ ncol ]
   standard_name = horizontal_loop_extent
@@ -15,20 +15,13 @@
   type = real
   kind = kind_phys
   intent = in
-[ temp_prev ]
+[ temp_calc ]
   standard_name = potential_temperature_at_previous_timestep
   units = K
   dimensions = (horizontal_loop_extent)
   type = real
   kind = kind_phys
-  intent = in
-[ temp_layer ]
-  standard_name = potential_temperature
-  units = K
-  dimensions = (horizontal_loop_extent)
-  type = real
-  kind = kind_phys
-  intent = inout
+  intent = out
 [ errmsg ]
   standard_name = ccpp_error_message
   long_name = Error message for error handling in CCPP
@@ -45,7 +38,7 @@
   type = integer
   intent = out
 [ccpp-arg-table]
-  name = temp_adjust_init
+  name = temp_calc_adjust_init
   type = scheme
 [ errmsg ]
   standard_name = ccpp_error_message
@@ -63,7 +56,7 @@
   type = integer
   intent = out
 [ccpp-arg-table]
-  name = temp_adjust_finalize
+  name = temp_calc_adjust_finalize
   type = scheme
 [ errmsg ]
   standard_name = ccpp_error_message

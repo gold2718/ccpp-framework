@@ -19,7 +19,8 @@ get_filename_component(CCPP_ROOT "${TEST_ROOT}" DIRECTORY)
 # Paths should be relative to CMAKE_SOURCE_DIR (this file's directory)
 #
 #------------------------------------------------------------------------------
-LIST(APPEND SCHEME_FILES "temp_set" "temp_adjust")
+SET(SCHEME_FILES "temp_scheme_files.txt")
+FILE(STRINGS ${SCHEME_FILES} SCHEME_FILENAMES)
 LIST(APPEND HOST_FILES  "test_host_mod")
 LIST(APPEND SUITE_FILES "temp_suite.xml")
 # HOST is the name of the executable we will build.
@@ -109,14 +110,12 @@ else(OPENMP)
 endif()
 
 # Create metadata and source file lists
-FOREACH(FILE ${SCHEME_FILES})
+FOREACH(FILE ${SCHEME_FILENAMES})
   # target_sources prefers absolute pathnames
-  get_filename_component(ABS_PATH "${FILE}.F90" ABSOLUTE)
-  LIST(APPEND SCHEME_SOURCE   "${ABS_PATH}")
+  string(REPLACE ".meta" ".F90" TEMP "${FILE}")
+  get_filename_component(ABS_PATH "${TEMP}" ABSOLUTE)
+  target_sources(${HOST} PUBLIC ${ABS_PATH})
 ENDFOREACH(FILE)
-target_sources(${HOST} PUBLIC ${SCHEME_SOURCE})
-string(REPLACE ";" ".meta," SCHEME_METADATA "${SCHEME_FILES}")
-set(SCHEME_METADATA "${SCHEME_METADATA}.meta")
 
 FOREACH(FILE ${HOST_FILES})
   LIST(APPEND HOST_METADATA "${FILE}.meta")
@@ -133,7 +132,7 @@ set(CAPGEN_CMD "${CCPP_FRAMEWORK}/ccpp_capgen.py")
 list(APPEND CAPGEN_CMD "--host-files")
 list(APPEND CAPGEN_CMD "${HOST_METADATA}")
 list(APPEND CAPGEN_CMD "--scheme-files")
-list(APPEND CAPGEN_CMD "${SCHEME_METADATA}")
+list(APPEND CAPGEN_CMD "${SCHEME_FILES}")
 list(APPEND CAPGEN_CMD "--suites")
 list(APPEND CAPGEN_CMD "${SUITE_FILES}")
 list(APPEND CAPGEN_CMD "--output-root")

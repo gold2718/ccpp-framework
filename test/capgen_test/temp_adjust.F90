@@ -1,4 +1,4 @@
-!Hello demonstration parameterization
+! Test parameterization with no vertical level
 !
 
 MODULE temp_adjust
@@ -17,11 +17,12 @@ CONTAINS
 !> \section arg_table_temp_adjust_run  Argument Table
 !! \htmlinclude arg_table_temp_adjust_run.html
 !!
-  SUBROUTINE temp_adjust_run(ncol, temp_layer, timestep, errmsg, errflg)
+  SUBROUTINE temp_adjust_run(ncol, timestep, temp_prev, temp_layer, errmsg, errflg)
 
    integer,            intent(in)    :: ncol
-   REAL(kind_phys),    intent(inout) :: temp_layer(:)
    real(kind_phys),    intent(in)    :: timestep
+   REAL(kind_phys),    intent(in)    :: temp_prev(:)
+   REAL(kind_phys),    intent(inout) :: temp_layer(:)
    character(len=512), intent(out)   :: errmsg
    integer,            intent(out)   :: errflg
 !----------------------------------------------------------------
@@ -32,7 +33,7 @@ CONTAINS
     errflg = 0
 
     do col_index = 1, ncol
-      temp_layer(col_index) = temp_layer(col_index) + 1.0_kind_phys
+      temp_layer(col_index) = temp_layer(col_index) + temp_prev(col_index)
     end do
 
   END SUBROUTINE temp_adjust_run

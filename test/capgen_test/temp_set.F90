@@ -1,4 +1,4 @@
-!Hello demonstration parameterization
+!Test 3D parameterization
 !
 
 MODULE temp_set

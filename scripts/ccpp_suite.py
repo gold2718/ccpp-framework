@@ -816,8 +816,18 @@ class Scheme(SuiteObject):
                     # This Scheme needs to be in a VerticalLoop
                     self._needs_vertical = missing_vert
                     break # Deal with this and come back
+                elif var.get_prop_value('intent') == 'out':
+                    if self._group is None:
+                        errmsg = 'Group not defined for {}'.format(self.name)
+                        raise ParseInternalError(errmsg)
+                    else:
+                        # We still need it in our call list
+                        self.add_call_list_variable(var)
+                        # The Group will manage this variable
+                        self._group.manage_variable(var)
+                    # End if
                 else:
-                    errmsg = 'Input argument for {}, {} not found'
+                    errmsg = 'Input argument for {}, {}, not found'
                     raise CCPPError(errmsg.format(self.name, vstdname))
                 # End if
             # End if
@@ -1174,6 +1184,47 @@ class Group(SuiteObject):
         # End if
         return False
 
+    def manage_variable(self, newvar):
+        """Add <newvar> to our local dictionary making necessary
+        modifications to the variable properties so that it is
+        allocated appropriately"""
+        # Need new dictionary to eliminate unwanted properties (e.g., intent)
+        vdims = newvar.get_dimensions()
+        # Look for dimensions where we have a loop substitution and replace
+        # with the correct size
+        hdims = [x.missing_stdname for x in self._loop_var_matches]
+        for index, dim in enumerate(vdims):
+            newdim = None
+            vert_index = None
+            for subdim in dim.split(':'):
+                if subdim in hdims:
+                    # We have a loop substitution, find and replace
+                    hindex = hdims.index(subdim)
+                    names = self._loop_var_matches[hindex].required_stdnames
+                    newdim = ':'.join(names)
+                    break
+                elif ('vertical' in subdim) and ('index' in subdim):
+                    # We have a vertical index, replace with correct dimension
+                    raise ParseInternalError("vertical index replace not implemented")
+                # End if
+            # End for
+            if newdim is not None:
+                vdims[index] = newdim
+            # End if
+        # End for
+        prop_dict = {'standard_name':newvar.get_prop_value('standard_name'),
+                     'local_name':newvar.get_prop_value('local_name'),
+                     'type':newvar.get_prop_value('type'),
+                     'kind':newvar.get_prop_value('kind'),
+                     'units':newvar.get_prop_value('units'),
+                     'dimensions':vdims}
+        local_var = Var(prop_dict, __api_local__)
+# XXgoldyXX: v debug only
+        print('XXG {}: Adding {}({})'.format(self.name, newvar.get_prop_value('local_name'), vdims))
+# XXgoldyXX: ^ debug only
+        self.add_variable(local_var, exists_ok=True)
+
+
     def analyze(self, phase, suite_vars, scheme_library):
         "Analyze the Group's interface to prepare for writing"
         parent = self.parent
@@ -1188,69 +1239,71 @@ class Group(SuiteObject):
                 self._local_schemes.add(lscheme)
             # End for
         # End for
-        # Add each scheme's variables either to our call list (field
-        # comes from the suite or the host model) or to our internal
-        # dictionary (field is defined in the group subroutine).
-        # Variable dimensions also count since they need a source.
-        for scheme in self.schemes():
-            # Sort the call list to handle scalars first (to capture
-            # dimension loop substitutions before dealing with them as
-            # vector dimensions
-            var_list = scheme.call_list.variable_list()
-            var_list.sort(key=lambda x: len(x.get_dimensions()))
-            has_vdim = scheme.has_vertical_dim
-            for cvar in var_list:
-                cstdname = cvar.get_prop_value('standard_name')
-                cdims = cvar.get_dimensions()
-                if not cdims:
-                    vmatch = VarDictionary.loop_var_match(cstdname)
-                else:
-                    vmatch = None
-                # End if
-                found_var = False
-                # Do we already have this variable?
-                local_var = self.find_variable(cstdname, any_scope=False)
-                if local_var is None:
-                    local_var = self.find_variable(cstdname, any_scope=True)
-                if local_var is not None:
-                    found_var = True
-                elif cvar.get_prop_value('intent') == 'out':
-                    self.add_variable(cvar, exists_ok=True)
-                elif vmatch is not None:
-                    svars = vmatch.has_subst(self, any_scope=True)
-                    if svars is None:
-                        found_var = False
-                    else:
-                        found_var = True
-                        for var in svars:
-                            self.add_call_list_variable(var, exists_ok=True)
-                        # End for
-                        # This variable should now be available in Group
-                        # But as a local variable
-                        lname = cvar.get_prop_value('local_name')
-                        prop_dict = {'standard_name':cstdname,
-                                     'local_name':lname,
-                                     'type':cvar.get_prop_value('type'),
-                                     'kind':cvar.get_prop_value('kind'),
-                                     'units':cvar.get_prop_value('units'),
-                                     'dimensions':cdims}
-                        local_var = Var(prop_dict, __api_local__)
-                        self.add_variable(local_var, exists_ok=True)
-                    # End if
-                else:
-                    found_var = False
-                # End if
-                if not found_var:
-                    intent = cvar.get_prop_value('intent')
-                    lname = cvar.get_prop_value('local_name')
-                    errmsg = ("{grp} / {sch} intent({int}) variable "
-                              "{lnam} has no source")
-                    raise CCPPError(errmsg.format(grp=self.name,
-                                                  sch=scheme.name,
-                                                  int=intent, lnam=cstdname))
-                # End if
-            # End for
-        # End for
+# XXgoldyXX: v debug only
+#        # Add each scheme's variables either to our call list (field
+#        # comes from the suite or the host model) or to our internal
+#        # dictionary (field is defined in the group subroutine).
+#        # Variable dimensions also count since they need a source.
+#        for scheme in self.schemes():
+#            # Sort the call list to handle scalars first (to capture
+#            # dimension loop substitutions before dealing with them as
+#            # vector dimensions
+#            var_list = scheme.call_list.variable_list()
+#            var_list.sort(key=lambda x: len(x.get_dimensions()))
+#            has_vdim = scheme.has_vertical_dim
+#            for cvar in var_list:
+#                cstdname = cvar.get_prop_value('standard_name')
+#                cdims = cvar.get_dimensions()
+#                if not cdims:
+#                    vmatch = VarDictionary.loop_var_match(cstdname)
+#                else:
+#                    vmatch = None
+#                # End if
+#                found_var = False
+#                # Do we already have this variable?
+#                local_var = self.find_variable(cstdname, any_scope=False)
+#                if local_var is None:
+#                    local_var = self.find_variable(cstdname, any_scope=True)
+#                if local_var is not None:
+#                    found_var = True
+#                elif cvar.get_prop_value('intent') == 'out':
+#                    self.add_variable(cvar, exists_ok=True)
+#                elif vmatch is not None:
+#                    svars = vmatch.has_subst(self, any_scope=True)
+#                    if svars is None:
+#                        found_var = False
+#                    else:
+#                        found_var = True
+#                        for var in svars:
+#                            self.add_call_list_variable(var, exists_ok=True)
+#                        # End for
+#                        # This variable should now be available in Group
+#                        # But as a local variable
+#                        lname = cvar.get_prop_value('local_name')
+#                        prop_dict = {'standard_name':cstdname,
+#                                     'local_name':lname,
+#                                     'type':cvar.get_prop_value('type'),
+#                                     'kind':cvar.get_prop_value('kind'),
+#                                     'units':cvar.get_prop_value('units'),
+#                                     'dimensions':cdims}
+#                        local_var = Var(prop_dict, __api_local__)
+#                        self.add_variable(local_var, exists_ok=True)
+#                    # End if
+#                else:
+#                    found_var = False
+#                # End if
+#                if not found_var:
+#                    intent = cvar.get_prop_value('intent')
+#                    lname = cvar.get_prop_value('local_name')
+#                    errmsg = ("{grp} / {sch} intent({int}) variable "
+#                              "{lnam} has no source")
+#                    raise CCPPError(errmsg.format(grp=self.name,
+#                                                  sch=scheme.name,
+#                                                  int=intent, lnam=cstdname))
+#                # End if
+#            # End for
+#        # End for
+# XXgoldyXX: ^ debug only
         self._phase_check_stmts = Suite.check_suite_state(phase)
         self._set_state = Suite.set_suite_state(phase)
 
@@ -1366,7 +1419,7 @@ class Group(SuiteObject):
         # End for
         # Write the scheme and subcycle calls
         for item in self.parts:
-            item.write(outfile, logger, indent+1)
+            item.write(outfile, logger, indent)
         # End for
         # Deallocate suite vars
         if deallocate:
