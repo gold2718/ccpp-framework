@@ -13,6 +13,12 @@
   type = integer
   protected = True
   dimensions = ()
+[ ncol]
+  standard_name = horizontal_loop_extent
+  units = count
+  type = integer
+  protected = True
+  dimensions = ()
 [ pver ]
   standard_name = vertical_layer_dimension
   units = count
