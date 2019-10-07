@@ -555,9 +555,12 @@ class SuiteObject(VarDictionary):
                     # No match, look for a loop match
                     dim = need_dims[nindex]
                     vmatch = VarDictionary.loop_var_match(dim)
-                    if ((need_dims[nindex] == "horizontal_dimension") and
-                        (have_dims[hindex] == "horizontal_loop_extent") and
-                        (self.parent.find_variable("horizontal_loop_extent") is not None)):
+                    hle = "horizontal_loop_extent"
+                    nd_test = "ccpp_constant_one:{}".format(hle)
+                    hd_test = "ccpp_constant_one:horizontal_dimension"
+                    if ((need_dims[nindex] == nd_test) and
+                        (have_dims[hindex] == hd_test) and
+                        (self.parent.find_variable(hle) is not None)):
                         pass # We have the variable
                     elif vmatch is None:
                         match = False
