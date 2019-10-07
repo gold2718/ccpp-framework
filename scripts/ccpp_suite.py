@@ -396,7 +396,7 @@ class SuiteObject(VarDictionary):
                     nlname = newvar.get_prop_value('local_name')
                     plname = pvar.get_prop_value('local_name')
                     raise CCPPError(emsg.format(nlname, newvar.source.name,
-                                                plname, pver.source.name))
+                                                plname, pvar.source.name))
                 # End if
             # End if (no else, variable already in call list)
         else:
