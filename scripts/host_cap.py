@@ -188,7 +188,7 @@ def write_host_cap(host_model, api, output_dir, logger):
             cap.write(subhead.format(api_vars=api_vlist,
                                      host_model=host_model.name,
                                      stage=stage), 1)
-            # Write out any use statements
+            # Write out any suite part use statements
             for suite in api.suites:
                 mspc = (max_suite_len - len(suite.module))*' '
                 spart_list = suite_part_list(suite, stage)
@@ -197,6 +197,10 @@ def write_host_cap(host_model, api, output_dir, logger):
                     cap.write(stmt.format(suite.module, mspc, spart.name), 2)
                 # End for
             # End for
+            # Write out any host model DDT input var use statements
+            host_model._ddt_lib.write_ddt_use_statements(hdvars, cap, 2, 
+                                                         pad=max_suite_len)
+
             cap.write("", 1)
             # Write out dummy arguments
             for var in apivars:
