@@ -1256,12 +1256,6 @@ class VarSpec(object):
 
 __ccpp_parse_context__ = ParseContext(filename='metavar.py')
 
-__ccpp_registry_parse_source__ = ParseSource('VarDictionary', 'module',
-                                             __ccpp_parse_context__)
-
-__ccpp_scheme_parse_source__ = ParseSource('VarDictionary', 'scheme',
-                                           __ccpp_parse_context__)
-
 ###############################################################################
 
 def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
@@ -1269,10 +1263,10 @@ def ccpp_standard_var(std_name, source_type, context=None, intent='out'):
         # Copy the dictionary because Var can change it
         vdict = dict(CCPP_STANDARD_VARS[std_name])
         if context is None:
-            psource = ParseSource('VarDictionary', source_type,
+            psource = ParseSource('ccpp_standard_vars', source_type,
                                   __ccpp_parse_context__)
         else:
-            psource = ParseSource('VarDictionary', source_type, context)
+            psource = ParseSource('ccpp_standard_vars', source_type, context)
         # End if
         if source_type.lower() == 'scheme':
             vdict['intent'] = intent

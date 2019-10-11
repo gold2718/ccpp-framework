@@ -392,7 +392,11 @@ class SuiteObject(VarDictionary):
                 else:
                     emsg = 'Attempt to add incompatible variable to call list:'
                     emsg += '\n{} from {} is not compatible with {} from {}'
-                    emsg += '\n{}'.format(reason)
+                    nlreason = newvar.get_prop_value(reason)
+                    plreason = pvar.get_prop_value(reason)
+                    emsg += '\nreason = {} ({} != {})'.format(reason,
+                                                              nlreason,
+                                                              plreason)
                     nlname = newvar.get_prop_value('local_name')
                     plname = pvar.get_prop_value('local_name')
                     raise CCPPError(emsg.format(nlname, newvar.source.name,
