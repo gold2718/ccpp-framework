@@ -92,7 +92,7 @@ def suite_part_call_list(host_model, suite_part, subst_loop_vars):
         hvar = host_model.find_variable(stdname)
         if hvar is None:
             errmsg = 'No host model variable for {} in {}'
-            raise CCPPError(errmsg.format(stdname, spart.name))
+            raise CCPPError(errmsg.format(stdname, suite_part.name))
         # End if
         if stdname not in CCPP_CONSTANT_VARS:
             if subst_loop_vars:
@@ -198,7 +198,7 @@ def write_host_cap(host_model, api, output_dir, logger):
                 # End for
             # End for
             # Write out any host model DDT input var use statements
-            host_model._ddt_lib.write_ddt_use_statements(hdvars, cap, 2, 
+            host_model._ddt_lib.write_ddt_use_statements(hdvars, cap, 2,
                                                          pad=max_suite_len)
 
             cap.write("", 1)

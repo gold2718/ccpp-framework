@@ -949,7 +949,15 @@ class Var(object):
         """
         if loop_vars is None:
             call_str = self.get_prop_value('local_name')
-            dims = None
+            # Look for dims in case this is an array selection variable
+            dind = call_str.find('(')
+            if dind > 0:
+                dimstr = call_str[dind+1:].rstrip()[:-1]
+                dims = [x.strip() for x in dimstr.split(',')]
+                call_str = call_str[:dind].strip()
+            else:
+                dims = None
+            # End if
         else:
             call_str, dims = self.handle_array_ref()
         # End if
@@ -957,17 +965,24 @@ class Var(object):
             call_str = call_str + '('
             dsep = ''
             for dim in dims:
-                lname = loop_vars.find_loop_dim_match(dim)
+                if loop_vars:
+                    lname = loop_vars.find_loop_dim_match(dim)
+                else:
+                    lname = None
                 # End if
                 if lname is None:
                     isep = ''
                     lname = ""
                     for item in dim.split(':'):
-                        dvar = var_dict.find_variable(item, any_scope=False)
-                        if dvar is None:
-                            iname = None
+                        if item:
+                            dvar = var_dict.find_variable(item, any_scope=False)
+                            if dvar is None:
+                                iname = None
+                            else:
+                                iname = dvar.get_prop_value('local_name')
+                            # End if
                         else:
-                            iname = dvar.get_prop_value('local_name')
+                            iname = ''
                         # End if
                         if iname is None:
                             errmsg = 'No local variable {} in {}{}'
