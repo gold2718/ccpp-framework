@@ -39,16 +39,24 @@ def call_command(commands, logger, silent=False):
     True
     """
     result = False
+    outstr = ''
     try:
-        outstr = subprocess.check_output(commands, stderr=subprocess.STDOUT)
+        if PY3:
+            cproc = subprocess.run(commands, check=True, capture_output=True,
+                                   stderr=subprocess.STDOUT)
+            logger.debug(cproc.stdout)
+        else:
+            cproc = subprocess.check_call(commands, stderr=subprocess.STDOUT)
+        # End if
         result = True
     except (OSError, CCPPError, subprocess.CalledProcessError) as err:
         if silent:
             result = False
         else:
             cmd = ' '.join(commands)
-            outstr = "Execution of '{}' failed:\n".format(cmd)
-            outstr = outstr + "{}".format(err)
+            emsg = "Execution of '{}' failed with code:\n"
+            outstr = emsg.format(cmd, err.returncode)
+            outstr += "{}".format(err.output)
             raise CCPPError(outstr)
         # End if
     # End of try
