@@ -75,7 +75,7 @@ Filenames with a '.xml' suffix are treated as suite definition XML files
 Other filenames are treated as containing a list of .xml filenames""")
 
     parser.add_argument("--preproc-directives",
-                        metavar='VARDEF1[,VARDEF2 ...]', type=str, default=None,
+                        metavar='VARDEF1[,VARDEF2 ...]', type=str, default='',
                         help="Proprocessor directives used to correctly parse source files")
 
     parser.add_argument("--cap-pathlist", type=str,
@@ -498,7 +498,7 @@ def parse_host_model_files(host_filenames, preproc_defs, host_name, logger):
         mheaders = MetadataTable.parse_metadata_file(filename, known_ddts,
                                                      logger)
         fort_file = find_associated_fortran_file(filename)
-        fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs,
+        fheaders = parse_fortran_file(fort_file, preproc_defs=preproc_defs,
                                       logger=logger)
         # Check Fortran against metadata (will raise an exception on error)
         hdr_dict = check_fortran_against_metadata(mheaders, fheaders,
@@ -547,7 +547,7 @@ def parse_scheme_files(scheme_filenames, preproc_defs, logger):
         mheaders = MetadataTable.parse_metadata_file(filename, known_ddts,
                                                      logger)
         fort_file = find_associated_fortran_file(filename)
-        fheaders = parse_fortran_file(fort_file, preproc_defs==preproc_defs,
+        fheaders = parse_fortran_file(fort_file, preproc_defs=preproc_defs,
                                       logger=logger)
         # Check Fortran against metadata (will raise an exception on error)
         hdr_dict = check_fortran_against_metadata(mheaders, fheaders,
