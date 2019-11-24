@@ -23,6 +23,7 @@ from parse_source import CCPPError
 
 # Find python version
 PY3 = sys.version_info[0] > 2
+PYSUBVER = sys.version_info[1]
 
 ###############################################################################
 def call_command(commands, logger, silent=False):
@@ -42,9 +43,19 @@ def call_command(commands, logger, silent=False):
     outstr = ''
     try:
         if PY3:
-            cproc = subprocess.run(commands, check=True, capture_output=True,
-                                   stderr=subprocess.STDOUT)
-            logger.debug(cproc.stdout)
+            if PYSUBVER > 6:
+                cproc = subprocess.run(commands, check=True,
+                                       capture_output=True,
+                                       stderr=subprocess.STDOUT)
+                logger.debug(cproc.stdout)
+            elif PYSUBVER >= 5:
+                cproc = subprocess.run(commands, check=True,
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE)
+                logger.debug(cproc.stdout)
+            else:
+                raise ValueError("Python 3 must be at least version 3.5")
+            # End if
         else:
             cproc = subprocess.check_call(commands, stderr=subprocess.STDOUT)
         # End if
