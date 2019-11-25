@@ -1790,7 +1790,7 @@ end module {module}
         # We do not have line number information for the XML file
         self._context = ParseContext(filename=self._sdf_name)
         # Validate the XML file
-        version = find_schema_version(suite_xml, self._logger)
+        version = find_schema_version(suite_xml)
         res = validate_xml_file(self._sdf_name, 'suite', version, self._logger)
         if not res:
             raise CCPPError("Invalid suite definition file, '{}'".format(self._sdf_name))
