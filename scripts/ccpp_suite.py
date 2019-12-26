@@ -1793,7 +1793,8 @@ end module {module}
         version = find_schema_version(suite_xml)
         res = validate_xml_file(self._sdf_name, 'suite', version, self._logger)
         if not res:
-            raise CCPPError("Invalid suite definition file, '{}'".format(self._sdf_name))
+            emsg = "Invalid suite definition file, '{}'"
+            raise CCPPError(emsg.format(self._sdf_name))
         # End if
         self._name = suite_xml.get('name')
         self._module = 'ccpp_{}_cap'.format(self.name)
@@ -1824,7 +1825,8 @@ end module {module}
             else:
                 match_trans = CCPP_STATE_MACH.function_match(item_type)
                 if match_trans is None:
-                    raise CCPPError("Unknown CCPP suite component tag type, '{}'".format(item_type))
+                    emsg = "Unknown CCPP suite component tag type, '{}'"
+                    raise CCPPError(emsg.format(item_type))
                 elif match_trans in self._full_phases:
                     # Parse a suite-wide initialization scheme
                     scheme = Scheme(suite_item, self._context,

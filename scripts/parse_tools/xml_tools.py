@@ -12,6 +12,7 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 sys.path.insert(0, os.path.dirname(__file__))
+# pylint: disable=wrong-import-position
 try:
     from distutils.spawn import find_executable
     _XMLLINT = find_executable('xmllint')
@@ -19,7 +20,6 @@ except ImportError:
     _XMLLINT = None
 # End try
 # CCPP framework imports
-# pylint: disable=wrong-import-position
 from parse_source import CCPPError
 from parse_log import init_log, set_log_to_null
 # pylint: enable=wrong-import-position
@@ -142,6 +142,26 @@ def find_schema_version(root):
     return verbits
 
 ###############################################################################
+def find_schema_file(schema_root, version, schema_path=None):
+###############################################################################
+    """Find and return the schema file based on <schema_root> and <version>
+    or return None.
+    If <schema_path> is present, use that as the directory to find the
+    appropriate schema file. Otherwise, just look in the current directory."""
+
+    verstring = '_'.join([str(x) for x in version])
+    schema_filename = "{}_v{}.xsd".format(schema_root, verstring)
+    if schema_path:
+        schema_file = os.path.join(schema_path, schema_filename)
+    else:
+        schema_file = schema_filename
+    # End if
+    if os.path.exists(schema_file):
+        return schema_file
+    # End if
+    return None
+
+###############################################################################
 def validate_xml_file(filename, schema_root, version, logger,
                       schema_path=None, error_on_noxmllint=False):
 ###############################################################################
@@ -162,10 +182,8 @@ def validate_xml_file(filename, schema_root, version, logger,
         pdir = os.path.dirname(os.path.dirname(os.path.dirname(thispath)))
         schema_path = os.path.join(pdir, 'schema')
     # End if
-    verstring = '_'.join([str(x) for x in version])
-    schema_file = os.path.join(schema_path,
-                               "{}_v{}.xsd".format(schema_root, verstring))
-    if not os.path.isfile(schema_file):
+    schema_file = find_schema_file(schema_root, version, schema_path)
+    if not (schema_file and os.path.isfile(schema_file)):
         verstring = '.'.join([str(x) for x in version])
         emsg = """validate_xml_file: Cannot find schema for version {},
         {} does not exist"""

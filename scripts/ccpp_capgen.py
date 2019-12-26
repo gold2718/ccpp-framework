@@ -578,6 +578,70 @@ def parse_scheme_files(scheme_filenames, preproc_defs, logger):
     return meta_headers
 
 ###############################################################################
+def clean_capgen(cap_output_file, logger):
+###############################################################################
+    log_level = logger.getEffectiveLevel()
+    set_log_level(logger, logging.INFO)
+    if os.path.exists(cap_output_file):
+        logger.info("Cleaning capgen files from {}".format(cap_output_file))
+        delete_pathnames_from_file(cap_output_file, logger)
+    else:
+        emsg = "Unable to run clean, {} not found"
+        logger.error(emsg.format(cap_output_file))
+    # End if
+    set_log_level(log_level)
+
+###############################################################################
+def capgen(host_files, scheme_files, suites, cap_output_file, preproc_defs,
+           gen_hostcap, gen_docfiles, output_dir, host_name, kind_phys, logger):
+###############################################################################
+    """Parse indicated host, scheme, and suite files.
+    Generate code to allow host model to run indicated CCPP suites."""
+    # We need to create three lists of files, hosts, schemes, and SDFs
+    host_files = create_file_list(host_files, ['meta'], 'Host', logger)
+    scheme_files = create_file_list(scheme_files, ['meta'], 'Scheme', logger)
+    sdfs = create_file_list(suites, ['xml'], 'Suite', logger)
+    check_for_writeable_file(cap_output_file, "Cap output file")
+    ##XXgoldyXX: Temporary warning
+    if gen_docfiles:
+        raise CCPPError("--generate-docfiles not yet supported")
+    # End if
+    # First up, handle the host files
+    host_model = parse_host_model_files(host_files, preproc_defs,
+                                        host_name, logger)
+    # Next, parse the scheme files
+    scheme_headers = parse_scheme_files(scheme_files, preproc_defs, logger)
+    ddts = host_model._ddt_lib.keys()
+    if ddts:
+        logger.debug("DDT definitions = {}".format(ddts))
+    # End if
+    plist = host_model.prop_list('local_name')
+    logger.debug("{} variables = {}".format(host_model.name, plist))
+    logger.debug("schemes = {}".format([x.title for x in scheme_headers]))
+    # Finally, we can get on with writing suites
+    ccpp_api = API(sdfs, host_model, scheme_headers, logger)
+    cap_filenames = ccpp_api.write(output_dir, logger)
+    if gen_hostcap:
+        # Create a cap file
+        hcap_filename = write_host_cap(host_model, ccpp_api,
+                                       output_dir, logger)
+    else:
+        hcap_filename = None
+    # End if
+    # Create the kinds file
+    kinds_file = create_kinds_file(kind_phys, output_dir, logger)
+    # Finally, create the list of generated files
+    with open(cap_output_file, 'w') as cap_names:
+        for path in cap_filenames:
+            cap_names.write('{}\n'.format(path))
+        # End for
+        if hcap_filename is not None:
+            cap_names.write('{}\n'.format(hcap_filename))
+        # End if
+        cap_names.write('{}\n'.format(kinds_file))
+    # End with
+
+###############################################################################
 def _main_func():
 ###############################################################################
     """Parse command line, then parse indicated host, scheme, and suite files.
@@ -597,82 +661,32 @@ def _main_func():
         cap_output_file = os.path.abspath(os.path.join(output_dir,
                                                        args.cap_pathlist))
     # End if
+    ## A few sanity checks
+    ## Make sure output directory is legit
+    if os.path.exists(output_dir):
+        if not os.path.isdir(output_dir):
+            errmsg = "output-root, '{}', is not a directory"
+            raise CCPPError(errmsg.format(args.output_root))
+        elif not os.access(output_dir, os.W_OK):
+            errmsg = "Cannot write files to output-root ({})"
+            raise CCPPError(errmsg.format(args.output_root))
+        # End if (output_dir is okay)
+    else:
+        # Try to create output_dir (let it crash if it fails)
+        os.makedirs(output_dir)
+    # End if
     # Make sure we can create output file lists
     if not os.path.isabs(cap_output_file):
         cap_output_file = os.path.normpath(os.path.join(output_dir,
                                                         cap_output_file))
     # End if
     if args.clean:
-        set_log_level(logger, logging.INFO)
-        if os.path.exists(cap_output_file):
-            logger.info("Cleaning capgen files from {}".format(cap_output_file))
-            delete_pathnames_from_file(cap_output_file, logger)
-        else:
-            emsg = "Unable to run clean, {} not found"
-            logger.error(emsg.format(cap_output_file))
-        # End if
+        clean_capgen(cap_output_file, logger)
     else:
-        # We need to create three lists of files, hosts, schemes, and SDFs
-        host_files = create_file_list(args.host_files, ['meta'], 'Host', logger)
-        scheme_files = create_file_list(args.scheme_files, ['meta'],
-                                        'Scheme', logger)
-        sdfs = create_file_list(args.suites, ['xml'], 'Suite', logger)
-        preproc_defs = args.preproc_directives
-        gen_hostcap = args.generate_host_cap
-        gen_docfiles = args.generate_docfiles
-        ## A few sanity checks
-        ## Make sure output directory is legit
-        if os.path.exists(output_dir):
-            if not os.path.isdir(output_dir):
-                errmsg = "output-root, '{}', is not a directory"
-                raise CCPPError(errmsg.format(args.output_root))
-            elif not os.access(output_dir, os.W_OK):
-                errmsg = "Cannot write files to output-root ({})"
-                raise CCPPError(errmsg.format(args.output_root))
-            # End if (output_dir is okay)
-        else:
-            # Try to create output_dir (let it crash if it fails)
-            os.makedirs(output_dir)
-        # End if
-        check_for_writeable_file(cap_output_file, "Cap output file")
-        ##XXgoldyXX: Temporary warning
-        if gen_docfiles:
-            raise CCPPError("--gen-docfiles not yet supported")
-        # End if
-        # First up, handle the host files
-        host_model = parse_host_model_files(host_files, preproc_defs,
-                                            args.host_name, logger)
-        # Next, parse the scheme files
-        scheme_headers = parse_scheme_files(scheme_files, preproc_defs, logger)
-        ddts = host_model._ddt_lib.keys()
-        if ddts:
-            logger.debug("DDT definitions = {}".format(ddts))
-        # End if
-        plist = host_model.prop_list('local_name')
-        logger.debug("{} variables = {}".format(host_model.name, plist))
-        logger.debug("schemes = {}".format([x.title for x in scheme_headers]))
-        # Finally, we can get on with writing suites
-        ccpp_api = API(sdfs, host_model, scheme_headers, logger)
-        cap_filenames = ccpp_api.write(output_dir, logger)
-        if gen_hostcap:
-            # Create a cap file
-            hcap_filename = write_host_cap(host_model, ccpp_api,
-                                           output_dir, logger)
-        else:
-            hcap_filename = None
-        # End if
-        # Create the kinds file
-        kinds_file = create_kinds_file(args.kind_phys, output_dir, logger)
-        # Finally, create the list of generated files
-        with open(cap_output_file, 'w') as cap_names:
-            for path in cap_filenames:
-                cap_names.write('{}\n'.format(path))
-            # End for
-            if hcap_filename is not None:
-                cap_names.write('{}\n'.format(hcap_filename))
-            # End if
-            cap_names.write('{}\n'.format(kinds_file))
-        # End with
+        capgen(args.host_files, args.scheme_files, args.suites, cap_output_file,
+               args.preproc_directives, args.generate_host_cap,
+               args.generate_docfiles, output_dir, args.host_name,
+               args.kind_phys, logger)
     # End if (clean)
 
 ###############################################################################

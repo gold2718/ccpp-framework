@@ -248,14 +248,15 @@ class MetadataTable(ParseSource):
         # End for
 
     def __init_from_file__(self, known_ddts, logger):
-        # Read the table preamble, assume the caller already figured out
-        #  the first line of the header using the table_start method.
+        """ Read the table preamble, assume the caller already figured out
+        the first line of the header using the table_start method."""
         curr_line, curr_line_num = self._pobj.next_line()
         self._table_title = None
         self._header_type = None
         self._module_name = None
         while (curr_line is not None) and (not self.variable_start(curr_line)) and (not MetadataTable.table_start(curr_line)):
-            for property in self.parse_config_line(curr_line):
+            for property in MetadataTable.parse_config_line(curr_line,
+                                                            self._pobj):
                 # Manually parse name, type, and module properties
                 key = property[0].strip().lower()
                 value = property[1].strip()
@@ -316,28 +317,6 @@ class MetadataTable(ParseSource):
             # End if
         # End while
 
-    def parse_config_line(self, line):
-        "Parse a config line and return a list of keyword value pairs."
-        parse_items = list()
-        if line is None:
-            pass # No properties on this line
-        elif MetadataTable.is_blank(line):
-            pass # No properties on this line
-        else:
-            properties = line.strip().split('|')
-            for property in properties:
-                pitems = property.split('=', 1)
-                if len(pitems) < 2:
-                    raise ParseSyntaxError("variable property syntax",
-                                           token=property,
-                                           context=self._pobj)
-                else:
-                    parse_items.append(pitems)
-                # End if
-            # End for
-        # End if
-        return parse_items
-
     def parse_variable(self, curr_line, known_ddts):
         # The header line has the format [ <valid_fortran_symbol> ]
         # Parse header
@@ -369,7 +348,8 @@ class MetadataTable(ParseSource):
                           (self.variable_start(curr_line) is None))
             # A valid line may have multiple properties (separated by '|')
             if valid_line:
-                properties = self.parse_config_line(curr_line)
+                properties = MetadataTable.parse_config_line(curr_line,
+                                                             self._pobj)
                 for property in properties:
                     try:
                         pname = property[0].strip().lower()
@@ -434,6 +414,29 @@ class MetadataTable(ParseSource):
                 raise ParseSyntaxError(ve, context=self._pobj)
             return newvar, curr_line
         # End if
+
+    @classmethod
+    def parse_config_line(cls, line, context):
+        """Parse a config line and return a list of keyword value pairs."""
+        parse_items = list()
+        if line is None:
+            pass # No properties on this line
+        elif MetadataTable.is_blank(line):
+            pass # No properties on this line
+        else:
+            properties = line.strip().split('|')
+            for property in properties:
+                pitems = property.split('=', 1)
+                if len(pitems) < 2:
+                    raise ParseSyntaxError("variable property syntax",
+                                           token=property,
+                                           context=context)
+                else:
+                    parse_items.append(pitems)
+                # End if
+            # End for
+        # End if
+        return parse_items
 
     @classmethod
     def check_array_reference(cls, local_name, var_dict, context):
@@ -503,13 +506,13 @@ class MetadataTable(ParseSource):
         # End if
 
     def variable_list(self, std_vars=True, loop_vars=True, consts=True):
-        "Return an ordered list of the header's variables"
+        """Return an ordered list of the header's variables"""
         return self._variables.variable_list(recursive=False,
                                              std_vars=std_vars,
                                              loop_vars=loop_vars, consts=consts)
 
     def find_variable(self, std_name, use_local_name=False):
-        "Find a variable in this header's dictionary"
+        """Find a variable in this header's dictionary"""
         var = None
         if use_local_name:
             var = self._variables.find_local_name(std_name)
@@ -587,7 +590,7 @@ class MetadataTable(ParseSource):
         return std_dims
 
     def prop_list(self, prop_name):
-        "Return list of <prop_name> values for this scheme's arguments"
+        """Return list of <prop_name> values for this scheme's arguments"""
         return self._variables.prop_list(prop_name)
 
     def variable_start(self, line):
@@ -680,12 +683,13 @@ class MetadataTable(ParseSource):
 
     @property
     def has_variables(self):
-        "Convenience function for finding empty headers"
+        """Convenience function for finding empty headers"""
         return self._variables
 
     @classmethod
     def is_blank(cls, line):
-        "Return True iff <line> is a valid config format blank or comment line"
+        """Return True iff <line> is a valid config format blank or comment
+        line"""
         return (len(line) == 0) or (cls.__blank_line__.match(line) is not None)
 
     @classmethod
@@ -705,7 +709,7 @@ class MetadataTable(ParseSource):
 
     @classmethod
     def parse_metadata_file(cls, filename, known_ddts, logger):
-        "Parse <filename> and return list of parsed metadata headers"
+        """Parse <filename> and return list of parsed metadata headers"""
         # Read all lines of the file at once
         meta_headers = list()
         header_titles = list() # Keep track of names in file
@@ -740,6 +744,48 @@ class MetadataTable(ParseSource):
             # End if
         # End while
         return meta_headers
+
+    @classmethod
+    def find_scheme_names(cls, filename):
+        """Find and return a list of all the physics scheme names in
+        <filename>. A scheme is identified by its run method name.
+        """
+        scheme_names = list()
+        with open(filename, 'r') as file:
+            fin_lines = file.readlines()
+        # End with
+        num_lines = len(fin_lines)
+        context = ParseContext(linenum=1, filename=filename)
+        while context.line_num <= num_lines:
+            if MetadataTable.table_start(fin_lines[context.line_num - 1]):
+                found_start = False
+                while not found_start:
+                    line = fin_lines[context.line_num].strip()
+                    context.line_num += 1
+                    if line and (line[0] == '['):
+                        found_start = True
+                    elif line:
+                        props = MetadataTable.parse_config_line(line, context)
+                        for property in props:
+                            # Look for name property
+                            key = property[0].strip().lower()
+                            value = property[1].strip()
+                            if key == 'name':
+                                if value[-4:] == '_run':
+                                    scheme_names.append(value[0:-4])
+                                # End if
+                            # End if
+                        # End for
+                    # End if
+                    if context.line_num > num_lines:
+                        found_start = True
+                    # End if
+                # End while
+            else:
+                context.line_num += 1
+            # End if
+        # End while
+        return scheme_names
 
 ########################################################################
 
