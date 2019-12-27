@@ -60,7 +60,7 @@ Filenames with a '.txt' suffix are treated as containing a list of .meta
 filenames""")
 
     parser.add_argument("--preproc-directives",
-                        metavar='VARDEF1[,VARDEF2 ...]', type=str, default=None,
+                        metavar='VARDEF1[,VARDEF2 ...]', type=str, default='',
                         help="Proprocessor directives used to correctly parse source files")
 
     parser.add_argument("--output-root", type=str,
@@ -88,7 +88,7 @@ def parse_fortran_files(filenames, preproc_defs, output_dir, sep, logger):
     for filename in filenames:
         logger.info('Looking for arg_tables from {}'.format(filename))
         reset_standard_name_counter()
-        fheaders = parse_fortran_file(filename, preproc_defs==preproc_defs,
+        fheaders = parse_fortran_file(filename, preproc_defs=preproc_defs,
                                       logger=logger)
         # Create metadata filename
         filepath = '.'.join(os.path.basename(filename).split('.')[0:-1])
