@@ -162,6 +162,36 @@ class CallList(VarDictionary):
         # End for
         return arg_str
 
+    def add_variable(self, newvar, exists_ok=False, gen_unique=False,
+                     objdict=None):
+        """Add <newvar> to our dictionary (using the standard VarDictionary
+        method).
+        Then, attempt to add <newvar>'s dimensions as well. Note, that for
+        this to succeed, the variable has to exist in <objdict>'s
+        parent call tree.
+        Raise an error if <objdict> is present but a dimension cannot
+           be found"""
+        # Add variable
+        super(CallList, self).add_variable(newvar, exists_ok=exists_ok,
+                                           gen_unique=gen_unique)
+        # Attempt to add dimensions
+        if objdict:
+            vdims = newvar.get_dim_stdnames(include_constants=False)
+            for dimname in vdims:
+                present = self.find_variable(dimname, any_scope=False)
+                if not present:
+                    dvar = objdict.find_variable(dimname, any_scope=True)
+                    if dvar:
+                        self.add_variable(dvar)
+                    else:
+                        emsg = "Cannot find variable for dimension, {} of {}"
+                        vstdname = newvar.get_prop_value('standard_name')
+                        raise CCPPError(emsg.format(dimname, vstdname))
+                    # End if
+                # End if
+            # End for
+        # End for
+
 ###############################################################################
 
 class SuiteObject(VarDictionary):
@@ -373,7 +403,8 @@ class SuiteObject(VarDictionary):
                 raise CCPPError(errmsg.format(stdname, self.phase()))
             else:
                 self.call_list.add_variable(newvar, exists_ok=exists_ok,
-                                            gen_unique=gen_unique)
+                                            gen_unique=gen_unique,
+                                            objdict=self)
             # End if
         elif self.parent is None:
             errmsg = 'No call_list found for {}'.format(newvar)
@@ -386,7 +417,9 @@ class SuiteObject(VarDictionary):
                     # Check for call list intent incompatibility
                     vintent = newvar.get_prop_value('intent')
                     pintent = pvar.get_prop_value('intent')
-                    if (pintent == 'in') and (vintent == 'inout'):
+                    if (pintent == 'in') and (vintent in ['inout', 'out']):
+                        pvar.adjust_intent('inout')
+                    elif (pintent == 'out') and (vintent in ['inout', 'in']):
                         pvar.adjust_intent('inout')
                     # No else, variables are compatible
                 else:
@@ -741,6 +774,10 @@ class SuiteObject(VarDictionary):
         self_match_vartypes = [__api_local_var_name__, __api_suite_var_name__]
         # Does this variable exist in the calling tree?
         dict_var = self.find_variable(vstdname, any_scope=True)
+# XXgoldyXX: v debug only
+        if vstdname == 'precipitation':
+            print('h: {}, v: {}, dv: {}'.format(var_hdim, var_vdim, dict_var))
+# XXgoldyXX: ^ debug only
         if dict_var is None:
             found_var = self.parent.add_variable_to_call_tree(dict_var,
                                                               vmatch=vmatch)
