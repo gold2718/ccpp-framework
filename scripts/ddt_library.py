@@ -49,6 +49,11 @@ class VarDDT(Var):
         '''Return True iff <self> is a DDT type.'''
         return True
 
+    def get_parent_prop(self, name):
+        """Return the Var property value for the parent Var object.
+        """
+        return super(VarDDT, self).get_prop_value(name)
+
     def get_prop_value(self, name):
         """Return the Var property value for the leaf Var object.
         """

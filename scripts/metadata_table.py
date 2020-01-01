@@ -179,15 +179,15 @@ class MetadataTable(ParseSource):
     'hi_mom'
 """
 
-    __header_start__ = re.compile(r"(?i)\s*\[\s*ccpp-arg-table\s*\]")
+    __header_start = re.compile(r"(?i)\s*\[\s*ccpp-arg-table\s*\]")
 
-    __var_start__ = re.compile(r"^\[\s*"+FORTRAN_ID+r"\s*\]$")
+    __var_start = re.compile(r"^\[\s*"+FORTRAN_ID+r"\s*\]$")
 
-    __vref_start__ = re.compile(r"^\[\s*"+FORTRAN_SCALAR_REF+r"\s*\]$")
+    __vref_start = re.compile(r"^\[\s*"+FORTRAN_SCALAR_REF+r"\s*\]$")
 
-    __blank_line__ = re.compile(r"\s*[#;]")
+    __blank_line = re.compile(r"\s*[#;]")
 
-    __header_types__ = ['ddt', 'host', 'module', 'scheme', 'local']
+    __header_types = ['ddt', 'host', 'module', 'scheme', 'local']
 
     def __init__(self, parse_object=None,
                  title=None, type_in=None, module=None, var_dict=None,
@@ -207,7 +207,7 @@ class MetadataTable(ParseSource):
             # End if
             if type_in is None:
                 raise ParseInternalError('MetadataTable requires a header type')
-            elif type_in not in MetadataTable.__header_types__:
+            elif type_in not in MetadataTable.__header_types:
                 raise ParseSyntaxError("metadata table type",
                                        token=type_in,
                                        context=self._pobj)
@@ -263,7 +263,7 @@ class MetadataTable(ParseSource):
                 if key == 'name':
                     self._table_title = value
                 elif key == 'type':
-                    if value not in MetadataTable.__header_types__:
+                    if value not in MetadataTable.__header_types:
                         raise ParseSyntaxError("metadata table type",
                                                token=value,
                                                context=self._pobj)
@@ -410,8 +410,8 @@ class MetadataTable(ParseSource):
             # End if (else just leave the local name alone)
             try:
                 newvar = Var(var_props, source=self, context=context)
-            except CCPPError as ve:
-                raise ParseSyntaxError(ve, context=self._pobj)
+            except CCPPError as verr:
+                raise ParseSyntaxError(verr, context=self._pobj)
             return newvar, curr_line
         # End if
 
@@ -599,9 +599,9 @@ class MetadataTable(ParseSource):
         if line is None:
             match = None
         else:
-            match = MetadataTable.__var_start__.match(line)
+            match = MetadataTable.__var_start.match(line)
             if match is None:
-                match = MetadataTable.__vref_start__.match(line)
+                match = MetadataTable.__vref_start.match(line)
                 if match is not None:
                     name = match.group(1)+'('+match.group(2)+')'
                 # End if
@@ -690,7 +690,7 @@ class MetadataTable(ParseSource):
     def is_blank(cls, line):
         """Return True iff <line> is a valid config format blank or comment
         line"""
-        return (len(line) == 0) or (cls.__blank_line__.match(line) is not None)
+        return (len(line) == 0) or (cls.__blank_line.match(line) is not None)
 
     @classmethod
     def table_start(cls, line):
@@ -699,7 +699,7 @@ class MetadataTable(ParseSource):
         if (line is None) or cls.is_blank(line):
             match = None
         else:
-            match = MetadataTable.__header_start__.match(line)
+            match = MetadataTable.__header_start.match(line)
         # End if
         return match is not None
 

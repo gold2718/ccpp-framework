@@ -108,6 +108,7 @@ def suite_part_call_list(host_model, suite_part, subst_loop_vars):
 ###############################################################################
 def write_host_cap(host_model, api, output_dir, logger):
 ###############################################################################
+    """Write an API to allow <host_model> to call any configured CCPP suite"""
     module_name = "{}_ccpp_cap".format(host_model.name)
     cap_filename = os.path.join(output_dir, '{}.F90'.format(module_name))
     if logger is not None:
@@ -198,8 +199,8 @@ def write_host_cap(host_model, api, output_dir, logger):
                 # End for
             # End for
             # Write out any host model DDT input var use statements
-            host_model._ddt_lib.write_ddt_use_statements(hdvars, cap, 2,
-                                                         pad=max_suite_len)
+            host_model.ddt_lib.write_ddt_use_statements(hdvars, cap, 2,
+                                                        pad=max_suite_len)
 
             cap.write("", 1)
             # Write out dummy arguments

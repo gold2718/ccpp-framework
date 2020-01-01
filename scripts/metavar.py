@@ -1746,11 +1746,11 @@ class VarDictionary(OrderedDict):
         std_vars are variables which are neither constants nor loop variables.
         '''
         plist = list()
-        for standard_name in self.keys():
-            var = self.find_variable(standard_name, any_scope=False)
+        for var in self.values():
+            standard_name = var.get_prop_value('standard_name')
             if self.include_var_in_list(var, std_vars=std_vars,
                                         loop_vars=loop_vars, consts=consts):
-                plist.append(self[standard_name].get_prop_value(prop_name))
+                plist.append(var.get_prop_value(prop_name))
             # End if
         # End for
         return plist

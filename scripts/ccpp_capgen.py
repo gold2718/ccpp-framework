@@ -611,7 +611,7 @@ def capgen(host_files, scheme_files, suites, cap_output_file, preproc_defs,
                                         host_name, logger)
     # Next, parse the scheme files
     scheme_headers = parse_scheme_files(scheme_files, preproc_defs, logger)
-    ddts = host_model._ddt_lib.keys()
+    ddts = host_model.ddt_lib.keys()
     if ddts:
         logger.debug("DDT definitions = {}".format(ddts))
     # End if
