@@ -1,14 +1,16 @@
 <standard_names name="CCPP Standard Name Library" version="1.0">
   <section name="dimensions"
            comment="Dimension standard names come in sets of six
-                    related standard names for each dimension:
-                    [dim_name]_dimension -- The full dimension size
-                    [dim_name]_loop_extent -- Size of dim for current call
-                    [dim_name]_begin - Start index for dimension
-                    [dim_name]_end - End index for dimension
-                    [dim_name]_index - Single index for dimension
-                    [dim_name]_selection - Array of selected indices
-                    for dimension
+                    related standard names for each dimension:\n
+                    ```\n
+                    [dim_name]_dimension -- The full dimension size\n
+                    [dim_name]_loop_extent -- Size of dim for current call\n
+                    [dim_name]_begin - Start index for dimension\n
+                    [dim_name]_end - End index for dimension\n
+                    [dim_name]_index - Single index for dimension\n
+                    [dim_name]_selection - Array of selected indices for
+                     dimension\n
+                    ```\n
                     Note that the cap generator may substitute among
                     standard names in this category in order to
                     properly call suite parts and individual
@@ -16,23 +18,40 @@
                     the left is the standard_name in the dimensions
                     field of the caller while the name(s) on the right
                     is (are) the standard name(s) of the callee (in
-                    the form used in the subroutine call).
-                    [dim_name]_dimension ==> 1:[dim_name]_loop_extent
-                    [dim_name]_loop_extent ==> 1:[dim_name]_loop_extent
-                    [dim_name]_begin:[dim_name]_end ==> 1:[dim_name]_loop_extent
-                    [dim_name]_begin:[dim_name]_end ==> 1:[dim_name]_dimension
-                    Below are the currently recognized dimension types">
+                    the form used in the subroutine call).\n
+                    ```\n
+                    [dim_name]_dimension ==> 1:[dim_name]_loop_extent\n
+                    [dim_name]_loop_extent ==> 1:[dim_name]_loop_extent\n
+                    [dim_name]_begin:[dim_name]_end ==> 1:[dim_name]_loop_extent\n
+                    [dim_name]_begin:[dim_name]_end ==> 1:[dim_name]_dimension\n
+                    ```\n
+                    Also note that horizontal_dimension should be used in
+                    xxx_[timestep_]init and xxx_[timestep_]final routines
+                    but not in xxx_run routines.\n
+                    Below are the currently recognized dimension types\n">
     <standard_name name="horizontal_dimension"
                    long_name="Size horizontal dimension">
-      <type units="none">integer</type>
+      <type units="count">integer</type>
     </standard_name>
     <standard_name name="vertical_layer_dimension"
                    long_name="number of vertical levels">
-      <type units="none">integer</type>
+      <type units="count">integer</type>
     </standard_name>
-    <standard_name name="vertical_level_dimension"
+    <standard_name name="vertical_interface_dimension"
                    long_name="number of vertical interfaces">
-      <type units="none">integer</type>
+      <type units="count">integer</type>
+    </standard_name>
+    <standard_name name="index_of_bottom_vertical_layer">
+      <type units="index">integer</type>
+    </standard_name>
+    <standard_name name="index_of_top_vertical_layer">
+      <type units="index">integer</type>
+    </standard_name>
+    <standard_name name="index_of_bottom_vertical_interface">
+      <type units="index">integer</type>
+    </standard_name>
+    <standard_name name="index_of_top_vertical_interface">
+      <type units="index">integer</type>
     </standard_name>
     <standard_name name="thread_block_dimension"
                    long_name="Number of thread blocks">
