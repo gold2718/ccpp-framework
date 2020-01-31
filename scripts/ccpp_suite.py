@@ -562,7 +562,7 @@ class SuiteObject(VarDictionary):
 
     def match_dimensions(self, need_dims, have_dims):
         """Compare dimensions between <need_dims> and <have_dims>.
-        Return 5 items:
+        Return 6 items:
         1) Return True if all dims match.
            If <have_dims> has a vertical dimension and <need_dims> does not
            but all other dimensions match, return False but include the
@@ -573,34 +573,45 @@ class SuiteObject(VarDictionary):
            any loop substitutions. If no substitutions, return None
            This is done so that the correct dimensions are used in the host cap.
         4) Return the name of the missing vertical index, or None
-        5) Finally, return a permutation array if the dimension ordering is
+        5) Return a permutation array if the dimension ordering is
         different (or None if the ordering is the same). Each element of the
         permutation array is the index in <have_dims> for that dimension of
         <need_dims>.
+        6) Finally, return a 'reason' string. If match (first return value) is
+        False, this string will contain information about the reason for
+        the match failure.
         >>> SuiteObject('foo', _API_CONTEXT, None, None).match_dimensions(['horizontal_loop_extent'], ['horizontal_loop_extent'])
-        (True, ['horizontal_loop_extent'], None, None)
+        (True, ['horizontal_loop_extent'], ['horizontal_loop_extent'], None, None, '')
         >>> SuiteObject('foo', _API_CONTEXT,None, None,variables=[Var({'local_name':'beg','standard_name':'horizontal_loop_begin','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'end','standard_name':'horizontal_loop_end','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL)],active_call_list=True,phase_type='initialize').match_dimensions(['ccpp_constant_one:horizontal_loop_extent'], ['ccpp_constant_one:horizontal_dimension'])
-        (True, ['ccpp_constant_one:horizontal_dimension'], None, None)
+        (True, ['ccpp_constant_one:horizontal_dimension'], ['ccpp_constant_one:horizontal_dimension'], None, None, '')
         >>> SuiteObject('foo', _API_CONTEXT,None,None,variables=[Var({'local_name':'beg','standard_name':'horizontal_loop_begin','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'end','standard_name':'horizontal_loop_end','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL)],active_call_list=True,phase_type=_RUN_PHASE_NAME).match_dimensions(['ccpp_constant_one:horizontal_loop_extent'], ['horizontal_loop_begin:horizontal_loop_end'])
-        (True, ['horizontal_loop_begin:horizontal_loop_end'], None, None)
+        (True, ['horizontal_loop_begin:horizontal_loop_end'], ['horizontal_loop_begin:horizontal_loop_end'], None, None, '')
         >>> SuiteObject('foo', _API_CONTEXT,None,None,variables=[Var({'local_name':'beg','standard_name':'horizontal_loop_begin','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'end','standard_name':'horizontal_loop_end','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'lev','standard_name':'vertical_layer_dimension','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL)],active_call_list=True,phase_type=_RUN_PHASE_NAME).match_dimensions(['ccpp_constant_one:horizontal_loop_extent'], ['horizontal_loop_begin:horizontal_loop_end','ccpp_constant_one:vertical_layer_dimension'])
-        (False, ['horizontal_loop_begin:horizontal_loop_end'], 'vertical_layer_index', None)
+        (False, ['horizontal_loop_begin:horizontal_loop_end', 'vertical_layer_index'], ['horizontal_loop_begin:horizontal_loop_end', 'ccpp_constant_one:vertical_layer_dimension'], 'vertical_layer_index', None, 'missing vertical dimension')
         >>> SuiteObject('foo', _API_CONTEXT,None,None,variables=[Var({'local_name':'beg','standard_name':'horizontal_loop_begin','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'end','standard_name':'horizontal_loop_end','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'lev','standard_name':'vertical_layer_dimension','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL)],active_call_list=True,phase_type=_RUN_PHASE_NAME).match_dimensions(['ccpp_constant_one:horizontal_loop_extent','ccpp_constant_one:vertical_layer_dimension'], ['horizontal_loop_begin:horizontal_loop_end','ccpp_constant_one:vertical_layer_dimension'])
-        (True, ['horizontal_loop_begin:horizontal_loop_end', 'ccpp_constant_one:vertical_layer_dimension'], None, None)
+        (True, ['horizontal_loop_begin:horizontal_loop_end', 'ccpp_constant_one:vertical_layer_dimension'], ['horizontal_loop_begin:horizontal_loop_end', 'ccpp_constant_one:vertical_layer_dimension'], None, None, '')
         >>> SuiteObject('foo', _API_CONTEXT,None,None,variables=[Var({'local_name':'beg','standard_name':'horizontal_loop_begin','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'end','standard_name':'horizontal_loop_end','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL),Var({'local_name':'lev','standard_name':'vertical_layer_dimension','units':'count','dimensions':'()','type':'integer'}, _API_LOCAL)],active_call_list=True,phase_type=_RUN_PHASE_NAME).match_dimensions(['ccpp_constant_one:horizontal_loop_extent','ccpp_constant_one:vertical_layer_dimension'], ['ccpp_constant_one:vertical_layer_dimension','horizontal_loop_begin:horizontal_loop_end'])
-        (True, ['horizontal_loop_begin:horizontal_loop_end', 'ccpp_constant_one:vertical_layer_dimension'], None, [1, 0])
+        (True, ['horizontal_loop_begin:horizontal_loop_end', 'ccpp_constant_one:vertical_layer_dimension'], ['ccpp_constant_one:vertical_layer_dimension', 'horizontal_loop_begin:horizontal_loop_end'], None, [1, 0], '')
         """
         new_need_dims = []
         new_have_dims = list(have_dims)
         perm = []
         match = True
         missing_vert_dim = None
+        reason = ''
         nlen = len(need_dims)
         hlen = len(have_dims)
         _, nvdim_index = Var.find_vertical_dimension(need_dims)
         _, hvdim_index = Var.find_vertical_dimension(have_dims)
         _, nhdim_index = Var.find_horizontal_dimension(need_dims)
         _, hhdim_index = Var.find_horizontal_dimension(have_dims)
+        if hhdim_index < 0 <= nhdim_index:
+            match = False
+            nlen = 0 # To skip logic below
+            hlen = 0 # To skip logic below
+            reason = '{hname}{hctx} is missing a horizontal dimension '
+            reason += 'required by {nname}{nctx}'
+        # End if
         for nindex in range(nlen):
             neddim = need_dims[nindex]
             if nindex == nhdim_index:
@@ -641,6 +652,8 @@ class SuiteObject(VarDictionary):
             # End for
             if not found_ndim:
                 match = False
+                reason = 'Could not find dimension, ' + neddim + ', in '
+                reason += '{hname}{hctx}. Needed by {nname}{nctx}'
                 break
             # End if (no else, we are still okay)
         # End for
@@ -658,6 +671,7 @@ class SuiteObject(VarDictionary):
                     if not mvdim:
                         missing_vert_dim = vmatch_dims
                         match = False # Should trigger vertical loop action
+                        reason = 'missing vertical dimension'
                         break
                     # End if
                 # End for
@@ -701,7 +715,7 @@ class SuiteObject(VarDictionary):
         if new_have_dims == have_dims:
             have_dims = None # Do not make any substitutions
         # End if
-        return match, new_need_dims, new_have_dims, missing_vert_dim, perm
+        return match, new_need_dims, new_have_dims, missing_vert_dim, perm, reason
 
     def find_variable(self, standard_name, any_scope=True, clone=False):
         """Find a matching variable to <var>, create a local clone (if
@@ -788,7 +802,7 @@ class SuiteObject(VarDictionary):
             dict_dims = dict_var.get_dimensions()
             if vdims:
                 args = self.parent.match_dimensions(vdims, dict_dims)
-                match, new_vdims, new_dict_dims, missing_vert, perm = args
+                match, new_vdims, new_dict_dims, missing_vert, perm, err = args
                 if perm is not None:
                     errmsg = "Permuted indices are not yet supported"
                     lname = var.get_prop_value('local_name')
@@ -819,12 +833,13 @@ class SuiteObject(VarDictionary):
                 # End if
             else:
                 found_var = False
-                dict_vdim = dict_var.has_vertical_dimension(dims=dict_dims)
-                if (dict_vdim is not None) and (var_vdim is None):
-                    if not missing_vert:
-                        emsg = "Vertical dimension mismatch, {}{}"
-                        ctx = context_string(var.context)
-                        raise CCPPError(emsg.format(dict_vdim, ctx))
+                if not missing_vert:
+                    nctx = context_string(var.context)
+                    nname = var.get_prop_value('local_name')
+                    hctx = context_string(dict_var.context)
+                    hname = dict_var.get_prop_value('local_name')
+                    raise CCPPError(err.format(nname=nname, nctx=nctx,
+                                               hname=hname, hctx=hctx))
                     # End if
                 # End if
             # End if
