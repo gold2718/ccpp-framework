@@ -378,7 +378,7 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
                 continue
             # End if
             # At this point, we should have a Fortran variable
-            if fvar is None:
+            if (not arrayref) and (fvar is None):
                 errmsg = 'Variable mismatch in {}, no Fortran variable {}.'
                 errors_found = add_error(errors_found, errmsg.format(title,
                                                                      lname))
