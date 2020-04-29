@@ -244,7 +244,7 @@ def _retrieve_module_list(table):
     return sorted(result)
 
 ###############################################################################
-def _find_var_dictionary(table, dict_name, dict_type):
+def _find_var_dictionary(table, dict_name, dict_type=None):
 ###############################################################################
     """Find and return a var_dictionary named, <dict_name> in <table>.
     If not found, return None"""
@@ -252,7 +252,7 @@ def _find_var_dictionary(table, dict_name, dict_type):
     target_dict = None
     for vdict in var_dicts:
         if ((vdict.get("name") == dict_name) and
-            (vdict.get("type") == dict_type)):
+            ((dict_type == None) or (vdict.get("type") == dict_type))):
             target_dict = vdict
             break
         # end if
@@ -300,6 +300,29 @@ def _retrieve_suite_group_names(table, suite_name):
     return result
 
 ###############################################################################
+def _is_variable_protected(table, var_name, var_dict):
+###############################################################################
+    """Determine whether variable, <var_name>, from <var_dict> is protected.
+    So this by checking for the 'protected' attribute for <var_name> in
+    <var_dict> or any of <var_dict>'s ancestors (parent dictionaries).
+    """
+    protected = False
+    while (not protected) and (var_dict is not None):
+        vars = var_dict.find("variables")
+        if vars is not None:
+            for var in vars:
+                if var.get("name") == var_name:
+                    protected = var.get("protected", default="False") == "True"
+                    break
+                # end if
+            # end for
+        # end if
+        parent = var_dict.get("parent")
+        var_dict = _find_var_dictionary(table, parent)
+    # end while
+    return protected
+
+###############################################################################
 def _retrieve_variable_list(table, suite_name, intent_type=None):
 ###############################################################################
     """Find and return a list of all the required variables in <suite_name>.
@@ -322,13 +345,17 @@ def _retrieve_variable_list(table, suite_name, intent_type=None):
     group_names = _retrieve_suite_group_names(table, suite_name)
     for group in group_names:
         cl_name = group + "_call_list"
-        group_dict = _find_var_dictionary(table, cl_name, "group_call_list")
+        group_dict = _find_var_dictionary(table, cl_name,
+                                          dict_type="group_call_list")
         if group_dict is not None:
             gvars = group_dict.find("variables")
             if gvars is not None:
                 for var in gvars:
-                    if var.get("intent") in allowed_intents:
-                        var_set.add(var.get("name"))
+                    vname = var.get("name")
+                    vintent = var.get("intent")
+                    protected = _is_variable_protected(table, vname, group_dict)
+                    if (not protected) and (vintent in allowed_intents):
+                        var_set.add(vname)
                     # end if
                 # end for
             # end if
@@ -518,7 +545,7 @@ def _new_var_entry(parent, var, full_entry=True):
     """
     prop_list = ["intent"]
     if full_entry:
-        prop_list.extend(["local_name", "type", "kind", "units"])
+        prop_list.extend(["local_name", "type", "kind", "units", "protected"])
     # end if
     ventry = ET.SubElement(parent, "var")
     ventry.set("name", var.get_prop_value("standard_name"))
@@ -601,14 +628,14 @@ def _new_scheme_entry(parent, scheme, group_name, scheme_headers):
     # end if
 
 ###############################################################################
-def _new_variable_dictionary(parent, var_dict, dict_type):
+def _new_variable_dictionary(dictionaries, var_dict, dict_type, parent=None):
 ###############################################################################
-    """Create a new XML entry for <var_dict> under <parent>."""
-    dict_entry = ET.SubElement(parent, "var_dictionary")
+    """Create a new XML entry for <var_dict> under <dictionaries>."""
+    dict_entry = ET.SubElement(dictionaries, "var_dictionary")
     dict_entry.set("name", var_dict.name)
     dict_entry.set("type", dict_type)
-    if var_dict.parent:
-        dict_entry.set("parent", var_dict.parent.name)
+    if parent is not None:
+        dict_entry.set("parent", parent.name)
     # end if
     sub_dicts = var_dict.sub_dictionaries()
     if sub_dicts:
@@ -621,19 +648,21 @@ def _new_variable_dictionary(parent, var_dict, dict_type):
     # end for
 
 ###############################################################################
-def _add_suite_object_dictionaries(parent, suite_object):
+def _add_suite_object_dictionaries(dictionaries, suite_object):
 ###############################################################################
-    """Create new XML entries for <suite_object> under <parent>.
+    """Create new XML entries for <suite_object> under <dictionaries>.
     Add <suite_object>'s dictionary and its call_list dictionary (if present).
     Recurse to this objects parts."""
     dict_type = _object_type(suite_object)
-    _new_variable_dictionary(parent, suite_object, dict_type)
+    _new_variable_dictionary(dictionaries, suite_object, dict_type,
+                             parent=suite_object.parent)
     if suite_object.call_list:
         dict_type += "_call_list"
-        _new_variable_dictionary(parent, suite_object.call_list, dict_type)
+        _new_variable_dictionary(dictionaries, suite_object.call_list,
+                                 dict_type, parent=suite_object.parent)
     # end if
     for part in suite_object.parts:
-        _add_suite_object_dictionaries(parent, part)
+        _add_suite_object_dictionaries(dictionaries, part)
     # end for
 
 ###############################################################################
@@ -729,10 +758,10 @@ def generate_ccpp_datatable(filename, host_model, api, scheme_headers,
     var_dicts = ET.SubElement(datatable, "var_dictionaries")
     # First, the top-level dictionaries
     _new_variable_dictionary(var_dicts, host_model, "host")
-    _new_variable_dictionary(var_dicts, api, "api")
+    _new_variable_dictionary(var_dicts, api, "api", parent=api.parent)
     # Now, the suite and group namelists, etc. (including call_lists)
     for suite in api.suites:
-        _new_variable_dictionary(var_dicts, suite, "suite")
+        _new_variable_dictionary(var_dicts, suite, "suite", parent=suite.parent)
         for group in suite.groups:
             _add_suite_object_dictionaries(var_dicts, group)
             # end for

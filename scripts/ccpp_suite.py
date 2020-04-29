@@ -2505,6 +2505,7 @@ end module {module}
         ofile.write("end if", 2)
         else_str = ''
         for suite in self.suites:
+            parent = suite.parent
             # Collect all the suite variables
             oline = "{}if(trim(suite_name) == '{}') then"
             suite_vars = [set(), set()] # input, output
@@ -2512,7 +2513,14 @@ end module {module}
                 for var in part.call_list.variable_list():
                     stdname = var.get_prop_value("standard_name")
                     intent = var.get_prop_value("intent")
-                    if intent in ['in', 'inout']:
+                    protected = var.get_prop_value("protected")
+                    if (parent is not None) and (not protected):
+                        pvar = parent.find_variable(stdname)
+                        if pvar is not None:
+                            protected = pvar.get_prop_value("protected")
+                        # end if
+                    # end if
+                    if (intent in ['in', 'inout']) and (not protected):
                         suite_vars[0].add(stdname)
                     # end if
                     if intent in ['inout', 'out']:

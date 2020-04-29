@@ -62,31 +62,23 @@ _PROCESS_LIST = ["setter=temp_set", "adjusting=temp_calc_adjust"]
 _MODULE_LIST = ["environ_conditions", "make_ddt", "temp_adjust",
                 "temp_calc_adjust", "temp_set"]
 _SUITE_LIST = ["ddt_suite", "temp_suite"]
-_REQUIRED_VARS_DDT = ["ccpp_error_flag", "ccpp_error_message",
-                      "horizontal_dimension", "horizontal_loop_begin",
-                      "horizontal_loop_end", "model_times",
+_REQUIRED_VARS_DDT = ["ccpp_error_flag", "ccpp_error_message", "model_times",
                       "number_of_model_times", "surface_air_pressure"]
-_INPUT_VARS_DDT = ["horizontal_dimension", "horizontal_loop_begin",
-                   "horizontal_loop_end", "model_times",
-                   "number_of_model_times", "surface_air_pressure"]
+_INPUT_VARS_DDT = ["model_times", "number_of_model_times",
+                   "surface_air_pressure"]
 _OUTPUT_VARS_DDT = ["ccpp_error_flag", "ccpp_error_message", "model_times",
                     "number_of_model_times"]
 _REQUIRED_VARS_TEMP = ["ccpp_error_flag", "ccpp_error_message",
-                       "horizontal_dimension", "horizontal_loop_begin",
-                       "horizontal_loop_end", "potential_temperature",
+                       "potential_temperature",
                        "potential_temperature_at_interface",
                        "potential_temperature_increment",
                        "surface_air_pressure", "time_step_for_physics",
-                       "vertical_interface_dimension",
-                       "vertical_layer_dimension",
                        "water_vapor_specific_humidity"]
-_INPUT_VARS_TEMP = ["horizontal_dimension", "horizontal_loop_begin",
-                    "horizontal_loop_end", "potential_temperature",
+_INPUT_VARS_TEMP = ["potential_temperature",
                     "potential_temperature_at_interface",
                     "potential_temperature_increment",
                     "surface_air_pressure", "time_step_for_physics",
-                    "vertical_interface_dimension",
-                    "vertical_layer_dimension", "water_vapor_specific_humidity"]
+                    "water_vapor_specific_humidity"]
 _OUTPUT_VARS_TEMP = ["ccpp_error_flag", "ccpp_error_message",
                      "potential_temperature",
                      "potential_temperature_at_interface",
@@ -116,7 +108,7 @@ def check_datatable(database, report_type, check_list, sep=','):
         sep = ','
     # end if
     test_str = datatable_report(database, report_type, sep)
-    test_list = test_str.split(sep)
+    test_list = [x for x in test_str.split(sep) if x]
     missing = list()
     unexpected = list()
     for item in check_list:
