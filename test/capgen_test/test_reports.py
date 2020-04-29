@@ -23,7 +23,7 @@ if not os.path.exists(_SCRIPTS_DIR):
 
 sys.path.append(_SCRIPTS_DIR)
 # pylint: disable=wrong-import-position
-from ccpp_datafile import datatable_report, DatatableReport, CCPPDatatableError
+from ccpp_datafile import datatable_report, DatatableReport
 # pylint: enable=wrong-import-position
 
 def usage(errmsg=None):
@@ -127,46 +127,46 @@ def check_datatable(database, report_type, check_list, sep=','):
         vmsg += fields_string("Unexpected", unexpected, sep)
         print(vmsg)
     else:
-        print(  "{} report okay".format(report_type.action))
+        print("{} report okay".format(report_type.action))
     # end if
     return len(missing) + len(unexpected)
 
-num_errors = 0
+NUM_ERRORS = 0
 print("Checking required files from python:")
-num_errors += check_datatable(_DATABASE, DatatableReport("host_files"),
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("host_files"),
                               _HOST_FILES)
-num_errors += check_datatable(_DATABASE, DatatableReport("suite_files"),
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("suite_files"),
                               _SUITE_FILES)
-num_errors += check_datatable(_DATABASE, DatatableReport("utility_files"),
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("utility_files"),
                               _UTILITY_FILES)
-num_errors += check_datatable(_DATABASE, DatatableReport("ccpp_files"),
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("ccpp_files"),
                               _CCPP_FILES)
 print("\nChecking lists from python")
-num_errors += check_datatable(_DATABASE, DatatableReport("process_list"),
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("process_list"),
                               _PROCESS_LIST)
-num_errors += check_datatable(_DATABASE, DatatableReport("module_list"),
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("module_list"),
                               _MODULE_LIST)
-num_errors += check_datatable(_DATABASE, DatatableReport("suite_list"),
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("suite_list"),
                               _SUITE_LIST)
 print("\nChecking variables for DDT suite from python")
-num_errors += check_datatable(_DATABASE, DatatableReport("required_variables",
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("required_variables",
                                                          value="ddt_suite"),
                               _REQUIRED_VARS_DDT)
-num_errors += check_datatable(_DATABASE, DatatableReport("input_variables",
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("input_variables",
                                                          value="ddt_suite"),
                               _INPUT_VARS_DDT)
-num_errors += check_datatable(_DATABASE, DatatableReport("output_variables",
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("output_variables",
                                                          value="ddt_suite"),
                               _OUTPUT_VARS_DDT)
 print("\nChecking variables for temp suite from python")
-num_errors += check_datatable(_DATABASE, DatatableReport("required_variables",
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("required_variables",
                                                          value="temp_suite"),
                               _REQUIRED_VARS_TEMP)
-num_errors += check_datatable(_DATABASE, DatatableReport("input_variables",
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("input_variables",
                                                          value="temp_suite"),
                               _INPUT_VARS_TEMP)
-num_errors += check_datatable(_DATABASE, DatatableReport("output_variables",
+NUM_ERRORS += check_datatable(_DATABASE, DatatableReport("output_variables",
                                                          value="temp_suite"),
                               _OUTPUT_VARS_TEMP)
 
-sys.exit(num_errors)
+sys.exit(NUM_ERRORS)

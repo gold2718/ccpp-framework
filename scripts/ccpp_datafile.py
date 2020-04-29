@@ -252,7 +252,7 @@ def _find_var_dictionary(table, dict_name, dict_type=None):
     target_dict = None
     for vdict in var_dicts:
         if ((vdict.get("name") == dict_name) and
-            ((dict_type == None) or (vdict.get("type") == dict_type))):
+            ((dict_type is None) or (vdict.get("type") == dict_type))):
             target_dict = vdict
             break
         # end if
@@ -308,9 +308,9 @@ def _is_variable_protected(table, var_name, var_dict):
     """
     protected = False
     while (not protected) and (var_dict is not None):
-        vars = var_dict.find("variables")
-        if vars is not None:
-            for var in vars:
+        dvars = var_dict.find("variables")
+        if dvars is not None:
+            for var in dvars:
                 if var.get("name") == var_name:
                     protected = var.get("protected", default="False") == "True"
                     break
