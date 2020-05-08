@@ -129,7 +129,7 @@ def delete_pathnames_from_file(capfile, logger):
                 if not os.path.isabs(path):
                     # Assume relative pathnames are relative to pathsfile
                     path = os.path.normpath(os.path.join(root_path, path))
-                # End if
+                # end if
                 logger.info("Clean: Removing {}".format(path))
                 try:
                     os.remove(path)
@@ -137,10 +137,10 @@ def delete_pathnames_from_file(capfile, logger):
                     success = False
                     errmsg = 'Unable to remove {}\n{}'
                     logger.warning(errmsg.format(path, oserr))
-                # End try
-            # End if (else skip blank or comment line)
-        # End for
-    # End with open
+                # end try
+            # end if (else skip blank or comment line)
+        # end for
+    # end with open
     logger.info("Clean: Removing {}".format(capfile))
     try:
         os.remove(capfile)
@@ -148,12 +148,12 @@ def delete_pathnames_from_file(capfile, logger):
         success = False
         errmsg = 'Unable to remove {}\n{}'
         logger.warning(errmsg.format(capfile, oserr))
-    # End try
+    # end try
     if success:
         logger.info("ccpp_capgen clean successful, exiting")
     else:
         logger.info("ccpp_capgen clean encountered errors, exiting")
-    # End if
+    # end if
 
 ###############################################################################
 def find_associated_fortran_file(filename):
@@ -166,17 +166,17 @@ def find_associated_fortran_file(filename):
         base = filename + '.'
     else:
         base = filename[0:lastdot+1]
-    # End if
+    # end if
     for extension in _FORTRAN_FILENAME_EXTENSIONS:
         test_name = base + extension
         if os.path.exists(test_name):
             fort_filename = test_name
             break
-        # End if
-    # End for
+        # end if
+    # end for
     if fort_filename is None:
         raise CCPPError("Cannot find Fortran file associated with {}".format(filename))
-    # End if
+    # end if
     return fort_filename
 
 ###############################################################################
@@ -187,7 +187,7 @@ def create_kinds_file(kind_phys, output_dir, logger):
     if logger is not None:
         msg = 'Writing {} to {}'
         logger.info(msg.format(KINDS_FILENAME, output_dir))
-    # End if
+    # end if
     with FortranWriter(kinds_filepath, "w") as kindf:
         kindf.write(COPYRIGHT, 0)
         kindf.write(_KINDS_HEADER, 0)
@@ -202,7 +202,7 @@ def create_kinds_file(kind_phys, output_dir, logger):
         kindf.write('public kind_phys', 1)
         kindf.write('', 0)
         kindf.write('end module {}'.format(KINDS_MODULE), 0)
-    # End with
+    # end with
     return kinds_filepath
 
 ###############################################################################
@@ -212,7 +212,7 @@ def add_error(error_string, new_error):
     newline'''
     if error_string:
         error_string += '\n'
-    # End if
+    # end if
     return error_string + new_error
 
 ###############################################################################
@@ -239,8 +239,8 @@ def find_var_in_list(local_name, var_list):
             vvar = lvar
             vind = lind
             break
-        # End if
-    # End for
+        # end if
+    # end for
     return vvar, vind
 
 ###############################################################################
@@ -253,18 +253,18 @@ def var_comp(prop_name, mvar, fvar, title, case_sensitive=False):
     if not case_sensitive:
         if isinstance(mprop, str):
             mprop = mprop.lower()
-        # End if
+        # end if
         if isinstance(fprop, str):
             fprop = fprop.lower()
-        # End if
-    # End if
+        # end if
+    # end if
     comp = mprop == fprop
     if not comp:
         errmsg = '{} mismatch ({} != {}) in {}{}'
         ctx = context_string(mvar.context)
         errors = add_error(errors,
                            errmsg.format(prop_name, mprop, fprop, title, ctx))
-    # End if
+    # end if
     return errors
 
 ###############################################################################
@@ -281,21 +281,21 @@ def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
         ctx = context_string(mvar.context)
         errors = add_error(errors, errmsg.format(title, stdname,
                                                  len(mdims), len(fdims), ctx))
-    # End if
+    # end if
     if comp:
         # Now, compare the dims
         for dim_ind, mdim in enumerate(mdims):
             if ':' in mdim:
                 mdim = ':'.join([x.strip() for x in mdim.split(':')])
-            # End if
+            # end if
             fdim = fdims[dim_ind].strip()
             if ':' in fdim:
                 fdim = ':'.join([x.strip() for x in fdim.split(':')])
-            # End if
+            # end if
             if not case_sensitive:
                 mdim = mdim.lower()
                 fdim = fdim.lower()
-            # End if
+            # end if
             # Naked colon is okay for Fortran side
             comp = fdim in (':', fdim)
             if not comp:
@@ -305,9 +305,9 @@ def dims_comp(mheader, mvar, fvar, title, logger, case_sensitive=False):
                 errmsg = errmsg.format(dim_ind+1, mdim, fdims[dim_ind],
                                        title, stdname, ctx)
                 errors = add_error(errors, errmsg)
-            # End if
-        # End for
-    # End if
+            # end if
+        # end for
+    # end if
     return errors
 
 ###############################################################################
@@ -328,7 +328,7 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
             ctx = meta_header.start_context()
             raise CCPPError(errmsg.format(title, meta_header.header_type,
                                           fort_header.header_type, ctx))
-        # End if
+        # end if
     else:
         # The headers should have the same variables in the same order
         # The exception is that a Fortran module can have variable declarations
@@ -341,8 +341,8 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
         for mvar in mlist:
             if is_arrayspec(mvar.get_prop_value('local_name')):
                 mlen -= 1
-            # End if
-        # End for
+            # end if
+        # end for
         list_match = mlen == flen
         if not list_match:
             if fht in _EXTRA_VARIABLE_TABLE_TYPES:
@@ -350,17 +350,17 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
                     list_match = True
                 else:
                     etype = 'Fortran {}'.format(fht)
-                # End if
+                # end if
             elif flen > mlen:
                 etype = 'metadata header'
             else:
                 etype = 'Fortran {}'.format(fht)
-            # End if
-        # End if
+            # end if
+        # end if
         if not list_match:
             errmsg = 'Variable mismatch in {}, variables missing from {}.'
             errors_found = add_error(errors_found, errmsg.format(title, etype))
-        # End if
+        # end if
         for mind, mvar in enumerate(mlist):
             lname = mvar.get_prop_value('local_name')
             arrayref = is_arrayspec(lname)
@@ -373,17 +373,17 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
                     errmsg = 'No Fortran variable for {} in {}'
                     errors_found = add_error(errors_found,
                                              errmsg.format(lname, title))
-                # End if (no else, we already reported an out-of-place error
+                # end if (no else, we already reported an out-of-place error
                 # Do not break to collect all missing variables
                 continue
-            # End if
+            # end if
             # At this point, we should have a Fortran variable
             if (not arrayref) and (fvar is None):
                 errmsg = 'Variable mismatch in {}, no Fortran variable {}.'
                 errors_found = add_error(errors_found, errmsg.format(title,
                                                                      lname))
                 continue
-            # End if
+            # end if
             # Check order dependence
             if fht in _ORDERED_TABLE_TYPES:
                 if find != mind:
@@ -391,12 +391,12 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
                     errors_found = add_error(errors_found,
                                              errmsg.format(lname, title))
                     continue
-                # End if
-            # End if
+                # end if
+            # end if
             if arrayref:
                 # Array reference, do not look for this in Fortran table
                 continue
-            # End if
+            # end if
             errs = var_comp('local_name', mvar, fvar, title)
             if errs:
                 errors_found = add_error(errors_found, errs)
@@ -404,25 +404,25 @@ def compare_fheader_to_mheader(meta_header, fort_header, logger):
                 errs = var_comp('type', mvar, fvar, title)
                 if errs:
                     errors_found = add_error(errors_found, errs)
-                # End if
+                # end if
                 errs = var_comp('kind', mvar, fvar, title)
                 if errs:
                     errors_found = add_error(errors_found, errs)
-                # End if
+                # end if
                 if meta_header.header_type == 'scheme':
                     errs = var_comp('intent', mvar, fvar, title)
                     if errs:
                         errors_found = add_error(errors_found, errs)
-                    # End if
-                # End if
+                    # end if
+                # end if
                 # Compare dimensions
                 errs = dims_comp(meta_header, mvar, fvar, title, logger)
                 if errs:
                     errors_found = add_error(errors_found, errs)
-                # End if
-            # End if
-        # End for
-    # End if
+                # end if
+            # end if
+        # end for
+    # end if
     return errors_found
 
 ###############################################################################
@@ -441,17 +441,17 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
             if fort_headers[findex].title == mtitle:
                 fheader = fort_headers.pop(findex)
                 break
-            # End if
-        # End for
+            # end if
+        # end for
         if fheader is None:
             tlist = '\n    '.join([x.title for x in fort_headers])
             logger.debug("CCPP routines in {}:{}".format(ffilename, tlist))
             errmsg = "No matching Fortran routine found for {} in {}"
             raise CCPPError(errmsg.format(mtitle, ffilename))
-        # End if
+        # end if
         header_dict[mheader] = fheader
-        # End if
-    # End while
+        # end if
+    # end while
     if fort_headers:
         errmsg = ""
         sep = ""
@@ -460,25 +460,25 @@ def check_fortran_against_metadata(meta_headers, fort_headers,
                 errmsg += sep + "No matching metadata header found for {} in {}"
                 errmsg = errmsg.format(fheader.title, mfilename)
                 sep = "\n"
-            # End if
-        # End for
+            # end if
+        # end for
         if errmsg:
             raise CCPPError(errmsg)
-        # End if
-    # End if
+        # end if
+    # end if
     # We have a one-to-one set, compare headers
     errors_found = ''
     for mheader in header_dict:
         fheader = header_dict[mheader]
         errors_found += compare_fheader_to_mheader(mheader, fheader, logger)
-    # End for
+    # end for
     if errors_found:
         num_errors = len(re.findall(r'\n', errors_found)) + 1
         errmsg = "{}\n{} error{} found comparing {} to {}"
         raise CCPPError(errmsg.format(errors_found, num_errors,
                                       's' if num_errors > 1 else '',
                                       mfilename, ffilename))
-    # End if
+    # end if
     # No return, an exception is raised on error
 
 ###############################################################################
@@ -517,15 +517,15 @@ def parse_host_model_files(host_filenames, preproc_defs, host_name, logger):
                 if ofile is not None:
                     errmsg = errmsg + ", original found in {ofile}"
                     edict['ofile'] = ofile
-                # End if
+                # end if
                 raise CCPPError(errmsg.format(**edict))
-                # End if
-            # End if
-        # End for
-    # End for
+                # end if
+            # end if
+        # end for
+    # end for
     if not host_name:
         host_name = None
-    # End if
+    # end if
     host_model = HostModel(meta_headers.values(), host_name, logger)
     return host_model
 
@@ -562,16 +562,16 @@ def parse_scheme_files(scheme_filenames, preproc_defs, logger):
                 if ofile is not None:
                     errmsg = errmsg + ", original found in {ofile}"
                     edict['ofile'] = ofile
-                # End if
+                # end if
                 raise CCPPError(errmsg.format(**edict))
-            # End if
+            # end if
             meta_headers.append(header)
             header_dict[header.title] = header
             if header.header_type == 'ddt':
                 known_ddts.append(header.title)
-            # End if
-        # End for
-    # End for
+            # end if
+        # end for
+    # end for
     return meta_headers
 
 ###############################################################################
@@ -586,7 +586,7 @@ def clean_capgen(cap_output_file, logger):
     else:
         emsg = "Unable to run clean, {} not found"
         logger.error(emsg.format(cap_output_file))
-    # End if
+    # end if
     set_log_level(logger, log_level)
 
 ###############################################################################
@@ -603,7 +603,36 @@ def capgen(host_files, scheme_files, suites, datatable_file, preproc_defs,
     ##XXgoldyXX: Temporary warning
     if gen_docfiles:
         raise CCPPError("--generate-docfiles not yet supported")
-    # End if
+    # end if
+    # Turn preproc_defs into a dictionary, start with a list to process
+    if isinstance(preproc_defs, list):
+        # Someone already handed us a list
+        preproc_list = preproc_defs
+    elif (not preproc_defs) or (preproc_defs == 'UNSET'):
+        # No preprocessor definitions
+        preproc_list = list()
+    elif ',' in preproc_defs:
+        # String of definitions, separated by commas
+        preproc_list = [x.strip() for x in preproc_defs.split(',')]
+    else:
+        # String of definitions, separated by spaces
+        preproc_list = [x.strip() for x in preproc_defs.split(' ') if x]
+    # end if
+    # Turn the list into a dictionary
+    preproc_defs = {}
+    for item in preproc_list:
+        tokens = [x.strip() for x in item.split('=', 1)]
+        key = tokens[0]
+        if key[0:2] == '-D':
+            key = key[2:]
+        # end if
+        if len(tokens) > 1:
+            value = tokens[1]
+        else:
+            value = None
+        # end if
+        preproc_defs[key] = value
+    # end for
     # First up, handle the host files
     host_model = parse_host_model_files(host_files, preproc_defs,
                                         host_name, logger)
@@ -612,7 +641,7 @@ def capgen(host_files, scheme_files, suites, datatable_file, preproc_defs,
     ddts = host_model.ddt_lib.keys()
     if ddts:
         logger.debug("DDT definitions = {}".format(ddts))
-    # End if
+    # end if
     plist = host_model.prop_list('local_name')
     logger.debug("{} variables = {}".format(host_model.name, plist))
     logger.debug("schemes = {}".format([x.title for x in scheme_headers]))
@@ -644,7 +673,7 @@ def _main_func():
         set_log_level(_LOGGER, logging.DEBUG)
     elif verbosity > 0:
         set_log_level(_LOGGER, logging.INFO)
-    # End if
+    # end if
     # Make sure we know where output is going
     output_dir = os.path.abspath(args.output_root)
     if os.path.abspath(args.ccpp_datafile):
@@ -652,36 +681,37 @@ def _main_func():
     else:
         datatable_file = os.path.abspath(os.path.join(output_dir,
                                                        args.ccpp_datafile))
-    # End if
+    # end if
     ## A few sanity checks
     ## Make sure output directory is legit
     if os.path.exists(output_dir):
         if not os.path.isdir(output_dir):
             errmsg = "output-root, '{}', is not a directory"
             raise CCPPError(errmsg.format(args.output_root))
-        # End if
+        # end if
         if not os.access(output_dir, os.W_OK):
             errmsg = "Cannot write files to output-root ({})"
             raise CCPPError(errmsg.format(args.output_root))
-        # End if (output_dir is okay)
+        # end if (output_dir is okay)
     else:
         # Try to create output_dir (let it crash if it fails)
         os.makedirs(output_dir)
-    # End if
+    # end if
     # Make sure we can create output file lists
     if not os.path.isabs(datatable_file):
         datatable_file = os.path.normpath(os.path.join(output_dir,
                                                         datatable_file))
-    # End if
+    # end if
     if args.clean:
         clean_capgen(datatable_file, _LOGGER)
     else:
         generate_host_cap = args.host_name != ''
+        preproc_defs = args.preproc_directives
         capgen(args.host_files, args.scheme_files, args.suites, datatable_file,
-               args.preproc_directives, generate_host_cap,
+               preproc_defs, generate_host_cap,
                args.generate_docfiles, output_dir, args.host_name,
                args.kind_phys, _LOGGER)
-    # End if (clean)
+    # end if (clean)
 
 ###############################################################################
 
@@ -697,8 +727,8 @@ if __name__ == "__main__":
             _LOGGER.exception(ccpp_err)
         else:
             _LOGGER.error(ccpp_err)
-        # End if
+        # end if
         sys.exit(1)
     finally:
         logging.shutdown()
-    # End try
+    # end try
