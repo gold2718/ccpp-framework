@@ -1726,6 +1726,9 @@ class Group(SuiteObject):
             errmsg = "No ccpp_error_message variable for group, {}"
             raise CCPPError(errmsg.format(self.name))
         # end if
+        # Initialize error variables
+        outfile.write("{} = 0".format(errflg), 2)
+        outfile.write("{} = ''".format(errmsg), 2)
         # Output threaded region check (except for run phase)
         if not self.run_phase():
             Group.__thread_check.write(outfile, indent,
