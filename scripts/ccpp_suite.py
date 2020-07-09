@@ -2294,6 +2294,7 @@ end module {module}
                         'dimensions':'()'}, _API_SOURCE)
 
     def __init__(self, sdfs, host_model, scheme_headers, logger):
+        """Initialize this API"""
         self._module = 'ccpp_physics_api'
         self._host = host_model
         self._suites = list()

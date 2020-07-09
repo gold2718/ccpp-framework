@@ -16,16 +16,25 @@ The CCPP datafile is a database consisting of several tables:
 ##     2) As an option in datatable_report
 
 # Python library imports
-import xml.etree.ElementTree as ET
 import argparse
+import os
+import re
 import sys
+import xml.etree.ElementTree as ET
 # CCPP framework imports
 from parse_tools import read_xml_file
 from metadata_table import MetadataTable
 from ccpp_suite import VerticalLoop, Subcycle
 
+# Find python version
+PY3 = sys.version_info[0] > 2
+PYSUBVER = sys.version_info[1]
+
 # Global data
 _INDENT_STR = "  "
+beg_tag_re = re.compile(r"([<][^/][^<>]*[^/][>])")
+end_tag_re = re.compile(r"([<][/][^<>/]+[>])")
+simple_tag_re = re.compile(r"([<][^/][^<>/]+[/][>])")
 
 ## datatable_report must have an action for each report type
 _VALID_REPORTS = [{"report" : "host_files", "type" : bool,
@@ -104,6 +113,96 @@ class DatatableReport(object):
     def valid_actions(cls):
         """Return the list of valid actions for this class"""
         return cls.__valid_actions
+
+class PrettyElementTree(ET.ElementTree):
+    """An ElementTree subclass with nice formatting when writing to a file"""
+
+    def __init__(self, element=None, file=None):
+        """Initialize a PrettyElementTree object"""
+        super(PrettyElementTree, self).__init__(element, file)
+
+    def _write(self, outfile, line, indent, eol=os.linesep):
+        """Write <line> as an ASCII string to <outfile>"""
+        outfile.write('{}{}{}'.format(_INDENT_STR*indent, line, eol))
+
+    def write(self, file, encoding="us-ascii", xml_declaration=None,
+              default_namespace=None, method="xml",
+              short_empty_elements=True):
+        """Subclassed write method to format output."""
+        if PY3 and (PYSUBVER >= 4):
+            if PYSUBVER >= 8:
+                input = ET.tostring(self.getroot(),
+                                   encoding=encoding, method=method,
+                                   xml_declaration=xml_declaration,
+                                   default_namespace=default_namespace,
+                                   short_empty_elements=short_empty_elements)
+            else:
+                input = ET.tostring(self.getroot(),
+                                    encoding=encoding, method=method,
+                                    short_empty_elements=short_empty_elements)
+            # end if
+        else:
+            input = ET.tostring(self.getroot(),
+                                encoding=encoding, method=method)
+        # end if
+        if PY3:
+            fmode = 'wt'
+            root = str(input, encoding="utf-8")
+        else:
+            fmode = 'w'
+            root = input
+        # end if
+        indent = 0
+        last_write_text = False
+        with open(file, fmode) as outfile:
+            inline = root.strip()
+            istart = 0 # Current start pos
+            iend = len(inline)
+            while istart < iend:
+                bmatch = beg_tag_re.match(inline[istart:])
+                ematch = end_tag_re.match(inline[istart:])
+                smatch = simple_tag_re.match(inline[istart:])
+                if bmatch is not None:
+                    outstr = bmatch.group(1)
+                    if inline[istart + len(bmatch.group(1))] != '<':
+                        # Print text on same line
+                        self._write(outfile, outstr, indent, eol='')
+                    else:
+                        self._write(outfile, outstr, indent)
+                    # end if
+                    indent += 1
+                    istart += len(outstr)
+                    last_write_text = False
+                elif ematch is not None:
+                    outstr = ematch.group(1)
+                    indent -= 1
+                    if last_write_text:
+                        self._write(outfile, outstr, 0)
+                        last_write_text = False
+                    else:
+                        self._write(outfile, outstr, indent)
+                    # end if
+                    istart += len(outstr)
+                elif smatch is not None:
+                    outstr = smatch.group(1)
+                    self._write(outfile, outstr, indent)
+                    istart += len(outstr)
+                    last_write_text = False
+                else:
+                    # No tag, just output text
+                    end_index = inline[istart:].find('<')
+                    if end_index < 0:
+                        end_index = iend
+                    else:
+                        end_index += istart
+                    # end if
+                    outstr = inline[istart:end_index]
+                    self._write(outfile, outstr.strip(), 0, eol='')
+                    last_write_text = True
+                    istart += len(outstr)
+                # end if
+            # end while
+        # end with
 
 ###
 ### Interface for retrieving datatable information
@@ -768,7 +867,7 @@ def generate_ccpp_datatable(filename, host_model, api, scheme_headers,
         # end for
     # end for
     # Write tree
-    datatable_tree = ET.ElementTree(datatable)
+    datatable_tree = PrettyElementTree(datatable)
     datatable_tree.write(filename)
 
 ###############################################################################
