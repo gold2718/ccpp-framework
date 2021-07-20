@@ -2668,7 +2668,7 @@ class API(VarDictionary):
             # Figure out how many total variables to return and allocate
             #   variable_list to that size
             ofile.write(oline.format(else_str, suite.name), 2)
-            ofile.write("if (input_vars .and. output_vars) then", 3)
+            ofile.write("if (input_vars_use .and. output_vars_use) then", 3)
             have_elems = input_vars[2] or inout_vars[2] or output_vars[2]
             if have_elems:
                 ofile.write("if (struct_elements_use) then", 4)
@@ -2685,7 +2685,7 @@ class API(VarDictionary):
             if have_elems:
                 ofile.write("end if", 4)
             # end if
-            ofile.write("else if (input_vars) then", 3)
+            ofile.write("else if (input_vars_use) then", 3)
             have_elems = input_vars[2] or inout_vars[2]
             if have_elems:
                 ofile.write("if (struct_elements_use) then", 4)
@@ -2700,7 +2700,7 @@ class API(VarDictionary):
             if have_elems:
                 ofile.write("end if", 4)
             # end if
-            ofile.write("else if (output_vars) then", 3)
+            ofile.write("else if (output_vars_use) then", 3)
             have_elems = inout_vars[2] or output_vars[2]
             if have_elems:
                 ofile.write("if (struct_elements_use) then", 4)
@@ -2727,7 +2727,7 @@ class API(VarDictionary):
             elem_written_set = inout_vars[0].copy()
             leaf_list = sorted(inout_vars[0])
             if inout_vars[0] or inout_vars[1] or inout_vars[2]:
-                ofile.write("if (input_vars .or. output_vars) then", 3)
+                ofile.write("if (input_vars_use .or. output_vars_use) then", 3)
                 API.write_var_set_loop(ofile, 'variable_list', leaf_list, 4,
                                        add_allocate=False,
                                        start_index=leaf_start)
@@ -2753,6 +2753,9 @@ class API(VarDictionary):
                 leaf_start += len(leaf_list)
                 ofile.write("num_vars = {}".format(leaf_start - 1), 5)
                 ofile.write("end if", 4)
+            else:
+                ofile.write("num_vars = {}".format(len(leaf_written_set)),
+                            4 if leaf_written_set else 3)
             # end if
             if inout_vars[0] or inout_vars[1] or inout_vars[2]:
                 ofile.write("end if", 3)
@@ -2765,7 +2768,7 @@ class API(VarDictionary):
             elem_written_set = elem_written_set.union(input_vars[2])
             have_inputs = elem_list or leaf_list
             if have_inputs:
-                ofile.write("if (input_vars) then", 3)
+                ofile.write("if (input_vars_use) then", 3)
                 # elements which have not been written out
             # end if
             API.write_var_set_loop(ofile, 'variable_list', leaf_list, 4,
@@ -2805,7 +2808,7 @@ class API(VarDictionary):
             elem_written_set = elem_written_set.union(output_vars[2])
             have_outputs = elem_list or leaf_list
             if have_outputs:
-                ofile.write("if (output_vars) then", 3)
+                ofile.write("if (output_vars_use) then", 3)
             # end if
             API.write_var_set_loop(ofile, 'variable_list', leaf_list, 4,
                                    add_allocate=False, start_var="num_vars",
