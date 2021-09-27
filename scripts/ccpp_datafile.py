@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Code to generate and query the CCPP datafile returned by capgen.
 The CCPP datafile is a database consisting of several tables:
@@ -929,7 +929,7 @@ def _add_suite_object(parent, suite_object):
     # end for
 
 ###############################################################################
-def generate_ccpp_datatable(filename, host_model, api, scheme_headers,
+def generate_ccpp_datatable(run_env, host_model, api, scheme_headers,
                             scheme_tdict, host_files, suite_files,
                             ccpp_kinds, source_dir):
 ###############################################################################
@@ -1007,7 +1007,7 @@ def generate_ccpp_datatable(filename, host_model, api, scheme_headers,
     _add_dependencies(datatable, scheme_depends, host_depends)
     # Write tree
     datatable_tree = PrettyElementTree(datatable)
-    datatable_tree.write(filename)
+    datatable_tree.write(run_env.datatable_file)
 
 ###############################################################################
 

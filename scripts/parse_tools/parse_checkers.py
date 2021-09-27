@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Helper functions to validate parsed input"""
 
@@ -206,8 +206,14 @@ __FORT_INT = r"[0-9]+"
 __FORT_DIM = r"(?:"+__FORTRAN_AID+r"|[:]|"+__FORT_INT+r")"
 __REPEAT_DIM = r"(?:,\s*"+__FORT_DIM+r"\s*)"
 __FORTRAN_SCALAR_ARREF = r"[(]\s*("+__FORT_DIM+r"\s*"+__REPEAT_DIM+r"{0,6})[)]"
+# FORTRAN_SCALAR_REF: Pattern of a valid Fortran array reference
+#    NB: Only allows symbols, no expressions and/or function calls
 FORTRAN_SCALAR_REF = r"(?:"+FORTRAN_ID+r"\s*"+__FORTRAN_SCALAR_ARREF+r")"
 FORTRAN_SCALAR_REF_RE = re.compile(FORTRAN_SCALAR_REF+r"$")
+# FORTRAN_FUNCTION_REF: A Fortran function reference
+#    NB: Currenly does not support function arguments
+FORTRAN_FUNCTION_REF = r"(?:"+FORTRAN_ID+r"\s*[(]\s*[)])"
+FORTRAN_FUNCTION_REF_RE = re.compile(FORTRAN_FUNCTION_REF)
 FORTRAN_INTRINSIC_TYPES = ["integer", "real", "logical", "complex",
                            "double precision", "character"]
 FORTRAN_DP_RE = re.compile(r"(?i)double\s*precision")

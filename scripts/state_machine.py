@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 
 """Classes and methods to implement a simple state machine."""

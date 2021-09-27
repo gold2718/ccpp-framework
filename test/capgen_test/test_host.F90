@@ -366,7 +366,7 @@ CONTAINS
         'potential_temperature_at_interface  ',                               &
         'surface_air_pressure                ',                               &
         'water_vapor_specific_humidity       ',                               &
-        'ccpp_error_flag                     ',                               &
+        'ccpp_error_code                     ',                               &
         'ccpp_error_message                  ' /)
    character(len=cm), target :: test_reqvars1(8) = (/                         &
         'potential_temperature               ',                               &
@@ -375,7 +375,7 @@ CONTAINS
         'water_vapor_specific_humidity       ',                               &
         'potential_temperature_increment     ',                               &
         'time_step_for_physics               ',                               &
-        'ccpp_error_flag                     ',                               &
+        'ccpp_error_code                     ',                               &
         'ccpp_error_message                  ' /)
 
    character(len=cm), target :: test_invars2(3) = (/                          &
@@ -384,7 +384,7 @@ CONTAINS
         'surface_air_pressure                ' /)
 
    character(len=cm), target :: test_outvars2(4) = (/                         &
-        'ccpp_error_flag                     ',                               &
+        'ccpp_error_code                     ',                               &
         'ccpp_error_message                  ',                               &
         'model_times                         ',                               &
         'number_of_model_times               ' /)
@@ -393,7 +393,7 @@ CONTAINS
         'model_times                         ',                               &
         'number_of_model_times               ',                               &
         'surface_air_pressure                ',                               &
-        'ccpp_error_flag                     ',                               &
+        'ccpp_error_code                     ',                               &
         'ccpp_error_message                  ' /)
     type(suite_info) :: test_suites(2)
     logical :: run_okay

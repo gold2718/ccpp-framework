@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
 Parse a host-model registry XML file and return the captured variables.
@@ -17,7 +17,12 @@ from parse_tools import FORTRAN_SCALAR_REF_RE
 class HostModel(VarDictionary):
     """Class to hold the data from a host model"""
 
-    def __init__(self, meta_tables, name_in, logger):
+    def __init__(self, meta_tables, name_in, run_env):
+        """Initialize this HostModel object.
+        <meta_tables> is a list of parsed host metadata tables.
+        <name_in> is the name for this host model.
+        <run_env> is the CCPPFrameworkEnv object for this framework run.
+        """
         self.__name = name_in
         self.__var_locations = {} # Local name to module map
         self.__loop_vars = None   # Loop control vars in interface calls
@@ -30,20 +35,19 @@ class HostModel(VarDictionary):
         # end for
         # Initialize our dictionaries
         # Initialize variable dictionary
-        super(HostModel, self).__init__(self.name, logger=logger)
-        self.__ddt_lib = DDTLibrary('{}_ddts'.format(self.name),
+        super(HostModel, self).__init__(self.name, logger=run_env.logger)
+        self.__ddt_lib = DDTLibrary('{}_ddts'.format(self.name), run_env,
                                     ddts=[d for d in meta_headers
-                                          if d.header_type == 'ddt'],
-                                    logger=logger)
+                                          if d.header_type == 'ddt'])
         self.__ddt_dict = VarDictionary("{}_ddt_vars".format(self.name),
-                                        parent_dict=self, logger=logger)
+                                        parent_dict=self, logger=run_env.logger)
         # Now, process the code headers by type
         self.__metadata_tables = meta_tables
         for header in [h for h in meta_headers if h.header_type != 'ddt']:
             title = header.title
-            if logger is not None:
+            if run_env.logger is not None:
                 msg = 'Adding {} {} to host model'
-                logger.debug(msg.format(header.header_type, title))
+                run_env.logger.debug(msg.format(header.header_type, title))
             # End if
             if header.header_type == 'module':
                 # Set the variable modules
