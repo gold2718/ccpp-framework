@@ -17,6 +17,7 @@ The CCPP datafile is a database consisting of several tables:
 
 # Python library imports
 import argparse
+import logging
 import os
 import re
 import sys
@@ -87,6 +88,13 @@ class CCPPDatatableError(ValueError):
     """Error specific to errors found in the CCPP capgen datafile"""
     pass
 
+class DatatableInternalError(ValueError):
+    """Error class for reporting internal errors"""
+    def __init__(self, message):
+        """Initialize this exception"""
+        logging.shutdown()
+        super(DatatableInternalError, self).__init__(message)
+
 class DatatableReport(object):
     """A class to hold a database report type and inquiry function"""
 
@@ -131,6 +139,22 @@ class PrettyElementTree(ET.ElementTree):
     def _write(self, outfile, line, indent, eol=os.linesep):
         """Write <line> as an ASCII string to <outfile>"""
         outfile.write('{}{}{}'.format(_INDENT_STR*indent, line, eol))
+
+    @staticmethod
+    def _inc_pos(outstr, text, txt_beg):
+        """Return a position increment based on the length of <outstr>
+        or raise an exception if <outstr> is empty.
+        <text> and <txt_beg> are used to provide some context for the error."""
+        if outstr:
+            return len(outstr)
+        # end if
+        txt_end = text[txt_beg].find(">") + txt_beg + 1
+        if txt_end <= txt_beg:
+            txt_end = txt_beg + 256
+        # end if
+        emsg = "No output at {} of {}\n{}".format(txt_beg, len(text),
+                                                  text[txt_beg:txt_end])
+        raise DatatableInternalError(emsg)
 
     def write(self, file, encoding="us-ascii", xml_declaration=None,
               default_namespace=None, method="xml",
@@ -178,7 +202,7 @@ class PrettyElementTree(ET.ElementTree):
                         self._write(outfile, outstr, indent)
                     # end if
                     indent += 1
-                    istart += len(outstr)
+                    istart += self._inc_pos(outstr, inline, istart)
                     last_write_text = False
                 elif ematch is not None:
                     outstr = ematch.group(1)
@@ -189,11 +213,11 @@ class PrettyElementTree(ET.ElementTree):
                     else:
                         self._write(outfile, outstr, indent)
                     # end if
-                    istart += len(outstr)
+                    istart += self._inc_pos(outstr, inline, istart)
                 elif smatch is not None:
                     outstr = smatch.group(1)
                     self._write(outfile, outstr, indent)
-                    istart += len(outstr)
+                    istart += self._inc_pos(outstr, inline, istart)
                     last_write_text = False
                 else:
                     # No tag, just output text
@@ -206,7 +230,7 @@ class PrettyElementTree(ET.ElementTree):
                     outstr = inline[istart:end_index]
                     self._write(outfile, outstr.strip(), 0, eol='')
                     last_write_text = True
-                    istart += len(outstr)
+                    istart += self._inc_pos(outstr, inline, istart)
                 # end if
             # end while
         # end with
@@ -740,9 +764,10 @@ def _new_var_entry(parent, var, full_entry=True):
     """
     prop_list = ["intent"]
     if full_entry:
-        prop_list.extend(["local_name", "type", "kind", "units",
+        prop_list.extend(["allocatable", "active", "default_value",
                           "diagnostic_name", "diagnostic_name_fixed",
-                          "default_value", "protected"])
+                          "kind", "persistence", "polymorphic", "protected",
+                          "state_variable", "type", "units"])
         prop_list.extend(Var.constituent_property_names())
     # end if
     ventry = ET.SubElement(parent, "var")

@@ -473,28 +473,28 @@ class Var(object):
     <__main__.VariableProperty object at 0x...>
     >>> Var.get_prop('active').valid_value('flag_for_aerosol_physics')
     'flag_for_aerosol_physics'
-    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('long_name')
+    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('long_name')
     'Hi mom'
-    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('intent')
+    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('intent')
     'in'
-    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('units')
-    'm/s'
+    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('units')
+    'm s-1'
     >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('units') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Required property, 'units', missing, in <standard input>
     >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : ' ', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV).get_prop_value('units') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: foo: ' ' is not a valid unit, in <standard input>
-    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'ttype' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'ttype' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid metadata variable property, 'ttype', in <standard input>
     >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Required property, 'units', missing, in <standard input>
-    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'inout', 'protected' : '.true.'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'inout', 'protected' : '.true.'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: foo is marked protected but is intent inout, at <standard input>:1
-    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'ino'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'ino'}, ParseSource('vname', 'SCHEME', ParseContext()), _MVAR_DUMMY_RUN_ENV) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid intent variable property, 'ino', at <standard input>:1
     """
@@ -976,24 +976,24 @@ class Var(object):
         """If this Var's local_name is an array ref, add in the array
         reference indices to the Var's dimensions.
         Return the (stripped) local_name and the full dimensions.
-        >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
+        >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
         ('foo', [])
-        >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
+        >>> Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
         ('foo', ['ccpp_constant_one:dim1'])
-        >>> Var({'local_name' : 'foo(:,:,bar)', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '(ccpp_constant_one:dim1,ccpp_constant_one:dim2)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
+        >>> Var({'local_name' : 'foo(:,:,bar)', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '(ccpp_constant_one:dim1,ccpp_constant_one:dim2)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
         ('foo', ['ccpp_constant_one:dim1', 'ccpp_constant_one:dim2', 'bar'])
-        >>> Var({'local_name' : 'foo(bar,:)', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
+        >>> Var({'local_name' : 'foo(bar,:)', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref()
         ('foo', ['bar', 'ccpp_constant_one:dim1'])
-        >>> Var({'local_name' : 'foo(bar)', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> Var({'local_name' : 'foo(bar)', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         CCPPError: Call dims mismatch for foo(bar), not enough colons
-        >>> Var({'local_name' : 'foo(:,bar,:)', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> Var({'local_name' : 'foo(:,bar,:)', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         CCPPError: Call dims mismatch for foo(:,bar,:), not enough dims
-        >>> Var({'local_name' : 'foo(:,:,bar)', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> Var({'local_name' : 'foo(:,:,bar)', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '(ccpp_constant_one:dim1)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         CCPPError: Call dims mismatch for foo(:,:,bar), not enough dims
-        >>> Var({'local_name' : 'foo(:,bar)', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '(ccpp_constant_one:dim1,ccpp_constant_one:dim2)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> Var({'local_name' : 'foo(:,bar)', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '(ccpp_constant_one:dim1,ccpp_constant_one:dim2)', 'type' : 'real',}, ParseSource('vname', 'HOST', ParseContext()), _MVAR_DUMMY_RUN_ENV).handle_array_ref() #doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         CCPPError: Call dims mismatch for foo(:,bar), too many dims
         """
@@ -1807,21 +1807,21 @@ class VarDictionary(OrderedDict):
     VarDictionary(foo)
     >>> VarDictionary('bar', variables={})
     VarDictionary(bar)
-    >>> VarDictionary('baz', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)) #doctest: +ELLIPSIS
+    >>> VarDictionary('baz', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)) #doctest: +ELLIPSIS
     VarDictionary(baz, [('hi_mom', <__main__.Var hi_mom: foo at 0x...>)])
-    >>> print("{}".format(VarDictionary('baz', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV))))
+    >>> print("{}".format(VarDictionary('baz', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV))))
     VarDictionary(baz, ['hi_mom'])
-    >>> VarDictionary('qux', [Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]) #doctest: +ELLIPSIS
+    >>> VarDictionary('qux', [Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]) #doctest: +ELLIPSIS
     VarDictionary(qux, [('hi_mom', <__main__.Var hi_mom: foo at 0x...>)])
-    >>> VarDictionary('boo').add_variable(Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV))
+    >>> VarDictionary('boo').add_variable(Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV))
 
-    >>> VarDictionary('who', variables=[Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]).prop_list('local_name')
+    >>> VarDictionary('who', variables=[Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]).prop_list('local_name')
     ['foo']
-    >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV),Var({'local_name' : 'who_var', 'standard_name' : 'bye_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]).new_internal_variable_name()
+    >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV),Var({'local_name' : 'who_var', 'standard_name' : 'bye_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]).new_internal_variable_name()
     'who_var2'
-    >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]).new_internal_variable_name(prefix='bar')
+    >>> VarDictionary('who', variables=[Var({'local_name' : 'who_var1', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)]).new_internal_variable_name(prefix='bar')
     'bar'
-    >>> VarDictionary('glitch', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)).add_variable(Var({'local_name' : 'bar', 'standard_name' : 'hi_mom', 'units' : 'm/s', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname2', 'DDT', ParseContext()), _MVAR_DUMMY_RUN_ENV)) #doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> VarDictionary('glitch', Var({'local_name' : 'foo', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname', 'scheme', ParseContext()), _MVAR_DUMMY_RUN_ENV)).add_variable(Var({'local_name' : 'bar', 'standard_name' : 'hi_mom', 'units' : 'm s-1', 'dimensions' : '()', 'type' : 'real', 'intent' : 'in'}, ParseSource('vname2', 'DDT', ParseContext()), _MVAR_DUMMY_RUN_ENV)) #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid Duplicate standard name, 'hi_mom', at <standard input>:
     """
