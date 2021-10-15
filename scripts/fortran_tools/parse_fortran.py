@@ -297,11 +297,11 @@ class Ftype(object):
 class FtypeCharacter(Ftype):
     """FtypeCharacter is a type that represents character types
     >>> FtypeCharacter.type_match('character') #doctest: +ELLIPSIS
-    <_sre.SRE_Match object; span=(0, 9), match='character'>
+    <re.Match object; span=(0, 9), match='character'>
     >>> FtypeCharacter.type_match('CHARACTER') #doctest: +ELLIPSIS
-    <_sre.SRE_Match object; span=(0, 9), match='CHARACTER'>
+    <re.Match object; span=(0, 9), match='CHARACTER'>
     >>> FtypeCharacter.type_match('chaRActer (len=*)') #doctest: +ELLIPSIS
-    <_sre.SRE_Match object; span=(0, 17), match='chaRActer (len=*)'>
+    <re.Match object; span=(0, 17), match='chaRActer (len=*)'>
     >>> FtypeCharacter.type_match('integer')
 
     >>> FtypeCharacter('character', ParseContext(169, 'foo.F90')).__str__()
@@ -473,11 +473,11 @@ class FtypeTypeDecl(Ftype):
     >>> FtypeTypeDecl.type_match('character')
 
     >>> FtypeTypeDecl.type_match('type(foo)') #doctest: +ELLIPSIS
-    <_sre.SRE_Match object; span=(0, 9), match='type(foo)'>
+    <re.Match object; span=(0, 9), match='type(foo)'>
     >>> FtypeTypeDecl.type_match('class(foo)') #doctest: +ELLIPSIS
 
     >>> FtypeTypeDecl.class_match('class(foo)') #doctest: +ELLIPSIS
-    <_sre.SRE_Match object; span=(0, 10), match='class(foo)'>
+    <re.Match object; span=(0, 10), match='class(foo)'>
     >>> FtypeTypeDecl.type_def_line('type GFS_statein_type')
     ['GFS_statein_type', None, None]
     >>> FtypeTypeDecl.type_def_line('type GFS_statein_type (n, m) ')
@@ -638,7 +638,7 @@ def parse_fortran_var_decl(line, source, run_env):
     """Parse a Fortran variable declaration line and return a list of
     Var objects representing the variables declared on <line>.
     >>> _VAR_ID_RE.match('foo') #doctest: +ELLIPSIS
-    <_sre.SRE_Match object; span=(0, 3), match='foo'>
+    <re.Match object; span=(0, 3), match='foo'>
     >>> _VAR_ID_RE.match("foo()")
 
     >>> _VAR_ID_RE.match('foo').group(1)

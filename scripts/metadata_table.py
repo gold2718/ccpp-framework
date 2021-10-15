@@ -1275,6 +1275,7 @@ class MetadataSection(ParseSource):
 if __name__ == "__main__":
     import doctest
     from framework_env import CCPPFrameworkEnv
-    _DUMMY_RUN_ENV = CCPPFrameworkEnv({'host_files':'', 'scheme_files':'',
-                                       'suites':''}, None)
+    _DUMMY_RUN_ENV = CCPPFrameworkEnv(None, {'host_files':'',
+                                             'scheme_files':'',
+                                             'suites':''})
     doctest.testmod()

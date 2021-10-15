@@ -265,14 +265,20 @@ class ConstituentVarDict(VarDictionary):
         this suite.
         Code is written to <outfile> starting at indent, <indent>."""
         # Format our error variables
-        errvar_names = [x.get_prop_value('local_name') for x in err_vars]
-        use_errcode = [x.get_prop_value('standard_name') in
-                       ('ccpp_error_code' 'ccpp_error_message')
-                       for x in err_vars]
-        errvar_alist = ", ".join([x for x in errvar_names])
+        errvar_names = {x.get_prop_value('standard_name') :
+                        x.get_prop_value('local_name') for x in err_vars}
+        errcode_snames = ('ccpp_error_code', 'ccpp_error_message')
+        use_errcode = all([x.get_prop_value('standard_name') in errcode_snames
+                           for x in err_vars])
+        errvar_alist = ", ".join([x for x in errvar_names.values()])
         errvar_alist2 = ", {}".format(errvar_alist) if errvar_alist else ""
-        errvar_call = ", ".join(["{}={}".format(x,x) for x in errvar_names])
+        call_vnames = {'ccpp_error_code' : 'errcode',
+                       'ccpp_error_message' : 'errmsg'}
+        errvar_call = ", ".join(["{}={}".format(call_vnames[x], errvar_names[x])
+                                 for x in errcode_snames])
         errvar_call2 = ", {}".format(errvar_call) if errvar_call else ""
+        local_call = ", ".join(["{}={}".format(errvar_names[x], errvar_names[x])
+                                 for x in errcode_snames])
         # Allocate and define constituents
         stmt = "subroutine {}({})".format(self.constituent_prop_init_consts(),
                                           errvar_alist)
@@ -294,6 +300,7 @@ class ConstituentVarDict(VarDictionary):
         # end if
         for std_name, var in self.items():
             outfile.write("index = index + 1", indent+1)
+            long_name = var.get_prop_value('long_name')
             dims = var.get_dim_stdnames()
             if 'vertical_layer_dimension' in dims:
                 vertical_dim = 'vertical_layer_dimension'
@@ -303,10 +310,10 @@ class ConstituentVarDict(VarDictionary):
                 vertical_dim = ''
             # end if
             advect_str = self.TF_string(var.get_prop_value('advected'))
-            stmt = 'call {}(index)%initialize("{}", "{}", {}{})'
+            stmt = 'call {}(index)%initialize("{}", "{}", "{}", {}{})'
             outfile.write(stmt.format(self.constituent_prop_array_name(),
-                                      std_name, vertical_dim, advect_str,
-                                      errvar_call2), indent+1)
+                                      std_name, long_name, vertical_dim,
+                                      advect_str, errvar_call2), indent+1)
         # end for
         for evar in err_vars:
             self.__init_err_var(evar, outfile, indent+1)
@@ -335,7 +342,7 @@ class ConstituentVarDict(VarDictionary):
         stmt = "if (.not. {}) then"
         outfile.write(stmt.format(self.constituent_prop_init_name()), indent+1)
         outfile.write("call {}({})".format(self.constituent_prop_init_consts(),
-                                           errvar_call), indent+2)
+                                           local_call), indent+2)
         outfile.write("end if", indent+1)
         outfile.write("{} = {}".format(fname, len(self)), indent+1)
         outfile.write("end function {}".format(fname), indent)

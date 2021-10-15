@@ -426,7 +426,7 @@ CONTAINS
         'water_vapor_specific_humidity       ' /)
    character(len=cm), target :: test_outvars1(6) = (/                         &
         'ccpp_error_message                  ',                               &
-        'ccpp_error_flag                     ',                               &
+        'ccpp_error_code                     ',                               &
         'temperature                         ',                               &
         'water_vapor_specific_humidity       ',                               &
         'cloud_liquid_dry_mixing_ratio       ',                               &
@@ -440,7 +440,7 @@ CONTAINS
         'water_temperature_at_freezing       ',                               &
         'water_vapor_specific_humidity       ',                               &
         'ccpp_error_message                  ',                               &
-        'ccpp_error_flag                     ' /)
+        'ccpp_error_code                     ' /)
 
     type(suite_info) :: test_suites(1)
     logical :: run_okay

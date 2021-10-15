@@ -1426,6 +1426,7 @@ class Var(object):
             dimstr = ''
         # end if
         protected = self.get_prop_value('protected')
+        polymorphic = self.get_prop_value('polymorphic')
         if dummy:
             intent = self.get_prop_value('intent')
         else:
@@ -1446,7 +1447,7 @@ class Var(object):
         if protected and dummy:
             intent_str = 'intent(in)   '
         elif allocatable:
-            if dimstr:
+            if dimstr or polymorphic:
                 intent_str = 'allocatable  '
             else:
                 intent_str = ' '*13
@@ -1470,8 +1471,13 @@ class Var(object):
             comma = ' '
         # end if
         if self.is_ddt():
-            dstr = "type({kind}){cspc}{intent} :: {name}{dims} ! {sname}"
-            cspc = comma + ' '*(extra_space + 13 - len(kind))
+            if polymorphic:
+                dstr = "class({kind}){cspc}{intent} :: {name}{dims} ! {sname}"
+                cspc = comma + ' '*(extra_space + 12 - len(kind))
+            else:
+                dstr = "type({kind}){cspc}{intent} :: {name}{dims} ! {sname}"
+                cspc = comma + ' '*(extra_space + 13 - len(kind))
+            # end if
         else:
             if kind:
                 dstr = "{type}({kind}){cspc}{intent} :: {name}{dims} ! {sname}"
