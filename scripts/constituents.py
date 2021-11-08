@@ -301,6 +301,7 @@ class ConstituentVarDict(VarDictionary):
         for std_name, var in self.items():
             outfile.write("index = index + 1", indent+1)
             long_name = var.get_prop_value('long_name')
+            units = var.get_prop_value('units')
             dims = var.get_dim_stdnames()
             if 'vertical_layer_dimension' in dims:
                 vertical_dim = 'vertical_layer_dimension'
@@ -310,10 +311,14 @@ class ConstituentVarDict(VarDictionary):
                 vertical_dim = ''
             # end if
             advect_str = self.TF_string(var.get_prop_value('advected'))
-            stmt = 'call {}(index)%initialize("{}", "{}", "{}", {}{})'
+            init_args = [f'std_name="{std_name}"', f'long_name="{long_name}"',
+                         f'units="{units}"', f'vertical_dim="{vertical_dim}"',
+                         f'advected={advect_str}',
+                         f'errcode={errvar_names["ccpp_error_code"]}',
+                         f'errmsg={errvar_names["ccpp_error_message"]}']
+            stmt = 'call {}(index)%initialize({})'
             outfile.write(stmt.format(self.constituent_prop_array_name(),
-                                      std_name, long_name, vertical_dim,
-                                      advect_str, errvar_call2), indent+1)
+                                      ", ".join(init_args)), indent+1)
         # end for
         for evar in err_vars:
             self.__init_err_var(evar, outfile, indent+1)
@@ -363,9 +368,12 @@ class ConstituentVarDict(VarDictionary):
         self._write_index_check(outfile, indent, suite_name,
                                 err_vars, use_errcode)
         if self:
-            stmt = "call {}(index)%standard_name(name_out{})"
+            init_args = ['std_name=name_out',
+                         f'errcode={errvar_names["ccpp_error_code"]}',
+                         f'errmsg={errvar_names["ccpp_error_message"]}']
+            stmt = "call {}(index)%standard_name({})"
             outfile.write(stmt.format(self.constituent_prop_array_name(),
-                                      errvar_call2), indent+1)
+                                      ", ".join(init_args)), indent+1)
         # end if
         outfile.write("end subroutine {}".format(self.const_name_subname()),
                       indent)

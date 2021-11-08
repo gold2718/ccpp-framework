@@ -807,9 +807,9 @@ class API(VarDictionary):
             parent = suite.parent
             # Collect all the suite variables
             oline = "{}if(trim(suite_name) == '{}') then"
-            input_vars = [set(), set(), set()] # leaves, arrrays, leaf elements
-            inout_vars = [set(), set(), set()] # leaves, arrrays, leaf elements
-            output_vars = [set(), set(), set()] # leaves, arrrays, leaf elements
+            input_vars = [set(), set(), set()] # leaves, arrays, leaf elements
+            inout_vars = [set(), set(), set()] # leaves, arrays, leaf elements
+            output_vars = [set(), set(), set()] # leaves, arrays, leaf elements
             for part in suite.groups:
                 for var in part.call_list.variable_list():
                     stdname = var.get_prop_value("standard_name")

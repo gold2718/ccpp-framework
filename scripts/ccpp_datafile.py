@@ -671,9 +671,13 @@ def _new_var_entry(parent, var, full_entry=True):
     if full_entry:
         dims = var.get_dimensions()
         if dims:
-            dim_entry = ET.SubElement(ventry, "dimensions")
-            dim_entry.text = " ".join(dims)
+            v_entry = ET.SubElement(ventry, "dimensions")
+            v_entry.text = " ".join(dims)
         # end if
+        v_entry = ET.SubElement(ventry, "source_type")
+        v_entry.text = var.source.type.lower()
+        v_entry = ET.SubElement(ventry, "source_name")
+        v_entry.text = var.source.name.lower()
     # end if
 
 ###############################################################################
