@@ -262,7 +262,7 @@ class Var:
             mstr_propdict = Var.__spec_propdict
 # XXgoldyXX: ^ don't fill in default properties?
         # end if
-        self._source = source
+        self.__source = source
         # Grab a frozen copy of the context
         if context is None:
             self._context = ParseContext(context=source.context)
@@ -835,6 +835,11 @@ class Var:
         return iter(children) if children else None
 
     @property
+    def var(self):
+        "Return this object (base behavior for derived classes such as VarDDT)"
+        return self
+
+    @property
     def context(self):
         """Return this variable's parsed context"""
         return self._context
@@ -842,13 +847,13 @@ class Var:
     @property
     def source(self):
         """Return the source object for this variable"""
-        return self._source
+        return self.__source
 
     @source.setter
     def source(self, new_source):
         """Reset this Var's source if <new_source> seems legit"""
         if isinstance(new_source, ParseSource):
-            self._source = new_source
+            self.__source = new_source
         else:
             errmsg = 'Attemping to set source of {} ({}) to "{}"'
             stdname = self.get_prop_value('standard_name')

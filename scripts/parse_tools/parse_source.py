@@ -393,24 +393,24 @@ class ParseSource(object):
 
     def __init__(self, name_in, type_in, context_in):
         """Initialize this ParseSource object."""
-        self._name = name_in
-        self._type = type_in
-        self._context = context_in
+        self.__name = name_in
+        self.__type = type_in
+        self.__context = context_in
 
     @property
     def type(self):
         """Return this source's type"""
-        return self._type
+        return self.__type
 
     @property
     def name(self):
         """Return this source's name"""
-        return self._name
+        return self.__name
 
     @property
     def context(self):
         """Return this source's context"""
-        return self._context
+        return self.__context
 
 ########################################################################
 

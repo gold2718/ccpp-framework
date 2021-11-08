@@ -20,25 +20,34 @@ module ccpp_constituent_prop_mod
       !   for a constituent species and provides interfaces to access that data.
       character(len=:), private, allocatable :: var_std_name
       character(len=:), private, allocatable :: var_long_name
+      character(len=:), private, allocatable :: var_units
       character(len=:), private, allocatable :: vert_dim
       integer,          private              :: const_ind = int_unassigned
       integer,          private              :: field_ind = int_unassigned
       logical,          private              :: advected = .false.
+      logical,          private              :: mass_mixing_ratio = .false.
+      logical,          private              :: volume_mixing_ratio = .false.
+      logical,          private              :: number_concentration = .false.
+      logical,          private              :: moist_mixing_ratio = .false.
    contains
       ! Required hashable method
       procedure :: key => ccp_properties_get_key
       ! Informational methods
-      procedure :: is_initialized     => ccp_is_initialized
-      procedure :: standard_name      => ccp_get_standard_name
-      procedure :: long_name          => ccp_get_long_name
-      procedure :: is_layer_var       => ccp_is_layer_var
-      procedure :: is_interface_var   => ccp_is_interface_var
-      procedure :: is_2d_var          => ccp_is_2d_var
-      procedure :: vertical_dimension => ccp_get_vertical_dimension
-      procedure :: const_index        => ccp_const_index
-      procedure :: field_index        => ccp_field_index
-      procedure :: is_advected        => ccp_is_advected
-      procedure :: equivalent         => ccp_is_equivalent
+      procedure :: is_initialized          => ccp_is_initialized
+      procedure :: standard_name           => ccp_get_standard_name
+      procedure :: long_name               => ccp_get_long_name
+      procedure :: is_layer_var            => ccp_is_layer_var
+      procedure :: is_interface_var        => ccp_is_interface_var
+      procedure :: is_2d_var               => ccp_is_2d_var
+      procedure :: vertical_dimension      => ccp_get_vertical_dimension
+      procedure :: const_index             => ccp_const_index
+      procedure :: field_index             => ccp_field_index
+      procedure :: is_advected             => ccp_is_advected
+      procedure :: equivalent              => ccp_is_equivalent
+      procedure :: is_mass_mixing_ratio    => ccp_is_mass_mixing_ratio
+      procedure :: is_volume_mixing_ratio  => ccp_is_volume_mixing_ratio
+      procedure :: is_number_concentration => ccp_is_number_concentration
+      procedure :: is_moist                => ccp_is_moist
       ! Copy method (be sure to update this anytime fields are added)
       procedure :: copyConstituent
       generic :: assignment(=) => copyConstituent
@@ -205,7 +214,7 @@ CONTAINS
 
    !#######################################################################
 
-   subroutine ccp_initialize(this, std_name, long_name, vertical_dim,         &
+   subroutine ccp_initialize(this, std_name, long_name, units, vertical_dim,  &
         advected, errcode, errmsg)
       ! Initialize all fields in <this>
 
@@ -213,6 +222,7 @@ CONTAINS
       class(ccpp_constituent_properties_t), intent(inout) :: this
       character(len=*),                     intent(in)    :: std_name
       character(len=*),                     intent(in)    :: long_name
+      character(len=*),                     intent(in)    :: units
       character(len=*),                     intent(in)    :: vertical_dim
       logical, optional,                    intent(in)    :: advected
       integer,                              intent(out)   :: errcode
@@ -231,12 +241,16 @@ CONTAINS
       end if
       if (errcode == 0) then
          this%var_long_name = trim(long_name)
+         this%var_units = trim(units)
          this%vert_dim = trim(vertical_dim)
          if (present(advected)) then
             this%advected = advected
          else
             this%advected = .false.
          end if
+      end if
+      if (errcode /= 0) then
+         ! Determine if this is a (moist) mixing ratio or volume mixing ratio
       end if
       if (errcode /= 0) then
          call this%deallocate()
@@ -480,6 +494,62 @@ CONTAINS
       end if
 
    end function ccp_is_equivalent
+
+   !########################################################################
+
+   logical function ccp_is_mass_mixing_ratio(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_properties_t), intent(in)  :: this
+      integer,                              intent(out) :: errcode
+      character(len=*),                     intent(out) :: errmsg
+
+      if (this%is_initialized(errcode, errmsg)) then
+         ccp_is_mass_mixing_ratio = this%mass_mixing_ratio
+      end if
+   end function ccp_is_mass_mixing_ratio
+
+   !########################################################################
+
+   logical function ccp_is_volume_mixing_ratio(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_properties_t), intent(in)  :: this
+      integer,                              intent(out) :: errcode
+      character(len=*),                     intent(out) :: errmsg
+
+      if (this%is_initialized(errcode, errmsg)) then
+         ccp_is_volume_mixing_ratio = this%volume_mixing_ratio
+      end if
+   end function ccp_is_volume_mixing_ratio
+
+   !########################################################################
+
+   logical function ccp_is_number_concentration(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_properties_t), intent(in)  :: this
+      integer,                              intent(out) :: errcode
+      character(len=*),                     intent(out) :: errmsg
+
+      if (this%is_initialized(errcode, errmsg)) then
+         ccp_is_number_concentration = this%number_concentration
+      end if
+   end function ccp_is_number_concentration
+
+   !########################################################################
+
+   logical function ccp_is_moist(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_properties_t), intent(in)  :: this
+      integer,                              intent(out) :: errcode
+      character(len=*),                     intent(out) :: errmsg
+
+      if (this%is_initialized(errcode, errmsg)) then
+         ccp_is_moist = this%moist_mixing_ratio
+      end if
+   end function ccp_is_moist
 
    !########################################################################
    !

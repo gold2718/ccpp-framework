@@ -17,7 +17,7 @@ class HostModel(VarDictionary):
 
     def __init__(self, meta_tables, name_in, run_env):
         """Initialize this HostModel object.
-        <meta_tables> is a list of parsed host metadata tables.
+        <meta_tables> is a dictionary of parsed host metadata tables.
         <name_in> is the name for this host model.
         <run_env> is the CCPPFrameworkEnv object for this framework run.
         """
