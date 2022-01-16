@@ -75,6 +75,10 @@ class CCPPDatabaseObj:
         # end if
         raise CCPPDatabaseObjError("ERROR: <database_file> not supported")
 
+    def constituent_dictionary(self, suite):
+        """Return the constituent dictionary for <suite>"""
+        return suite.constituent_dictionary()
+
     def call_list(self, phase):
         """Return the API call list for <phase>"""
         if self.__api is not None:
