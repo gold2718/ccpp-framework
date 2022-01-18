@@ -449,7 +449,7 @@ class SuiteObject(VarDictionary):
                 if dvar is None:
                     emsg = "{}: Could not find dimension {} in {}"
                     raise ParseInternalError(emsg.format(self.name,
-                                                         stdname, vardim))
+                                                         vardim, stdname))
                 # end if
         elif self.parent is None:
             errmsg = 'No call_list found for {}'.format(newvar)
