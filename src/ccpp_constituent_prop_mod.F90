@@ -51,7 +51,7 @@ module ccpp_constituent_prop_mod
       ! Copy method (be sure to update this anytime fields are added)
       procedure :: copyConstituent
       generic :: assignment(=) => copyConstituent
-      ! Methods that change state
+      ! Methods that change state (XXgoldyXX: make private?)
       procedure :: initialize      => ccp_initialize
       procedure :: deallocate      => ccp_deallocate
       procedure :: set_const_index => ccp_set_const_index
@@ -63,8 +63,10 @@ module ccpp_constituent_prop_mod
       !   data for a model run's constituents along with data and methods
       !   to initialize and access the data.
       integer,                 private :: num_layer_vars = 0
+      !!XXgoldyXX v: Do we really need the complexity of these?
       integer,                 private :: num_interface_vars = 0
       integer,                 private :: num_2d_vars = 0
+      !!XXgoldyXX ^: Do we really need the complexity of these?
       integer,                 private :: num_layers = 0
       integer,                 private :: num_interfaces = 0
       type(ccpp_hash_table_t), private :: hash_table
@@ -72,10 +74,14 @@ module ccpp_constituent_prop_mod
       ! These fields are public to allow for efficient (i.e., no copying)
       !   usage even though it breaks object independence
       real(kind_phys), allocatable     :: vars_layer(:,:,:)
+      !!XXgoldyXX v: Do we really need the complexity of these?
       real(kind_phys), allocatable     :: vars_interface(:,:,:)
       real(kind_phys), allocatable     :: vars_2d(:,:)
+      !!XXgoldyXX ^: Do we really need the complexity of these?
       ! An array containing all the constituent metadata
       ! XXgoldyXX: Is this needed? Source of duplicate metadata?
+      !            Perhaps convert hash to index and reconfigure so that
+      !            total number known at initialization time?
       type(ccpp_constituent_properties_t), allocatable :: const_metadata(:)
    contains
       ! Return .true. if a constituent matches pattern
