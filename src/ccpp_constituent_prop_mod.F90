@@ -58,6 +58,9 @@ module ccpp_constituent_prop_mod
       procedure :: set_field_index => ccp_set_field_index
    end type ccpp_constituent_properties_t
 
+!! \section arg_table_ccpp_model_constituents_t
+!! \htmlinclude ccpp_model_constituents_t.html
+!!
    type, public :: ccpp_model_constituents_t
       ! A ccpp_model_constituents_t object holds all the metadata and field
       !   data for a model run's constituents along with data and methods
@@ -74,6 +77,7 @@ module ccpp_constituent_prop_mod
       ! These fields are public to allow for efficient (i.e., no copying)
       !   usage even though it breaks object independence
       real(kind_phys), allocatable     :: vars_layer(:,:,:)
+      real(kind_phys], allocatable     :: vars_minvalue(:,:,:)
       !!XXgoldyXX v: Do we really need the complexity of these?
       real(kind_phys), allocatable     :: vars_interface(:,:,:)
       real(kind_phys), allocatable     :: vars_2d(:,:)

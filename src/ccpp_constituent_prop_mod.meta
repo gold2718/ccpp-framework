@@ -1,0 +1,26 @@
+########################################################################
+[ccpp-table-properties]
+  name = ccpp_model_constituents_t
+  type = ddt
+
+[ccpp-arg-table]
+  name = ccpp_model_constituents_t
+  type = ddt
+[ num_layer_vars ]
+  standard_name = ccpp_num_constituents
+  long_name = Number of constituents managed by CCPP Framework
+  units = count
+  dimensions = ()
+  type = integer
+[ vars_layer ]
+  standard_name = ccpp_constituent_array
+  long_name = Array of constituents managed by CCPP Framework
+  units = none
+  dimensions = (horizontal_dimension, vertical_layer_dimension, ccpp_num_constituents)
+  type = real | kind = kind_phys
+[ vars_interface ]
+  standard_name = ccpp_constituents_minimum_value_array
+  long_name = Array of minimum allowed values of constituents managed by CCPP Framework
+  units = none
+  dimensions = (horizontal_dimension, vertical_layer_dimension, ccpp_num_constituents)
+  type = real | kind = kind_phys
