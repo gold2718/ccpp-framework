@@ -12,6 +12,12 @@
   units = count
   dimensions = ()
   type = integer
+[ num_advected_vars ]
+  standard_name = ccpp_num_advected_constituents
+  long_name = Number of advected constituents managed by CCPP Framework
+  units = count
+  dimensions = ()
+  type = integer
 [ vars_layer ]
   standard_name = ccpp_constituent_array
   long_name = Array of constituents managed by CCPP Framework

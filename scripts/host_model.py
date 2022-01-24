@@ -131,12 +131,10 @@ class HostModel(VarDictionary):
         """Return this host model's DDT library"""
         return self.__ddt_lib
 
-# XXgoldyXX: v needed?
     @property
     def constituent_module(self):
         """Return the name of host model constituent module"""
         return "{}_ccpp_constituents".format(self.name)
-# XXgoldyXX: ^ needed?
 
     def argument_list(self, loop_vars=True):
         """Return a string representing the host model variable arg list"""
