@@ -23,7 +23,6 @@ module ccpp_constituent_prop_mod
       character(len=:), private, allocatable :: var_units
       character(len=:), private, allocatable :: vert_dim
       integer,          private              :: const_ind = int_unassigned
-      integer,          private              :: field_ind = int_unassigned
       logical,          private              :: advected = .false.
       logical,          private              :: mass_mixing_ratio = .false.
       logical,          private              :: volume_mixing_ratio = .false.
@@ -41,7 +40,6 @@ module ccpp_constituent_prop_mod
       procedure :: is_2d_var               => ccp_is_2d_var
       procedure :: vertical_dimension      => ccp_get_vertical_dimension
       procedure :: const_index             => ccp_const_index
-      procedure :: field_index             => ccp_field_index
       procedure :: is_advected             => ccp_is_advected
       procedure :: equivalent              => ccp_is_equivalent
       procedure :: is_mass_mixing_ratio    => ccp_is_mass_mixing_ratio
@@ -55,8 +53,21 @@ module ccpp_constituent_prop_mod
       procedure :: initialize      => ccp_initialize
       procedure :: deallocate      => ccp_deallocate
       procedure :: set_const_index => ccp_set_const_index
-      procedure :: set_field_index => ccp_set_field_index
    end type ccpp_constituent_properties_t
+
+   type, public :: ccpp_constituent_prop_ptr_t
+      type(ccpp_constituent_properties_t), private, pointer :: prop => NULL()
+   contains
+      ! Informational methods
+      procedure :: standard_name           => ccpt_get_standard_name
+      procedure :: long_name               => ccpt_get_long_name
+      procedure :: const_index             => ccpt_const_index
+      procedure :: is_advected             => ccpt_is_advected
+      procedure :: is_mass_mixing_ratio    => ccpt_is_mass_mixing_ratio
+      procedure :: is_volume_mixing_ratio  => ccpt_is_volume_mixing_ratio
+      procedure :: is_number_concentration => ccpt_is_number_concentration
+      procedure :: is_moist                => ccpt_is_moist
+   end type ccpp_constituent_prop_ptr_t
 
 !! \section arg_table_ccpp_model_constituents_t
 !! \htmlinclude ccpp_model_constituents_t.html
@@ -66,27 +77,19 @@ module ccpp_constituent_prop_mod
       !   data for a model run's constituents along with data and methods
       !   to initialize and access the data.
       integer,                 private :: num_layer_vars = 0
-      !!XXgoldyXX v: Do we really need the complexity of these?
-      integer,                 private :: num_interface_vars = 0
-      integer,                 private :: num_2d_vars = 0
-      !!XXgoldyXX ^: Do we really need the complexity of these?
+      integer,                 private :: num_advected_vars = 0
       integer,                 private :: num_layers = 0
-      integer,                 private :: num_interfaces = 0
       type(ccpp_hash_table_t), private :: hash_table
       logical,                 private :: table_locked = .false.
       ! These fields are public to allow for efficient (i.e., no copying)
       !   usage even though it breaks object independence
       real(kind_phys), allocatable     :: vars_layer(:,:,:)
       real(kind_phys], allocatable     :: vars_minvalue(:,:,:)
-      !!XXgoldyXX v: Do we really need the complexity of these?
-      real(kind_phys), allocatable     :: vars_interface(:,:,:)
-      real(kind_phys), allocatable     :: vars_2d(:,:)
-      !!XXgoldyXX ^: Do we really need the complexity of these?
       ! An array containing all the constituent metadata
       ! XXgoldyXX: Is this needed? Source of duplicate metadata?
       !            Perhaps convert hash to index and reconfigure so that
       !            total number known at initialization time?
-      type(ccpp_constituent_properties_t), allocatable :: const_metadata(:)
+      type(ccpp_constituent_prop_ptr_t), allocatable :: const_metadata(:)
    contains
       ! Return .true. if a constituent matches pattern
       procedure, private :: is_match => ccp_model_const_is_match
@@ -121,7 +124,11 @@ module ccpp_constituent_prop_mod
    end type ccpp_model_constituents_t
 
    private int_unassigned
+   private tostr
+   private initialize_errvars
+   private set_errvars
    private handle_allocate_error
+   private check_var_bounds
 
 CONTAINS
 
@@ -146,6 +153,77 @@ CONTAINS
 
    !#######################################################################
 
+   character(len=10) function to_str(val)
+      ! return default integer as a left justified string
+
+      ! Dummy argument
+      integer, intent(in) :: val
+
+      write(to_str,'(i0)') val
+
+   end function to_str
+
+   !#######################################################################
+
+   subroutine initialize_errvars(errcode, errmsg)
+      ! Initialize error variables, if present
+
+      ! Dummy arguments
+      integer,          optional, intent(out) :: errcode
+      character(len=*), optional, intent(out) :: errmsg
+
+      if (present(errcode)) then
+         errcode = 0
+      end if
+      if (present(errmsg)) then
+         errmsg = ''
+      end if
+   end subroutine initialize_errvars
+
+   !#######################################################################
+
+   subroutine set_errvars(errcode_val, errmsg_val, errcode, errmsg,           &
+        errmsg2, errmsg3, errmsg4, errmsg5)
+      ! Set error variables, if present
+
+      ! Dummy arguments
+      integer,          optional, intent(in)  :: errcode_val
+      character(len=*), optional, intent(in)  :: errmsg_val
+      integer,          optional, intent(out) :: errcode
+      character(len=*), optional, intent(out) :: errmsg
+      character(len=*), optional, intent(in)  :: errmsg2
+      character(len=*), optional, intent(in)  :: errmsg3
+      character(len=*), optional, intent(in)  :: errmsg4
+      character(len=*), optional, intent(in)  :: errmsg5
+      ! Local variable
+      integer :: emsg_len
+
+      if (present(errcode)) then
+         errcode = errcode_val
+      end if
+      if (present(errmsg)) then
+         errmsg = trim(errmsg_val)
+         if (present(errmsg2)) then
+            emsg_len = len_trim(errmsg)
+            errmsg(emsg_len+1:) = errmsg2
+         end if
+         if (present(errmsg3)) then
+            emsg_len = len_trim(errmsg)
+            errmsg(emsg_len+1:) = errmsg3
+         end if
+         if (present(errmsg4)) then
+            emsg_len = len_trim(errmsg)
+            errmsg(emsg_len+1:) = errmsg4
+         end if
+         if (present(errmsg5)) then
+            emsg_len = len_trim(errmsg)
+            errmsg(emsg_len+1:) = errmsg5
+         end if
+      end if
+   end subroutine set_errvars
+
+   !#######################################################################
+
    subroutine handle_allocate_error(astat, fieldname, errcode, errmsg)
       ! Generate an error message if <astat> indicates an allocation failure
 
@@ -155,25 +233,34 @@ CONTAINS
       integer,          optional, intent(out) :: errcode
       character(len=*), optional, intent(out) :: errmsg
 
+      call initialize_errvars(errcode, errmsg)
       if (astat /= 0) then
-         if (present(errcode)) then
-            errcode = astat
-         end if
-         if (present(errmsg)) then
-            write(errmsg, '(4a,i0)') 'Error allocating ',                     &
-                 'ccpp_constituent_properties_t object component, ',          &
-                 trim(fieldname), ', error code = ', astat
-         end if
-      else
-         if (present(errcode)) then
-            errcode = 0
-         end if
-         if (present(errmsg)) then
-            errmsg = ''
-         end if
+         call set_errvars(astat, "Error allocating ", errcode=errcode,        &
+              errmsg=errmsg, errmsg2="ccpp_constituent_properties_t",         &
+              errmsg3="object component, "//trim(fieldname),                  &
+              errmsg4=", error code = ", errmsg5=to_str(astat))
       end if
 
    end subroutine handle_allocate_error
+
+   !#######################################################################
+
+   subroutine check_var_bounds(var, var_bound, varname, errcode, errmsg)
+      ! Generate an error message if <astat> indicates an allocation failure
+
+      ! Dummy arguments
+      integer,                    intent(in)  :: var
+      integer,                    intent(in)  :: var_bound
+      character(len=*),           intent(in)  :: varname
+      integer,          optional, intent(out) :: errcode
+      character(len=*), optional, intent(out) :: errmsg
+
+      call initialize_errvars(errcode, errmsg)
+      if (var > var_bound) then
+         call set_errvars(1, trim(varname)//" exceeds its upper bound, ",     &
+              errcode=errcode, errmsg=errmsg, errmsg2=to_str(var_bound))
+      end if
+   end subroutine check_var_bounds
 
    !#######################################################################
 
@@ -203,21 +290,10 @@ CONTAINS
       character(len=*), optional,           intent(out) :: errmsg
 
       ccp_is_initialized = allocated(this%var_std_name)
-      if (ccp_is_initialized) then
-         if (present(errcode)) then
-            errcode = 0
-         end if
-         if (present(errmsg)) then
-            errmsg = ''
-         end if
-      else
-         if (present(errcode)) then
-            errcode = 1
-         end if
-         if (present(errmsg)) then
-            write(errmsg, *) 'ccpp_constituent_properties_t object ',         &
-                 'is not initialized'
-         end if
+      call initialize_errvars(errcode, errmsg)
+      if (.not. ccp_is_initialized) then
+         call set_errvars(1, "ccpp_constituent_properties_t object ",         &
+              errcode=errcode, errmsg=errmsg, errmsg2="is not initialized")
       end if
 
    end function ccp_is_initialized
@@ -259,7 +335,7 @@ CONTAINS
             this%advected = .false.
          end if
       end if
-      if (errcode /= 0) then
+      if (errcode == 0) then
          ! Determine if this is a (moist) mixing ratio or volume mixing ratio
       end if
       if (errcode /= 0) then
@@ -384,21 +460,6 @@ CONTAINS
 
    !#######################################################################
 
-   integer function ccp_const_index(this, errcode, errmsg)
-      ! Return this constituent's master index (or -1 of not assigned)
-
-      ! Dummy arguments
-      class(ccpp_constituent_properties_t), intent(in)  :: this
-      integer,          optional,           intent(out) :: errcode
-      character(len=*), optional,           intent(out) :: errmsg
-
-      if (this%is_initialized(errcode, errmsg)) then
-         ccp_const_index = this%const_ind
-      end if
-   end function ccp_const_index
-
-   !#######################################################################
-
    integer function ccp_field_index(this, errcode, errmsg)
       ! Return this constituent's field index (or -1 of not assigned)
 
@@ -409,6 +470,8 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          ccp_field_index = this%field_ind
+      else
+         ccp_field_index = int_unassigned
       end if
 
    end function ccp_field_index
@@ -429,44 +492,13 @@ CONTAINS
          if (this%const_ind /= int_unassigned) then
             this%const_ind = index
          else
-            if (present(errcode)) then
-               errcode = 1
-            end if
-            if (present(errmsg)) then
-               write(errmsg, *) 'ccpp_constituent_properties_t ',          &
-                    'const index is already set'
-            end if
+            call set_errvars(1, "ccpp_constituent_properties_t ",             &
+                 errcode=errcode, errmsg=errmsg,                              &
+                 errmsg2="const index is already set")
          end if
       end if
 
    end subroutine ccp_set_const_index
-
-   !#######################################################################
-
-   subroutine ccp_set_field_index(this, findex, errcode, errmsg)
-      ! Set this constituent's field index
-      ! It is an error to try to set an index if it is already set
-
-      ! Dummy arguments
-      class(ccpp_constituent_properties_t), intent(inout) :: this
-      integer,                              intent(in)    :: findex
-      integer,          optional,           intent(out)   :: errcode
-      character(len=*), optional,           intent(out)   :: errmsg
-
-      if (this%is_initialized(errcode, errmsg)) then
-         if (this%field_ind == int_unassigned) then
-            this%field_ind = findex
-         else
-            if (present(errcode)) then
-               errcode = 1
-            end if
-            if (present(errmsg)) then
-               write(errmsg, *) 'ccpp_constituent_properties_t ',          &
-                    'field index is already set'
-            end if
-         end if
-      end if
-   end subroutine ccp_set_field_index
 
    !#######################################################################
 
@@ -479,6 +511,8 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          ccp_is_advected = this%advected
+      else
+         ccp_is_advected = .false.
       end if
    end function ccp_is_advected
 
@@ -516,6 +550,8 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          ccp_is_mass_mixing_ratio = this%mass_mixing_ratio
+      else
+         ccp_is_mass_mixing_ratio = .false.
       end if
    end function ccp_is_mass_mixing_ratio
 
@@ -530,6 +566,8 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          ccp_is_volume_mixing_ratio = this%volume_mixing_ratio
+      else
+         ccp_is_volume_mixing_ratio = .false.
       end if
    end function ccp_is_volume_mixing_ratio
 
@@ -544,6 +582,8 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          ccp_is_number_concentration = this%number_concentration
+      else
+         ccp_is_number_concentration = .false.
       end if
    end function ccp_is_number_concentration
 
@@ -558,6 +598,8 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          ccp_is_moist = this%moist_mixing_ratio
+      else
+         ccp_is_moist = .false.
       end if
    end function ccp_is_moist
 
@@ -579,12 +621,7 @@ CONTAINS
       ! Local variable
       character(len=*), parameter :: subname = 'ccp_model_const_locked'
 
-      if (present(errcode)) then
-         errcode = 0
-      end if
-      if (present(errmsg)) then
-         errmsg = ''
-      end if
+      call initialize_errvars(errcode, errmsg)
       ccp_model_const_locked = .false.
       ! Use an initialized hash table as double check
       if (this%hash_table%is_initialized()) then
@@ -597,17 +634,14 @@ CONTAINS
                  ' WARNING: Model constituents not ready to use'
          end if
       else
-         if (present(errcode)) then
-            errcode = 1
-         end if
-         if (present(errmsg)) then
-            if (present(warn_func)) then
-               write(errmsg, *) trim(warn_func),                              &
-                    ' WARNING: Model constituents not initialized'
-            else
-               write(errmsg, *) subname,                                      &
-                    ' WARNING: Model constituents not initialized'
-            end if
+         if (present(warn_func)) then
+            call set_errvars(1, trim(warn_func),                              &
+                 errcode=errcode, errmsg=errmsg,                              &
+                 errmsg2=" WARNING: Model constituents not initialized")
+         else
+            call set_errvars(1, subname,                                      &
+                 errcode=errcode, errmsg=errmsg,                              &
+                 errmsg2=" WARNING: Model constituents not initialized")
          end if
       end if
 
@@ -618,7 +652,8 @@ CONTAINS
    logical function ccp_model_const_okay_to_add(this, errcode, errmsg,        &
         warn_func)
       ! Return .true. iff <this> is initialized and not locked
-      ! Optionally fill out <errcode> and <errmsg> if the conditions are not met.
+      ! Optionally fill out <errcode> and <errmsg> if the conditions
+      !    are not met.
 
       ! Dummy arguments
       class(ccpp_model_constituents_t),    intent(inout) :: this
@@ -633,29 +668,25 @@ CONTAINS
          ccp_model_const_okay_to_add = .not. this%locked(errcode=errcode,     &
               errmsg=errmsg, warn_func=subname)
          if (.not. ccp_model_const_okay_to_add) then
-            if (present(errcode)) then
-               errcode = 1
-            end if
-            if (present(errmsg)) then
-               if (present(warn_func)) then
-                  write(errmsg, *) trim(warn_func),                           &
-                       ' WARNING: Model constituents are locked'
-               else
-                  errmsg = subname//' WARNING: Model constituents are locked'
-               end if
+            if (present(warn_func)) then
+               call set_errvars(1, trim(warn_func),                           &
+                    errcode=errcode, errmsg=errmsg,                           &
+                    errmsg2=" WARNING: Model constituents are locked")
+            else
+               call set_errvars(1, subname,                                   &
+                    errcode=errcode, errmsg=errmsg,                           &
+                    errmsg2=" WARNING: Model constituents are locked")
             end if
          end if
       else
-         if (present(errcode)) then
-            errcode = 1
-         end if
-         if (present(errmsg)) then
-            if (present(warn_func)) then
-               write(errmsg, *) trim(warn_func),                              &
-                    ' WARNING: Model constituents not initialized'
-            else
-               errmsg = subname//' WARNING: Model constituents not initialized'
-            end if
+         if (present(warn_func)) then
+            call set_errvars(1, trim(warn_func),                              &
+                 errcode=errcode, errmsg=errmsg,                              &
+                 errmsg2=" WARNING: Model constituents not initialized")
+         else
+            call set_errvars(1, subname,                                      &
+                 errcode=errcode, errmsg=errmsg,                              &
+                 errmsg2=" WARNING: Model constituents not initialized")
          end if
       end if
 
@@ -675,46 +706,34 @@ CONTAINS
       character(len=256)          :: error
       character(len=*), parameter :: subnam = 'ccp_model_const_add_metadata'
 
-      if (this%okay_to_add(errcode=errcode, errmsg=errmsg, warn_func=subnam)) then
+      if (this%okay_to_add(errcode=errcode, errmsg=errmsg,                    &
+           warn_func=subnam)) then
          error = ''
 !!XXgoldyXX: Add check on key to see if incompatible item already there.
          call this%hash_table%add_hash_key(field_data, error)
          if (len_trim(error) > 0) then
-            if (present(errcode)) then
-               errcode = 1
-            end if
-            if (present(errmsg)) then
-               errmsg = trim(error)
-            end if
+            call err_setvars(1, trim(error), errcode=errcode, errmsg=errmsg)
          else
             ! If we get here we are successful, add to variable count
             if (field_data%is_layer_var()) then
                this%num_layer_vars = this%num_layer_vars + 1
-            else if (field_data%is_interface_var()) then
-               this%num_interface_vars = this%num_interface_vars + 1
-            else if (field_data%is_2d_var()) then
-               this%num_2d_vars = this%num_2d_vars + 1
             else
-               if (present(errcode)) then
-                  errcode = 1
-               end if
                if (present(errmsg)) then
                   call field_data%vertical_dimension(error,                   &
                        errcode=errcode, errmsg=errmsg)
                   if (len_trim(errmsg) == 0) then
-                     write(errmsg, *) "ERROR: Unknown vertical dimension, '", &
-                          trim(error), "'"
+                     call err_setvars(1,                                      &
+                          "ERROR: Unknown vertical dimension, '",             &
+                          errcode=errcode, errmsg=errmsg,                     &
+                          errmsg2=trim(error), errmsg3="'")
                   end if
                end if
             end if
          end if
       else
-         if (present(errcode)) then
-            errcode = 1
-         end if
-         if (present(errmsg)) then
-            errmsg = 'ERROR: Model contituents are locked'
-         end if
+         call set_errvars(1, subname,                                         &
+              errcode=errcode, errmsg=errmsg,                                 &
+              errmsg2=" WARNING: Model constituents are locked")
       end if
 
    end subroutine ccp_model_const_add_metadata
@@ -732,16 +751,8 @@ CONTAINS
 
       ! Clear any data
       this%num_layer_vars = 0
-      this%num_interface_vars = 0
-      this%num_2d_vars = 0
       if (allocated(this%vars_layer)) then
          deallocate(this%vars_layer)
-      end if
-      if (allocated(this%vars_interface)) then
-         deallocate(this%vars_interface)
-      end if
-      if (allocated(this%vars_2d)) then
-         deallocate(this%vars_2d)
       end if
       if (allocated(this%const_metadata)) then
          deallocate(this%const_metadata)
@@ -758,7 +769,7 @@ CONTAINS
 
    !########################################################################
 
-   function ccp_model_const_find_const(this, standard_name, errcode, errmsg)   &
+   function ccp_model_const_find_const(this, standard_name, errcode, errmsg)  &
         result(cprop)
       ! Return a constituent with key, <standard_name>, from the hash table
       ! <this> must be locked to execute this function
@@ -779,24 +790,16 @@ CONTAINS
       nullify(cprop)
       hval => this%hash_table%table_value(standard_name, errmsg=error)
       if (len_trim(error) > 0) then
-         if (present(errcode)) then
-            errcode = 1
-         end if
-         if (present(errmsg)) then
-            write(errmsg, *) subname, ': ', trim(error)
-         end if
+         call set_errvars(1, subname, errcode=errcode, errmsg=errmsg,         &
+              errmsg2=": "//trim(error))
       else
          select type(hval)
          type is (ccpp_constituent_properties_t)
             cprop => hval
          class default
-            if (present(errcode)) then
-               errcode = 1
-            end if
-            if (present(errmsg)) then
-               write(errmsg, *) subname, ' ERROR: Bad hash table value',      &
-                    trim(standard_name)
-            end if
+            call set_errvars(1, subname, errcode=errcode, errmsg=errmsg,      &
+                 errmsg2=" ERROR: Bad hash table value",                      &
+                 errmsg3=trim(standard_name))
          end select
       end if
 
@@ -804,68 +807,81 @@ CONTAINS
 
    !########################################################################
 
-   subroutine ccp_model_const_lock(this, ncols, num_layers, num_interfaces,   &
-        errcode, errmsg)
+   subroutine ccp_model_const_lock(this, ncols, num_layers, errcode, errmsg)
       ! Freeze hash table and initialize constituent field arrays
 
       ! Dummy arguments
       class(ccpp_model_constituents_t), intent(inout) :: this
       integer,                          intent(in)    :: ncols
       integer,                          intent(in)    :: num_layers
-      integer,                          intent(in)    :: num_interfaces
       integer,                optional, intent(out)   :: errcode
       character(len=*),       optional, intent(out)   :: errmsg
       ! Local variables
       integer                                      :: index_layer
-      integer                                      :: index_interface
-      integer                                      :: index_2d
-      integer                                      :: index_const
+      integer                                      :: index_advect
+      integer                                      :: num_advect
+      integer                                      :: num_vars
       integer                                      :: astat
       type(ccpp_hash_iterator_t)                   :: hiter
       class(ccpp_hashable_t),              pointer :: hval
-      type(ccpp_constituent_properties_t), pointer :: cprop
+      type(ccpp_constituent_prop_ptr_t),   pointer :: cprop
       character(len=32)                            :: dimname
       character(len=*), parameter :: subname = 'ccp_model_const_lock'
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
-         if (present(errcode)) then
-            errcode = 1
-         end if
-         if (present(errmsg)) then
-            if (len_trim(errmsg) == 0) then
-               write(errmsg, *) subname,                                      &
-                    ' WARNING: Model constituents already locked, ignoring'
-            end if
-         end if
+         call set_errvars(1, subname, errcode=errcode, errmsg=errmsg,         &
+              errmsg2=" WARNING: Model constituents already locked, ignoring")
       else
          index_layer = 0
-         index_interface = 0
-         index_2d = 0
          index_const = 0
          ! Make sure everything is really initialized
          if (allocated(this%vars_layer)) then
             deallocate(this%vars_layer)
          end if
-         if (allocated(this%vars_interface)) then
-            deallocate(this%vars_interface)
-         end if
-         if (allocated(this%vars_2d)) then
-            deallocate(this%vars_2d)
-         end if
          if (allocated(this%const_metadata)) then
             deallocate(this%const_metadata)
          end if
          ! Allocate the constituent array
-         allocate(this%const_metadata(this%hash_table%num_values()), stat=astat)
+         num_vars = this%hash_table%num_values()
+         allocate(this%const_metadata(num_vars), stat=astat)
          call handle_allocate_error(astat, 'const_metadata',                  &
               errcode=errcode, errmsg=errmsg)
+         ! We want to pack the advected constituents at the beginning of
+         !   the field array so we need to know how many there are
+         num_advect = 0
+         if (astat == 0) then
+            call hiter%initialize(this%hash_table)
+            do
+               if (hiter%valid()) then
+                  hval => hiter%value()
+                  select type(hval)
+                  type is (ccpp_constituent_prop_ptr_t)
+                     cprop => hval
+                     if (cprop%is_advected()) then
+                        num_advect = num_advect + 1
+                     end if
+                  end select
+               end if
+            end do
+            ! Sanity check on num_advect
+            if (num_advect > num_vars) then
+               astat = 1
+               if (present(errcode)) then
+                  errcode = astat
+               end if
+               if (present(errmsg)) then
+                  write(errmsg, *) subname,                             &
+                             " ERROR: num_advect index out of bounds"
+               end if
+            end if
+         end if
          ! Iterate through the hash table to find entries
          if (astat == 0) then
             call hiter%initialize(this%hash_table)
             do
                if (hiter%valid()) then
                   index_const = index_const + 1
-                  if (index_const > SIZE(this%const_metadata)) then
+                  if (index_const > num_vars) then
                      if (present(errcode)) then
                         errcode = 1
                      end if
@@ -877,7 +893,7 @@ CONTAINS
                   end if
                   hval => hiter%value()
                   select type(hval)
-                  type is (ccpp_constituent_properties_t)
+                  type is (ccpp_constituent_prop_ptr_t)
                      cprop => hval
                      call cprop%set_const_index(index_const,                  &
                           errcode=errcode, errmsg=errmsg)
@@ -968,20 +984,6 @@ CONTAINS
             if (astat == 0) then
                this%num_layers = num_layers
                this%vars_layer = kphys_unassigned
-               allocate(this%vars_interface(ncols, num_interfaces,            &
-                    index_layer), stat=astat)
-               call handle_allocate_error(astat, 'vars_interface',            &
-                    errcode=errcode, errmsg=errmsg)
-            end if
-            if (astat == 0) then
-               this%num_interfaces = num_interfaces
-               this%vars_interface = kphys_unassigned
-               allocate(this%vars_2d(ncols, index_2d), stat=astat)
-               call handle_allocate_error(astat, 'vars_2d',                   &
-                    errcode=errcode, errmsg=errmsg)
-            end if
-            if (astat == 0) then
-               this%vars_2d = kphys_unassigned
             end if
             if (present(errcode)) then
                if (errcode /= 0) then
@@ -1340,5 +1342,120 @@ CONTAINS
       end if
 
    end subroutine ccp_model_const_metadata
+
+   !########################################################################
+
+   !#####################################
+   ! ccpp_constituent_prop_ptr_t methods
+   !#####################################
+
+   !#######################################################################
+
+   subroutine ccpt_get_standard_name(this, std_name, errcode, errmsg)
+      ! Return this constituent's standard name
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      character(len=*),                   intent(out) :: std_name
+      integer,          optional,         intent(out) :: errcode
+      character(len=*), optional,         intent(out) :: errmsg
+
+      call this%prop%standard_name(std_name, errcode, errmsg)
+
+   end subroutine ccpt_get_standard_name
+
+   !#######################################################################
+
+   subroutine ccpt_get_long_name(this, long_name, errcode, errmsg)
+      ! Return this constituent's long name (description)
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      character(len=*),                   intent(out) :: long_name
+      integer,          optional,         intent(out) :: errcode
+      character(len=*), optional,         intent(out) :: errmsg
+
+      call this%prop%long_name(long_name, errcode, errmsg)
+
+   end subroutine ccpt_get_long_name
+
+   !#######################################################################
+
+   integer function ccpt_const_index(this, errcode, errmsg)
+      ! Return this constituent's master index (or -1 of not assigned)
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      integer,          optional,         intent(out) :: errcode
+      character(len=*), optional,         intent(out) :: errmsg
+
+      ccpt_const_index = this%prop%const_ind(errcode, errmsg)
+
+   end function ccpt_const_index
+
+   !#######################################################################
+
+   logical function ccpt_is_advected(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      integer,          optional,         intent(out) :: errcode
+      character(len=*), optional,         intent(out) :: errmsg
+
+      ccpt_is_advected = this%prop%is_advected(errcode, errmsg)
+
+   end function ccpt_is_advected
+
+   !########################################################################
+
+   logical function ccpt_is_mass_mixing_ratio(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      integer,                            intent(out) :: errcode
+      character(len=*),                   intent(out) :: errmsg
+
+      ccpt_is_mass_mixing_ratio = this%prop%is_mass_mixing_ratio(errcode, errmsg)
+
+   end function ccpt_is_mass_mixing_ratio
+
+   !########################################################################
+
+   logical function ccpt_is_volume_mixing_ratio(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      integer,                            intent(out) :: errcode
+      character(len=*),                   intent(out) :: errmsg
+
+      ccpt_is_volume_mixing_ratio = this%prop%is_volume_mixing_ratio(errcode, errmsg)
+
+   end function ccpt_is_volume_mixing_ratio
+
+   !########################################################################
+
+   logical function ccpt_is_number_concentration(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      integer,                            intent(out) :: errcode
+      character(len=*),                   intent(out) :: errmsg
+
+      ccpt_is_number_concentration = this%prop_is_number_concentration(errcode, errmsg)
+
+   end function ccpt_is_number_concentration
+
+   !########################################################################
+
+   logical function ccpt_is_moist(this, errcode, errmsg)
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      integer,                            intent(out) :: errcode
+      character(len=*),                   intent(out) :: errmsg
+
+      ccpt_is_moist = this%prop%is_moist(errcode, errmsg)
+
+   end function ccpt_is_moist
 
 end module ccpp_constituent_prop_mod

@@ -484,9 +484,9 @@ class ConstituentVarDict(VarDictionary):
                                                  errmsg=herrmsg)
 # XXgoldyXX: ^ need to generalize host model error var type support
         # First up, the registration routine
-        substmt = "subroutine {}".format(reg_funcname)
-        stmt = "{}(suite_list, ncols, num_layers, num_interfaces, {})"
-        cap.write(stmt.format(substmt, err_dummy_str), 1)
+        substmt = f"subroutine {reg_funcname}"
+        stmt = f"{substmt}(suite_list, ncols, num_layers, {err_dummy_str})"
+        cap.write(stmt, 1)
         cap.write("! Create constituent object for suites in <suite_list>", 2)
         cap.write("", 0)
         ConstituentVarDict.write_constituent_use_statements(cap, suite_list, 2)
@@ -495,7 +495,6 @@ class ConstituentVarDict(VarDictionary):
         cap.write("character(len=*),   intent(in)    :: suite_list(:)", 2)
         cap.write("integer,            intent(in)    :: ncols", 2)
         cap.write("integer,            intent(in)    :: num_layers", 2)
-        cap.write("integer,            intent(in)    :: num_interfaces", 2)
         for evar in err_vars:
             evar.write_def(cap, 2, host, dummy=True, add_intent="out")
         # end for
@@ -557,7 +556,7 @@ class ConstituentVarDict(VarDictionary):
             cap.write("", 0)
         # end for
         cap.write("if ({} == 0) then".format(herrcode), 2)
-        stmt = "call {}%lock_table(ncols, num_layers, num_interfaces, {})"
+        stmt = "call {}%lock_table(ncols, num_layers, {})"
         cap.write(stmt.format(const_obj_name, obj_err_callstr), 3)
         cap.write("end if", 2)
         cap.write("! Set the index for each active constituent", 2)
