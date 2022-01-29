@@ -10,9 +10,6 @@ module ccpp_constituent_prop_mod
    implicit none
    private
 
-   integer,         parameter :: int_unassigned = -1
-   real(kind_phys), parameter :: kphys_unassigned = HUGE(1.0_kind_phys)
-
    !!XXgoldyXX: NB: We end up with two copies of each metadata object, FIX!!
 
    type, public, extends(ccpp_hashable_char_t) :: ccpp_constituent_properties_t
@@ -67,6 +64,10 @@ module ccpp_constituent_prop_mod
       procedure :: is_volume_mixing_ratio  => ccpt_is_volume_mixing_ratio
       procedure :: is_number_concentration => ccpt_is_number_concentration
       procedure :: is_moist                => ccpt_is_moist
+      ! Copy method (be sure to update this anytime fields are added)
+      procedure :: set             => ccpt_set
+      ! Methods that change state (XXgoldyXX: make private?)
+      procedure :: deallocate      => ccpt_deallocate
    end type ccpp_constituent_prop_ptr_t
 
 !! \section arg_table_ccpp_model_constituents_t
@@ -110,19 +111,23 @@ module ccpp_constituent_prop_mod
       ! Query number of constituents matching pattern
       procedure :: num_constituents => ccp_model_const_num_match
       ! Gather constituent fields matching pattern
-      !!XXgoldyXX: Might need a 2D version of this
       procedure :: copy_in => ccp_model_const_copy_in_3d
       ! Update constituent fields matching pattern
-      !!XXgoldyXX: Might need a 2D version of this
       procedure :: copy_out => ccp_model_const_copy_out_3d
       ! Return index of constituent matching standard name
       procedure :: const_index => ccp_model_const_index
-      ! Return index of field matching standard name
-      procedure :: field_index => ccp_model_const_field_index
       ! Return metadata matching standard name
       procedure :: field_metada => ccp_model_const_metadata
    end type ccpp_model_constituents_t
 
+   ! Private module data
+   integer,         parameter :: stdname_len = 256
+   integer,         parameter :: dimname_len = 32
+   integer,         parameter :: errmsg_len = 256
+   integer,         parameter :: int_unassigned = -1
+   real(kind_phys), parameter :: kphys_unassigned = HUGE(1.0_kind_phys)
+
+   ! Private interfaces
    private int_unassigned
    private tostr
    private initialize_errvars
@@ -187,37 +192,42 @@ CONTAINS
       ! Set error variables, if present
 
       ! Dummy arguments
-      integer,          optional, intent(in)  :: errcode_val
-      character(len=*), optional, intent(in)  :: errmsg_val
-      integer,          optional, intent(out) :: errcode
-      character(len=*), optional, intent(out) :: errmsg
-      character(len=*), optional, intent(in)  :: errmsg2
-      character(len=*), optional, intent(in)  :: errmsg3
-      character(len=*), optional, intent(in)  :: errmsg4
-      character(len=*), optional, intent(in)  :: errmsg5
+      integer,          optional, intent(in)    :: errcode_val
+      character(len=*), optional, intent(in)    :: errmsg_val
+      integer,          optional, intent(inout) :: errcode
+      character(len=*), optional, intent(inout) :: errmsg
+      character(len=*), optional, intent(in)    :: errmsg2
+      character(len=*), optional, intent(in)    :: errmsg3
+      character(len=*), optional, intent(in)    :: errmsg4
+      character(len=*), optional, intent(in)    :: errmsg5
       ! Local variable
       integer :: emsg_len
 
       if (present(errcode)) then
-         errcode = errcode_val
+         errcode = errcode + errcode_val
       end if
       if (present(errmsg)) then
-         errmsg = trim(errmsg_val)
+         emsg_len = len_trim(errmsg)
+         if (emsg_len > 0) then
+            errmsg(emsg_len+1:) = '; '
+         end if
+         emsg_len = len_trim(errmsg)
+         errmsg(emsg_len+1:) = trim(errmsg_val)
          if (present(errmsg2)) then
             emsg_len = len_trim(errmsg)
-            errmsg(emsg_len+1:) = errmsg2
+            errmsg(emsg_len+1:) = trim(errmsg2)
          end if
          if (present(errmsg3)) then
             emsg_len = len_trim(errmsg)
-            errmsg(emsg_len+1:) = errmsg3
+            errmsg(emsg_len+1:) = trim(errmsg3)
          end if
          if (present(errmsg4)) then
             emsg_len = len_trim(errmsg)
-            errmsg(emsg_len+1:) = errmsg4
+            errmsg(emsg_len+1:) = trim(errmsg4)
          end if
          if (present(errmsg5)) then
             emsg_len = len_trim(errmsg)
-            errmsg(emsg_len+1:) = errmsg5
+            errmsg(emsg_len+1:) = trim(errmsg5)
          end if
       end if
    end subroutine set_errvars
@@ -421,7 +431,7 @@ CONTAINS
       ! Dummy arguments
       class(ccpp_constituent_properties_t), intent(in)  :: this
       ! Local variable
-      character(len=32) :: dimname
+      character(len=dimname_len) :: dimname
 
       call this%vertical_dimension(dimname)
       is_layer = trim(dimname) == 'vertical_layer_dimension'
@@ -436,7 +446,7 @@ CONTAINS
       ! Dummy arguments
       class(ccpp_constituent_properties_t), intent(in)  :: this
       ! Local variable
-      character(len=32) :: dimname
+      character(len=dimname_len) :: dimname
 
       call this%vertical_dimension(dimname)
       is_interface = trim(dimname) == 'vertical_interface_dimension'
@@ -451,7 +461,7 @@ CONTAINS
       ! Dummy arguments
       class(ccpp_constituent_properties_t), intent(in)  :: this
       ! Local variable
-      character(len=32) :: dimname
+      character(len=dimname_len) :: dimname
 
       call this%vertical_dimension(dimname)
       is_2d = len_trim(dimname) == 0
@@ -703,7 +713,7 @@ CONTAINS
       integer,                             optional, intent(out)   :: errcode
       character(len=*),                    optional, intent(out)   :: errmsg
       ! Local variables
-      character(len=256)          :: error
+      character(len=errmsg_len)   :: error
       character(len=*), parameter :: subnam = 'ccp_model_const_add_metadata'
 
       if (this%okay_to_add(errcode=errcode, errmsg=errmsg,                    &
@@ -750,13 +760,7 @@ CONTAINS
       integer :: tbl_size
 
       ! Clear any data
-      this%num_layer_vars = 0
-      if (allocated(this%vars_layer)) then
-         deallocate(this%vars_layer)
-      end if
-      if (allocated(this%const_metadata)) then
-         deallocate(this%const_metadata)
-      end if
+      call this%reset()
       ! Figure a log base 2 for initializing hash table
       tbl_size = num_elements * 10 ! Hash padding
       tbl_size = int((log(real(tbl_size, kind_phys)) / log(2.0_kind_phys)) +  &
@@ -784,7 +788,7 @@ CONTAINS
       type(ccpp_constituent_properties_t), pointer  :: cprop
       ! Local variables
       class(ccpp_hashable_t), pointer :: hval
-      character(len=256)              :: error
+      character(len=errmsg_len)       :: error
       character(len=*), parameter     :: subname = 'ccp_model_const_find_const'
 
       nullify(cprop)
@@ -817,30 +821,25 @@ CONTAINS
       integer,                optional, intent(out)   :: errcode
       character(len=*),       optional, intent(out)   :: errmsg
       ! Local variables
-      integer                                      :: index_layer
+      integer                                      :: index_const
       integer                                      :: index_advect
-      integer                                      :: num_advect
       integer                                      :: num_vars
       integer                                      :: astat
       type(ccpp_hash_iterator_t)                   :: hiter
       class(ccpp_hashable_t),              pointer :: hval
       type(ccpp_constituent_prop_ptr_t),   pointer :: cprop
-      character(len=32)                            :: dimname
+      character(len=dimname_len)                   :: dimname
       character(len=*), parameter :: subname = 'ccp_model_const_lock'
 
+      astat = 0
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
          call set_errvars(1, subname, errcode=errcode, errmsg=errmsg,         &
               errmsg2=" WARNING: Model constituents already locked, ignoring")
+         astat = astat + 1
       else
-         index_layer = 0
-         index_const = 0
          ! Make sure everything is really initialized
-         if (allocated(this%vars_layer)) then
-            deallocate(this%vars_layer)
-         end if
-         if (allocated(this%const_metadata)) then
-            deallocate(this%const_metadata)
-         end if
+         call this%reset(clear_hash_table=.false.)
+         this%num_advected_vars = 0
          ! Allocate the constituent array
          num_vars = this%hash_table%num_values()
          allocate(this%const_metadata(num_vars), stat=astat)
@@ -848,7 +847,6 @@ CONTAINS
               errcode=errcode, errmsg=errmsg)
          ! We want to pack the advected constituents at the beginning of
          !   the field array so we need to know how many there are
-         num_advect = 0
          if (astat == 0) then
             call hiter%initialize(this%hash_table)
             do
@@ -858,80 +856,71 @@ CONTAINS
                   type is (ccpp_constituent_prop_ptr_t)
                      cprop => hval
                      if (cprop%is_advected()) then
-                        num_advect = num_advect + 1
+                        this%num_advected_vars = this%num_advected_vars + 1
                      end if
                   end select
                end if
             end do
             ! Sanity check on num_advect
-            if (num_advect > num_vars) then
+            if (this%num_advected_vars > num_vars) then
                astat = 1
-               if (present(errcode)) then
-                  errcode = astat
-               end if
-               if (present(errmsg)) then
-                  write(errmsg, *) subname,                             &
-                             " ERROR: num_advect index out of bounds"
-               end if
+               call set_errvars(astat, subname,                               &
+                    errcode=errcode, errmsg=errmsg,                           &
+                    errmsg2=" ERROR: num_advected_vars index out of bounds")
+               astat = astat + 1
             end if
          end if
+         index_advect = 0
+         index_const = this%num_advected_vars + 1
          ! Iterate through the hash table to find entries
          if (astat == 0) then
             call hiter%initialize(this%hash_table)
             do
                if (hiter%valid()) then
-                  index_const = index_const + 1
-                  if (index_const > num_vars) then
-                     if (present(errcode)) then
-                        errcode = 1
-                     end if
-                     if (present(errmsg)) then
-                        write(errmsg, *) subname,                             &
-                             " ERROR: const index out of bounds"
-                     end if
-                     exit
-                  end if
                   hval => hiter%value()
                   select type(hval)
                   type is (ccpp_constituent_prop_ptr_t)
                      cprop => hval
-                     call cprop%set_const_index(index_const,                  &
-                          errcode=errcode, errmsg=errmsg)
-                     ! Figure out which type of variable this is
-                     if (cprop%is_layer_var()) then
-                        index_layer = index_layer + 1
-                        call cprop%set_field_index(index_layer,               &
-                             errcode=errcode, errmsg=errmsg)
-                     else if (cprop%is_interface_var()) then
-                        index_interface = index_interface + 1
-                        call cprop%set_field_index(index_interface,           &
-                             errcode=errcode, errmsg=errmsg)
-                     else if (cprop%is_2d_var()) then
-                        index_2d = index_2d + 1
-                        call cprop%set_field_index(index_2d,                  &
+                     if (cprop%is_advected()) then
+                        index_advect = index_advect + 1
+                        if (index_const > this%num_advected_vars) then
+                           call set_errvars(1, subname,                       &
+                                errcode=errcode, errmsg=errmsg,               &
+                                errmsg2=" ERROR: const a index out of bounds")
+                           astat = astat + 1
+                           exit
+                        end if
+                        call cprop%set_const_index(index_advect,              &
                              errcode=errcode, errmsg=errmsg)
                      else
-                        if (present(errcode)) then
-                           errcode = 1
+                        index_const = index_const + 1
+                        if (index_const > num_vars) then
+                           call set_errvars(1, subname,                       &
+                                errcode=errcode, errmsg=errmsg,               &
+                                errmsg2=" ERROR: const v index out of bounds")
+                           astat = astat + 1
+                           exit
                         end if
-                        if (present(errmsg)) then
-                           call cprop%vertical_dimension(dimname,             &
-                                errcode=errcode, errmsg=errmsg)
-                           if (len_trim(errmsg) == 0) then
-                              write(errmsg, *) subname,                       &
-                                   " ERROR: Bad vertical dimension, '",       &
-                                   trim(dimname), "'"
-                           end if
-                        end if
+                        call cprop%set_const_index(index_const,               &
+                             errcode=errcode, errmsg=errmsg)
                      end if
-                     this%const_metadata(index_const) = cprop
+                     ! Make sure this is a layer variable
+                     if (.not. cprop%is_layer_var()) then
+                        call cprop%vertical_dimension(dimname,                &
+                             errcode=errcode, errmsg=errmsg)
+                        set_errvars(1, subname,                               &
+                             errcode=errcode, errmsg=errmsg,                  &
+                             errmsg2=" ERROR: Bad vertical dimension, '",     &
+                             errmsg3=trim(dimname))
+                        astat = astat + 1
+                        exit
+                     end if
+                     this%const_metadata(index_const).set(cprop)
                   class default
-                     if (present(errcode)) then
-                        errcode = 1
-                     end if
-                     if (present(errmsg)) then
-                        write(errmsg, *) subname, 'ERROR: Bad hash table value'
-                     end if
+                     call set_errvars(1, subname,                             &
+                          errcode=errcode, errmsg=errmsg,                     &
+                          errmsg2="ERROR: Bad hash table value")
+                     astat = astat + 1
                      exit
                   end select
                   call hiter%next()
@@ -941,43 +930,20 @@ CONTAINS
             end do
             ! Some size sanity checks
             if (index_const /= this%hash_table%num_values()) then
-               if (present(errcode)) then
-                  errcode = 1
-               end if
-               if (present(errmsg)) then
-                  write(errmsg, *) subname,                                   &
-                       " ERROR: Too few constituents found in hash table"
-               end if
-            else if (index_layer /= this%num_layer_vars) then
-               if (present(errcode)) then
-                  errcode = 1
-               end if
-               if (present(errmsg)) then
-                  write(errmsg, '(2a,i0,a,i0)') subname,                      &
-                       " ERROR: Wrong number of layer variables found (",     &
-                       index_layer, ") should be ", this%num_layer_vars
-               end if
-            else if (index_interface /= this%num_interface_vars) then
-               if (present(errcode)) then
-                  errcode = 1
-               end if
-               if (present(errmsg)) then
-                  write(errmsg, '(2a,i0,a,i0)') subname,                      &
-                       " ERROR: Wrong number of interface variables found (", &
-                       index_interface, ") should be ", this%num_interface_vars
-               end if
-            else if (index_2d /= this%num_2d_vars) then
-               if (present(errcode)) then
-                  errcode = 1
-               end if
-               if (present(errmsg)) then
-                  write(errmsg, '(2a,i0,a,i0)') subname,                      &
-                       " ERROR: Wrong number of 2D variables found (",        &
-                       index_2d, ") should be ", this%num_2d_vars
-               end if
+               call set_errvars(errcode + 1, subname,                         &
+                    errcode=errcode, errmsg=errmsg,                           &
+                    errmsg2=" ERROR: Too few constituents found in hash table")
+               astat = astat + 1
+            end if
+            if (index_advect /= this%num_advected_vars) then
+               call set_errvars(1, subname,                                   &
+                    errcode=errcode, errmsg=errmsg,                           &
+                    errmsg2=" ERROR: Too few advected constituents found ",   &
+                    errmsg3="in hash table")
+               astat = astat + 1
             end if
             ! Everything looks okay, allocate field arrays
-            allocate(this%vars_layer(ncols, num_layers, index_layer),         &
+            allocate(this%vars_layer(ncols, num_layers, index_const),         &
                  stat=astat)
             call handle_allocate_error(astat, 'vars_layer',                   &
                  errcode=errcode, errmsg=errmsg)
@@ -1000,25 +966,39 @@ CONTAINS
 
    !########################################################################
 
-   subroutine ccp_model_const_reset(this)
+   subroutine ccp_model_const_reset(this, clear_hash_table)
       ! Empty (reset) the entire object
+      ! Optionally do not clear the hash table (and its data)
 
-      ! Dummy argument
+      ! Dummy arguments
       class(ccpp_model_constituents_t), intent(inout) :: this
+      logical, optional,                intent(in)    :: clear_hash_table
+      ! Local variables
+      logical :: clear_table
+      integer :: index
 
+      if (present(clear_hash_table)) then
+         clear_table = clear_hash_table
+      else
+         clear_table = .true.
+      end if
       if (allocated(this%vars_layer)) then
          deallocate(this%vars_layer)
       end if
-      if (allocated(this%vars_interface)) then
-         deallocate(this%vars_interface)
-      end if
-      if (allocated(this%vars_2d)) then
-         deallocate(this%vars_2d)
-      end if
       if (allocated(this%const_metadata)) then
+         if (clear_table) then
+            do index = 1, size(this%const_metadata, 1)
+               call this%const_metadata(index)%deallocate()
+            end do
+         end if
          deallocate(this%const_metadata)
       end if
-      call this%hash_table%clear()
+      if (clear_table) then
+         this%num_layer_vars = 0
+         this%num_advected_vars = 0
+         this%num_layers = 0
+         call this%hash_table%clear()
+      end if
 
    end subroutine ccp_model_const_reset
 
@@ -1097,7 +1077,7 @@ CONTAINS
       integer                     :: fld_ind    ! const field index
       integer                     :: max_cind   ! Size of const_array
       integer                     :: num_levels ! Levels of const_array
-      character(len=64)           :: std_name
+      character(len=stdname_len)  :: std_name
       character(len=*), parameter :: subname = "ccp_model_const_copy_in_3d"
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
@@ -1109,58 +1089,40 @@ CONTAINS
                ! See if we have room for another constituent
                cindex = cindex + 1
                if (cindex > max_cind) then
-                  if (present(errcode)) then
-                     errcode = 1
-                  end if
-                  if (present(errmsg)) then
-                     write(errmsg, *) subname,                                &
-                          ": Too many constituents for <const_array>"
-                  end if
+                  call set_errvars(1, subname,                                &
+                       errcode=errcode, errmsg=errmsg,                        &
+                       errmsg2=": Too many constituents for <const_array>")
                   exit
                end if
                ! Copy this constituent's field data to <const_array>
-               fld_ind = this%const_metadata(index)%field_index()
-               if (fld_ind < 1) then
-                  if (present(errcode)) then
-                     errcode = 1
-                  end if
-                  if (present(errmsg)) then
-                     call this%const_metadata(index)%standard_name(std_name)
-                     write(errmsg, '(4a,i0,a,i0)') subname,                   &
-                          ": No field index for '", trim(std_name), "'"
-                  end if
+               fld_ind = this%const_metadata(index)%const_index()
+               if (fld_ind /= index) then
+                  call this%const_metadata(index)%standard_name(std_name)
+                  call set_errvars(1, subname//": ERROR: ",                   &
+                       errcode=errcode, errmsg=errmsg,                        &
+                       errmsg2="bad field index, "//to_str(fld_ind),          &
+                       errmsg3=" for "//trim(std_name)", ",                   &
+                       errmsg4="should have been "//to_str(index))
                else if (this%const_metadata(index)%is_layer_var()) then
                   if (this%num_layers == num_levels) then
                      const_array(:,:,cindex) = this%vars_layer(:,:,fld_ind)
                   else
-                     if (present(errcode)) then
-                        errcode = 1
-                     end if
-                     if (present(errmsg)) then
-                        call this%const_metadata(index)%standard_name(std_name)
-                        write(errmsg, '(4a,i0,a,i0)') subname,                &
-                             ": Wrong number of vertical levels for ",        &
-                             trim(std_name), ', ', num_levels,                &
-                             ', expected ', this%num_layers
-                     end if
+                     call this%const_metadata(index)%standard_name(std_name)
+                     call set_errvars(1, subname,                             &
+                          errcode=errcode, errmsg=errmsg,                     &
+                          errmsg2=": Wrong number of vertical levels for ",   &
+                          errmsg3=trim(stdname)//', '//to_int(num_levels),    &
+                          errmsg4=", expected"//to_int(this%num_layers))
                      exit
                   end if
-               else if (this%const_metadata(index)%is_interface_var()) then
-                  if (this%num_interfaces == num_levels) then
-                     const_array(:,:,cindex) = this%vars_interface(:,:,fld_ind)
-                  else
-                     if (present(errcode)) then
-                        errcode = 1
-                     end if
-                     if (present(errmsg)) then
-                        call this%const_metadata(index)%standard_name(std_name)
-                        write(errmsg, '(4a,i0,a,i0)') subname,                &
-                             ": Wrong number of vertical levels for ",        &
-                             std_name, ', ', num_levels, ', expected ',       &
-                             this%num_interfaces
-                     end if
-                     exit
-                  end if
+               else
+                  call this%const_metadata(index)%standard_name(std_name)
+                  call set_errvars(1, subname//": Unsupported var type, ",    &
+                       errcode=errcode, errmsg=errmsg,                        &
+                       errmsg2="wrong number of vertical levels for ",        &
+                       errmsg3=trim(stdname)//', '//to_int(num_levels),       &
+                       errmsg4=", expected"//to_int(this%num_layers))
+                  exit
                end if
             end if
          end do
@@ -1189,7 +1151,7 @@ CONTAINS
       integer                     :: fld_ind    ! const field index
       integer                     :: max_cind   ! Size of const_array
       integer                     :: num_levels ! Levels of const_array
-      character(len=64)           :: std_name
+      character(len=stdname_len)  :: std_name
       character(len=*), parameter :: subname = "ccp_model_const_copy_out_3d"
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
@@ -1201,58 +1163,40 @@ CONTAINS
                ! See if we have room for another constituent
                cindex = cindex + 1
                if (cindex > max_cind) then
-                  if (present(errcode)) then
-                     errcode = 1
-                  end if
-                  if (present(errmsg)) then
-                     write(errmsg, *) subname,                                &
-                          ": Too many constituents for <const_array>"
-                  end if
+                  call set_errvars(1, subname,                                &
+                       errcode=errcode, errmsg=errmsg,                        &
+                       errmsg2=": Too many constituents for <const_array>")
                   exit
                end if
                ! Copy this field of to <const_array> to constituent's field data
                fld_ind = this%const_metadata(index)%field_index()
-               if (fld_ind < 1) then
-                  if (present(errcode)) then
-                     errcode = 1
-                  end if
-                  if (present(errmsg)) then
-                     call this%const_metadata(index)%standard_name(std_name)
-                     write(errmsg, '(4a,i0,a,i0)') subname,                   &
-                          ": No field index for '", trim(std_name), "'"
-                  end if
+               if (fld_ind /= index) then
+                  call this%const_metadata(index)%standard_name(std_name)
+                  call set_errvars(1, subname//": ERROR: ",                   &
+                       errcode=errcode, errmsg=errmsg,                        &
+                       errmsg2="bad field index, "//to_str(fld_ind),          &
+                       errmsg3=" for "//trim(std_name)", ",                   &
+                       errmsg4="should have been "//to_str(index))
                else if (this%const_metadata(index)%is_layer_var()) then
                   if (this%num_layers == num_levels) then
                      this%vars_layer(:,:,fld_ind) = const_array(:,:,cindex)
                   else
-                     if (present(errcode)) then
-                        errcode = 1
-                     end if
-                     if (present(errmsg)) then
-                        call this%const_metadata(index)%standard_name(std_name)
-                        write(errmsg, '(4a,i0,a,i0)') subname,                &
-                             ": Wrong number of vertical levels for ",        &
-                             trim(std_name), ', ', num_levels,                &
-                             ', expected ', this%num_layers
-                     end if
+                     call this%const_metadata(index)%standard_name(std_name)
+                     call set_errvars(1, subname,                             &
+                          errcode=errcode, errmsg=errmsg,                     &
+                          errmsg2=": Wrong number of vertical levels for ",   &
+                          errmsg3=trim(stdname)//', '//to_int(num_levels),    &
+                          errmsg4=", expected"//to_int(this%num_layers))
                      exit
                   end if
-               else if (this%const_metadata(index)%is_interface_var()) then
-                  if (this%num_interfaces == num_levels) then
-                     this%vars_interface(:,:,fld_ind) = const_array(:,:,cindex)
-                  else
-                     if (present(errcode)) then
-                        errcode = 1
-                     end if
-                     if (present(errmsg)) then
-                        call this%const_metadata(index)%standard_name(std_name)
-                        write(errmsg, '(4a,i0,a,i0)') subname,                &
-                             ": Wrong number of vertical levels for ",        &
-                             std_name, ', ', num_levels, ', expected ',       &
-                             this%num_interfaces
-                     end if
-                     exit
-                  end if
+               else
+                  call this%const_metadata(index)%standard_name(std_name)
+                  call set_errvars(1, subname//": Unsupported var type, ",    &
+                       errcode=errcode, errmsg=errmsg,                        &
+                       errmsg2="wrong number of vertical levels for ",        &
+                       errmsg3=trim(stdname)//', '//to_int(num_levels),       &
+                       errmsg4=", expected"//to_int(this%num_layers))
+                  exit
                end if
             end if
          end do
@@ -1290,48 +1234,19 @@ CONTAINS
 
    !########################################################################
 
-   integer function ccp_model_const_field_index(this, standard_name,          &
-        errcode, errmsg)
-      ! Return index of field matching <standard_name>.
-      ! <this> must be locked to execute this function
-
-      ! Dummy arguments
-      class(ccpp_model_constituents_t), intent(in)  :: this
-      character(len=*),                 intent(in)  :: standard_name
-      integer,          optional,       intent(out) :: errcode
-      character(len=*), optional,       intent(out) :: errmsg
-      ! Local variables
-      type(ccpp_constituent_properties_t), pointer  :: cprop
-      character(len=*), parameter :: subname = "ccp_model_field_index"
-
-      if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
-         cprop => this%find_const(standard_name, errcode=errcode, errmsg=errmsg)
-         if (associated(cprop)) then
-            ccp_model_const_field_index = cprop%field_index()
-         else
-            ccp_model_const_field_index = int_unassigned
-         end if
-      else
-         ccp_model_const_field_index = int_unassigned
-      end if
-
-   end function ccp_model_const_field_index
-
-   !########################################################################
-
    subroutine ccp_model_const_metadata(this, standard_name, const_data,       &
         errcode, errmsg)
       ! Return metadata matching standard name
       ! <this> must be locked to execute this function
 
       ! Dummy arguments
-      class(ccpp_model_constituents_t),    intent(in)  :: this
-      character(len=*),                    intent(in)  :: standard_name
-      type(ccpp_constituent_properties_t), intent(out) :: const_data
-      integer,          optional,          intent(out) :: errcode
-      character(len=*), optional,          intent(out) :: errmsg
+      class(ccpp_model_constituents_t),  intent(in)  :: this
+      character(len=*),                  intent(in)  :: standard_name
+      type(ccpp_constituent_prop_ptr_t), intent(out) :: const_data
+      integer,          optional,        intent(out) :: errcode
+      character(len=*), optional,        intent(out) :: errmsg
       ! Local variables
-      type(ccpp_constituent_properties_t), pointer  :: cprop
+      type(ccpp_constituent_prop_ptr_t), pointer  :: cprop
       character(len=*), parameter :: subname = "ccp_model_const_metadata"
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
@@ -1457,5 +1372,52 @@ CONTAINS
       ccpt_is_moist = this%prop%is_moist(errcode, errmsg)
 
    end function ccpt_is_moist
+
+   !########################################################################
+
+   subroutine ccpt_set(this, const_ptr, errcode, errmsg)
+      ! Set the pointer to <const_ptr>, however, an error is recorded if
+      !    the pointer is already set.
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t),            intent(inout) :: this
+      type(ccpp_constituent_properties_t), pointer                 :: const_ptr
+      integer,                             optional, intent(out)   :: errcode
+      character(len=*),                    optional, intent(out)   :: errmsg
+      ! Local variables
+      character(len=stdname_len) :: stdname
+      character(len=errmsg_len)  :: errmsg2
+
+      call initialize_errvars(errcode, errmsg)
+      if (associated(this%prop)) then
+         call this%standard_name(stdname, errcode=errcode, errmsg=errmsg2)
+         if (errcode == 0) then
+            write(errmsg2, *) "Pointer already allocated as '",               &
+                 trim(stdname), "'"
+         end if
+         errcode = errcode + 1
+         call set_errvars(1, "ccpt_set: ", errcode=errcode, errmsg=errmsg,    &
+              errmsg2=trim(errmsg2))
+      else
+         this%prop => const_ptr
+      end if
+
+   end subroutine ccpt_set
+
+   !########################################################################
+
+   subroutine ccpt_deallocate(this)
+      ! Deallocate the constituent object pointer if it is allocated.
+
+      ! Dummy argument
+      class(ccpp_constituent_prop_ptr_t), intent(inout) :: this
+
+      if (associated(this%prop)) then
+         call this%prop%deallocate()
+         deallocate(this%prop)
+      end if
+      nullify(this%prop)
+
+   end subroutine ccpt_deallocate
 
 end module ccpp_constituent_prop_mod
