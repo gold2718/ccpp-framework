@@ -1,6 +1,7 @@
 module test_prog
 
-   use ccpp_kinds, only: kind_phys
+   use ccpp_kinds,                only: kind_phys
+   use ccpp_constituent_prop_mod, only: ccpp_constituent_properties_t
 
    implicit none
    private
@@ -21,6 +22,9 @@ module test_prog
       character(len=cm), pointer :: suite_output_vars(:) => NULL()
       character(len=cm), pointer :: suite_required_vars(:) => NULL()
    end type suite_info
+
+   type(ccpp_constituent_properties_t), private, target :: host_constituents(1)
+
 
    private :: check_list
    private :: check_suite
@@ -185,21 +189,17 @@ CONTAINS
        end if
     end function check_suite
 
-    logical function constituents_in(num_host_fields) result(okay)
+    logical function constituents_in() result(okay)
        ! Copy advected species from physics to 'dynamics' array
        use test_host_mod,      only: phys_state, ncnst, index_qv
        use test_host_ccpp_cap, only: test_host_ccpp_gather_constituents
 
-       ! Dummy argument
-       integer, intent(in) :: num_host_fields ! Packed at beginning of Q
        ! Local variables
-       integer            :: q_off
        integer            :: errflg
        character(len=512) :: errmsg
 
        okay = .true.
-       q_off = num_host_fields + 1
-       call test_host_ccpp_gather_constituents(phys_state%q(:,:,q_off:),      &
+       call test_host_ccpp_gather_constituents(phys_state%q,                  &
             errflg=errflg, errmsg=errmsg)
        if (errflg /= 0) then
           write(6, *) "ERROR: gather_constituents failed, '", trim(errmsg), "'"
@@ -208,21 +208,17 @@ CONTAINS
 
     end function constituents_in
 
-    logical function constituents_out(num_host_fields) result(okay)
+    logical function constituents_out() result(okay)
        ! Copy advected constituents back to physics
        use test_host_mod,      only: phys_state, ncnst, index_qv
        use test_host_ccpp_cap, only: test_host_ccpp_update_constituents
 
-       ! Dummy argument
-       integer, intent(in) :: num_host_fields ! Packed at beginning of Q
        ! Local variables
-       integer            :: q_off
        integer            :: errflg
        character(len=512) :: errmsg
 
        okay = .true.
-       q_off = num_host_fields + 1
-       call test_host_ccpp_update_constituents(phys_state%q(:,:,q_off:),      &
+       call test_host_ccpp_update_constituents(phys_state%q,                  &
             errflg=errflg, errmsg=errmsg)
        if (errflg /= 0) then
           write(6, *) "ERROR: update_constituents failed, '", trim(errmsg), "'"
@@ -248,7 +244,7 @@ CONTAINS
     !!
     subroutine test_host(retval, test_suites)
 
-       use test_host_mod,      only: num_time_steps, num_host_advected
+       use test_host_mod,      only: num_time_steps
        use test_host_mod,      only: init_data, compare_data
        use test_host_mod,      only: ncols, pver
        use test_host_ccpp_cap, only: test_host_ccpp_register_constituents
@@ -301,14 +297,18 @@ CONTAINS
        end if
 
        ! Register the constituents to find out what needs advecting
+      call host_constituents(1)%initialize(std_name="specific_humidity",      &
+           long_name="Specific humidity", units="kg kg-1",                    &
+           vertical_dim="vertical_layer_dimension", advected=.true.,          &
+           errcode=errflg, errmsg=errmsg)
        call test_host_ccpp_register_constituents(suite_names(:),              &
-            ncols, pver, errmsg=errmsg, errflg=errflg)
+            ncols, pver, host_constituents, errmsg=errmsg, errflg=errflg)
        if (errflg /= 0) then
           write(6, '(2a)') 'ERROR register_constituents: ', trim(errmsg)
        end if
        num_advected = test_host_ccpp_number_constituents(errmsg=errmsg,       &
             errflg=errflg)
-       if (num_advected /= 2) then
+       if (num_advected /= 3) then
           write(6, '(a,i0)') "ERROR: num advected constituents = ", num_advected
           STOP 2
        end if
@@ -375,11 +375,11 @@ CONTAINS
 
           ! Run "dycore"
           if (errflg == 0) then
-             check = constituents_in(num_host_advected)
+             check = constituents_in()
           end if
           if (check) then
              call advect_constituents()
-             check = constituents_out(num_host_advected)
+             check = constituents_out()
           end if
        end do ! End time step loop
 
@@ -398,7 +398,7 @@ CONTAINS
 
        if (errflg == 0) then
           ! Run finished without error, check answers
-          if (compare_data(num_advected + num_host_advected)) then
+          if (compare_data(num_advected)) then
              write(6, *) 'Answers are correct!'
              errflg = 0
           else

@@ -15,7 +15,6 @@ module test_host_mod
    integer,         parameter   :: ncols = 10
    integer,         parameter   :: pver = 5
    integer,         parameter   :: pverP = pver + 1
-   integer,         parameter   :: num_host_advected = 1
    integer,         protected   :: ncnst = -1
    integer,         parameter   :: index_qv = 1
    real(kind_phys)              :: dt
@@ -46,7 +45,7 @@ contains
       ! Allocate and initialize state
       ! Temperature starts above freezing and decreases to -30C
       ! water vapor is initialized in odd columns to different amounts
-      ncnst = num_advected + num_host_advected
+      ncnst = num_advected
       call allocate_physics_state(ncols, pver, ncnst, phys_state)
       allocate(check_vals(ncols, pver, ncnst))
       check_vals(:,:,:) = 0.0_kind_phys
