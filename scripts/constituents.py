@@ -561,7 +561,7 @@ class ConstituentVarDict(VarDictionary):
         cap.write("end if", 2)
         cap.write("! Set the index for each active constituent", 2)
         cap.write("do index = 1, SIZE({})".format(const_indices_name), 2)
-        stmt = "field_ind = {}%field_index({}(index), {})"
+        stmt = "field_ind = {}%const_index({}(index), {})"
         cap.write(stmt.format(const_obj_name, const_names_name,
                               obj_err_callstr), 3)
         cap.write("if (field_ind > 0) then", 3)

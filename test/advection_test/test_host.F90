@@ -250,7 +250,7 @@ CONTAINS
 
        use test_host_mod,      only: num_time_steps, num_host_advected
        use test_host_mod,      only: init_data, compare_data
-       use test_host_mod,      only: ncols, pver, pverp
+       use test_host_mod,      only: ncols, pver
        use test_host_ccpp_cap, only: test_host_ccpp_register_constituents
        use test_host_ccpp_cap, only: test_host_ccpp_number_constituents
        use test_host_ccpp_cap, only: test_host_ccpp_physics_initialize
@@ -302,7 +302,7 @@ CONTAINS
 
        ! Register the constituents to find out what needs advecting
        call test_host_ccpp_register_constituents(suite_names(:),              &
-            ncols, pver, pverp, errmsg=errmsg, errflg=errflg)
+            ncols, pver, errmsg=errmsg, errflg=errflg)
        if (errflg /= 0) then
           write(6, '(2a)') 'ERROR register_constituents: ', trim(errmsg)
        end if

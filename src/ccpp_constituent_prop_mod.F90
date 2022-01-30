@@ -10,7 +10,12 @@ module ccpp_constituent_prop_mod
    implicit none
    private
 
-   !!XXgoldyXX: NB: We end up with two copies of each metadata object, FIX!!
+   ! Private module data
+   integer,         parameter :: stdname_len = 256
+   integer,         parameter :: dimname_len = 32
+   integer,         parameter :: errmsg_len = 256
+   integer,         parameter :: int_unassigned = -1
+   real(kind_phys), parameter :: kphys_unassigned = HUGE(1.0_kind_phys)
 
    type, public, extends(ccpp_hashable_char_t) :: ccpp_constituent_properties_t
       ! A ccpp_constituent_properties_t object holds relevant metadata
@@ -58,6 +63,10 @@ module ccpp_constituent_prop_mod
       ! Informational methods
       procedure :: standard_name           => ccpt_get_standard_name
       procedure :: long_name               => ccpt_get_long_name
+      procedure :: is_layer_var            => ccpt_is_layer_var
+      procedure :: is_interface_var        => ccpt_is_interface_var
+      procedure :: is_2d_var               => ccpt_is_2d_var
+      procedure :: vertical_dimension      => ccpt_get_vertical_dimension
       procedure :: const_index             => ccpt_const_index
       procedure :: is_advected             => ccpt_is_advected
       procedure :: is_mass_mixing_ratio    => ccpt_is_mass_mixing_ratio
@@ -68,6 +77,7 @@ module ccpp_constituent_prop_mod
       procedure :: set             => ccpt_set
       ! Methods that change state (XXgoldyXX: make private?)
       procedure :: deallocate      => ccpt_deallocate
+      procedure :: set_const_index => ccpt_set_const_index
    end type ccpp_constituent_prop_ptr_t
 
 !! \section arg_table_ccpp_model_constituents_t
@@ -85,11 +95,9 @@ module ccpp_constituent_prop_mod
       ! These fields are public to allow for efficient (i.e., no copying)
       !   usage even though it breaks object independence
       real(kind_phys), allocatable     :: vars_layer(:,:,:)
-      real(kind_phys], allocatable     :: vars_minvalue(:,:,:)
+      real(kind_phys), allocatable     :: vars_minvalue(:,:,:)
       ! An array containing all the constituent metadata
-      ! XXgoldyXX: Is this needed? Source of duplicate metadata?
-      !            Perhaps convert hash to index and reconfigure so that
-      !            total number known at initialization time?
+      ! Each element contains a pointer to a constituent from the hash table
       type(ccpp_constituent_prop_ptr_t), allocatable :: const_metadata(:)
    contains
       ! Return .true. if a constituent matches pattern
@@ -120,16 +128,9 @@ module ccpp_constituent_prop_mod
       procedure :: field_metada => ccp_model_const_metadata
    end type ccpp_model_constituents_t
 
-   ! Private module data
-   integer,         parameter :: stdname_len = 256
-   integer,         parameter :: dimname_len = 32
-   integer,         parameter :: errmsg_len = 256
-   integer,         parameter :: int_unassigned = -1
-   real(kind_phys), parameter :: kphys_unassigned = HUGE(1.0_kind_phys)
-
    ! Private interfaces
    private int_unassigned
-   private tostr
+   private to_str
    private initialize_errvars
    private set_errvars
    private handle_allocate_error
@@ -152,7 +153,6 @@ CONTAINS
       outConst%var_long_name = inConst%var_long_name
       outConst%vert_dim = inConst%vert_dim
       outConst%const_ind = inConst%const_ind
-      outConst%field_ind = inConst%field_ind
       outConst%advected = inConst%advected
    end subroutine copyConstituent
 
@@ -370,7 +370,7 @@ CONTAINS
       if (allocated(this%vert_dim)) then
          deallocate(this%vert_dim)
       end if
-      this%field_ind = int_unassigned
+      this%const_ind = int_unassigned
       this%advected = .false.
 
    end subroutine ccp_deallocate
@@ -388,7 +388,10 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          std_name = this%var_std_name
+      else
+         std_name = ''
       end if
+
    end subroutine ccp_get_standard_name
 
    !#######################################################################
@@ -404,7 +407,10 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          long_name = this%var_long_name
+      else
+         long_name = ''
       end if
+
    end subroutine ccp_get_long_name
 
    !#######################################################################
@@ -420,7 +426,10 @@ CONTAINS
 
       if (this%is_initialized(errcode, errmsg)) then
          vert_dim = this%vert_dim
+      else
+         vert_dim = ''
       end if
+
    end subroutine ccp_get_vertical_dimension
 
    !#######################################################################
@@ -470,8 +479,8 @@ CONTAINS
 
    !#######################################################################
 
-   integer function ccp_field_index(this, errcode, errmsg)
-      ! Return this constituent's field index (or -1 of not assigned)
+   integer function ccp_const_index(this, errcode, errmsg)
+      ! Return this constituent's array index (or -1 of not assigned)
 
       ! Dummy arguments
       class(ccpp_constituent_properties_t), intent(in)  :: this
@@ -479,12 +488,12 @@ CONTAINS
       character(len=*), optional,           intent(out) :: errmsg
 
       if (this%is_initialized(errcode, errmsg)) then
-         ccp_field_index = this%field_ind
+         ccp_const_index = this%const_ind
       else
-         ccp_field_index = int_unassigned
+         ccp_const_index = int_unassigned
       end if
 
-   end function ccp_field_index
+   end function ccp_const_index
 
    !#######################################################################
 
@@ -499,7 +508,7 @@ CONTAINS
       character(len=*), optional,           intent(out)   :: errmsg
 
       if (this%is_initialized(errcode, errmsg)) then
-         if (this%const_ind /= int_unassigned) then
+         if (this%const_ind == int_unassigned) then
             this%const_ind = index
          else
             call set_errvars(1, "ccpp_constituent_properties_t ",             &
@@ -714,15 +723,15 @@ CONTAINS
       character(len=*),                    optional, intent(out)   :: errmsg
       ! Local variables
       character(len=errmsg_len)   :: error
-      character(len=*), parameter :: subnam = 'ccp_model_const_add_metadata'
+      character(len=*), parameter :: subname = 'ccp_model_const_add_metadata'
 
       if (this%okay_to_add(errcode=errcode, errmsg=errmsg,                    &
-           warn_func=subnam)) then
+           warn_func=subname)) then
          error = ''
 !!XXgoldyXX: Add check on key to see if incompatible item already there.
          call this%hash_table%add_hash_key(field_data, error)
          if (len_trim(error) > 0) then
-            call err_setvars(1, trim(error), errcode=errcode, errmsg=errmsg)
+            call set_errvars(1, trim(error), errcode=errcode, errmsg=errmsg)
          else
             ! If we get here we are successful, add to variable count
             if (field_data%is_layer_var()) then
@@ -732,7 +741,7 @@ CONTAINS
                   call field_data%vertical_dimension(error,                   &
                        errcode=errcode, errmsg=errmsg)
                   if (len_trim(errmsg) == 0) then
-                     call err_setvars(1,                                      &
+                     call set_errvars(1,                                      &
                           "ERROR: Unknown vertical dimension, '",             &
                           errcode=errcode, errmsg=errmsg,                     &
                           errmsg2=trim(error), errmsg3="'")
@@ -827,7 +836,7 @@ CONTAINS
       integer                                      :: astat
       type(ccpp_hash_iterator_t)                   :: hiter
       class(ccpp_hashable_t),              pointer :: hval
-      type(ccpp_constituent_prop_ptr_t),   pointer :: cprop
+      type(ccpp_constituent_properties_t), pointer :: cprop
       character(len=dimname_len)                   :: dimname
       character(len=*), parameter :: subname = 'ccp_model_const_lock'
 
@@ -853,12 +862,15 @@ CONTAINS
                if (hiter%valid()) then
                   hval => hiter%value()
                   select type(hval)
-                  type is (ccpp_constituent_prop_ptr_t)
+                  type is (ccpp_constituent_properties_t)
                      cprop => hval
                      if (cprop%is_advected()) then
                         this%num_advected_vars = this%num_advected_vars + 1
                      end if
                   end select
+                  call hiter%next()
+               else
+                  exit
                end if
             end do
             ! Sanity check on num_advect
@@ -879,11 +891,11 @@ CONTAINS
                if (hiter%valid()) then
                   hval => hiter%value()
                   select type(hval)
-                  type is (ccpp_constituent_prop_ptr_t)
+                  type is (ccpp_constituent_properties_t)
                      cprop => hval
                      if (cprop%is_advected()) then
                         index_advect = index_advect + 1
-                        if (index_const > this%num_advected_vars) then
+                        if (index_advect > this%num_advected_vars) then
                            call set_errvars(1, subname,                       &
                                 errcode=errcode, errmsg=errmsg,               &
                                 errmsg2=" ERROR: const a index out of bounds")
@@ -892,6 +904,7 @@ CONTAINS
                         end if
                         call cprop%set_const_index(index_advect,              &
                              errcode=errcode, errmsg=errmsg)
+                        call this%const_metadata(index_advect)%set(cprop)
                      else
                         index_const = index_const + 1
                         if (index_const > num_vars) then
@@ -903,19 +916,19 @@ CONTAINS
                         end if
                         call cprop%set_const_index(index_const,               &
                              errcode=errcode, errmsg=errmsg)
+                        call this%const_metadata(index_const)%set(cprop)
                      end if
                      ! Make sure this is a layer variable
                      if (.not. cprop%is_layer_var()) then
                         call cprop%vertical_dimension(dimname,                &
                              errcode=errcode, errmsg=errmsg)
-                        set_errvars(1, subname,                               &
+                        call set_errvars(1, subname,                          &
                              errcode=errcode, errmsg=errmsg,                  &
                              errmsg2=" ERROR: Bad vertical dimension, '",     &
                              errmsg3=trim(dimname))
                         astat = astat + 1
                         exit
                      end if
-                     this%const_metadata(index_const).set(cprop)
                   class default
                      call set_errvars(1, subname,                             &
                           errcode=errcode, errmsg=errmsg,                     &
@@ -1101,8 +1114,9 @@ CONTAINS
                   call set_errvars(1, subname//": ERROR: ",                   &
                        errcode=errcode, errmsg=errmsg,                        &
                        errmsg2="bad field index, "//to_str(fld_ind),          &
-                       errmsg3=" for "//trim(std_name)", ",                   &
+                       errmsg3=" for '"//trim(std_name)//"', ",               &
                        errmsg4="should have been "//to_str(index))
+                  exit
                else if (this%const_metadata(index)%is_layer_var()) then
                   if (this%num_layers == num_levels) then
                      const_array(:,:,cindex) = this%vars_layer(:,:,fld_ind)
@@ -1110,18 +1124,18 @@ CONTAINS
                      call this%const_metadata(index)%standard_name(std_name)
                      call set_errvars(1, subname,                             &
                           errcode=errcode, errmsg=errmsg,                     &
-                          errmsg2=": Wrong number of vertical levels for ",   &
-                          errmsg3=trim(stdname)//', '//to_int(num_levels),    &
-                          errmsg4=", expected"//to_int(this%num_layers))
+                          errmsg2=": Wrong number of vertical levels for '",  &
+                          errmsg3=trim(std_name)//"', "//to_str(num_levels),  &
+                          errmsg4=", expected"//to_str(this%num_layers))
                      exit
                   end if
                else
                   call this%const_metadata(index)%standard_name(std_name)
                   call set_errvars(1, subname//": Unsupported var type, ",    &
                        errcode=errcode, errmsg=errmsg,                        &
-                       errmsg2="wrong number of vertical levels for ",        &
-                       errmsg3=trim(stdname)//', '//to_int(num_levels),       &
-                       errmsg4=", expected"//to_int(this%num_layers))
+                       errmsg2="wrong number of vertical levels for '",       &
+                       errmsg3=trim(std_name)//"', "//to_str(num_levels),     &
+                       errmsg4=", expected"//to_str(this%num_layers))
                   exit
                end if
             end if
@@ -1169,14 +1183,15 @@ CONTAINS
                   exit
                end if
                ! Copy this field of to <const_array> to constituent's field data
-               fld_ind = this%const_metadata(index)%field_index()
+               fld_ind = this%const_metadata(index)%const_index()
                if (fld_ind /= index) then
                   call this%const_metadata(index)%standard_name(std_name)
                   call set_errvars(1, subname//": ERROR: ",                   &
                        errcode=errcode, errmsg=errmsg,                        &
                        errmsg2="bad field index, "//to_str(fld_ind),          &
-                       errmsg3=" for "//trim(std_name)", ",                   &
+                       errmsg3=" for '"//trim(std_name)//"', ",               &
                        errmsg4="should have been "//to_str(index))
+                  exit
                else if (this%const_metadata(index)%is_layer_var()) then
                   if (this%num_layers == num_levels) then
                      this%vars_layer(:,:,fld_ind) = const_array(:,:,cindex)
@@ -1184,18 +1199,18 @@ CONTAINS
                      call this%const_metadata(index)%standard_name(std_name)
                      call set_errvars(1, subname,                             &
                           errcode=errcode, errmsg=errmsg,                     &
-                          errmsg2=": Wrong number of vertical levels for ",   &
-                          errmsg3=trim(stdname)//', '//to_int(num_levels),    &
-                          errmsg4=", expected"//to_int(this%num_layers))
+                          errmsg2=": Wrong number of vertical levels for '",  &
+                          errmsg3=trim(std_name)//"', "//to_str(num_levels),  &
+                          errmsg4=", expected"//to_str(this%num_layers))
                      exit
                   end if
                else
                   call this%const_metadata(index)%standard_name(std_name)
                   call set_errvars(1, subname//": Unsupported var type, ",    &
                        errcode=errcode, errmsg=errmsg,                        &
-                       errmsg2="wrong number of vertical levels for ",        &
-                       errmsg3=trim(stdname)//', '//to_int(num_levels),       &
-                       errmsg4=", expected"//to_int(this%num_layers))
+                       errmsg2="wrong number of vertical levels for '",       &
+                       errmsg3=trim(std_name)//"', "//to_str(num_levels),     &
+                       errmsg4=", expected"//to_str(this%num_layers))
                   exit
                end if
             end if
@@ -1240,13 +1255,13 @@ CONTAINS
       ! <this> must be locked to execute this function
 
       ! Dummy arguments
-      class(ccpp_model_constituents_t),  intent(in)  :: this
-      character(len=*),                  intent(in)  :: standard_name
-      type(ccpp_constituent_prop_ptr_t), intent(out) :: const_data
-      integer,          optional,        intent(out) :: errcode
-      character(len=*), optional,        intent(out) :: errmsg
+      class(ccpp_model_constituents_t),    intent(in)  :: this
+      character(len=*),                    intent(in)  :: standard_name
+      type(ccpp_constituent_properties_t), intent(out) :: const_data
+      integer,                   optional, intent(out) :: errcode
+      character(len=*),          optional, intent(out) :: errmsg
       ! Local variables
-      type(ccpp_constituent_prop_ptr_t), pointer  :: cprop
+      type(ccpp_constituent_properties_t), pointer     :: cprop
       character(len=*), parameter :: subname = "ccp_model_const_metadata"
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
@@ -1274,8 +1289,16 @@ CONTAINS
       character(len=*),                   intent(out) :: std_name
       integer,          optional,         intent(out) :: errcode
       character(len=*), optional,         intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_get_standard_name'
 
-      call this%prop%standard_name(std_name, errcode, errmsg)
+      if (associated(this%prop)) then
+         call this%prop%standard_name(std_name, errcode, errmsg)
+      else
+         std_name = ''
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end subroutine ccpt_get_standard_name
 
@@ -1289,10 +1312,103 @@ CONTAINS
       character(len=*),                   intent(out) :: long_name
       integer,          optional,         intent(out) :: errcode
       character(len=*), optional,         intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_get_long_name'
 
-      call this%prop%long_name(long_name, errcode, errmsg)
+      if (associated(this%prop)) then
+         call this%prop%long_name(long_name, errcode, errmsg)
+      else
+         long_name = ''
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end subroutine ccpt_get_long_name
+
+   !#######################################################################
+
+   subroutine ccpt_get_vertical_dimension(this, vert_dim, errcode, errmsg)
+      ! Return the standard name of this constituent's vertical dimension
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      character(len=*),                   intent(out) :: vert_dim
+      integer,          optional,         intent(out) :: errcode
+      character(len=*), optional,         intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_get_vertical_dimension'
+
+      if (associated(this%prop)) then
+         if (this%prop%is_initialized(errcode, errmsg)) then
+            vert_dim = this%prop%vert_dim
+         end if
+      else
+         vert_dim = ''
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
+
+   end subroutine ccpt_get_vertical_dimension
+
+   !#######################################################################
+
+   logical function ccpt_is_layer_var(this) result(is_layer)
+      ! Return .true. iff this constituent has a layer vertical dimension
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      ! Local variables
+      character(len=dimname_len)  :: dimname
+      character(len=*), parameter :: subname = 'ccpt_is_layer_var'
+
+      if (associated(this%prop)) then
+         call this%prop%vertical_dimension(dimname)
+         is_layer = trim(dimname) == 'vertical_layer_dimension'
+      else
+         is_layer = .false.
+      end if
+
+   end function ccpt_is_layer_var
+
+   !#######################################################################
+
+   logical function ccpt_is_interface_var(this) result(is_interface)
+      ! Return .true. iff this constituent has a interface vertical dimension
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      ! Local variables
+      character(len=dimname_len)  :: dimname
+      character(len=*), parameter :: subname = 'ccpt_is_interface_var'
+
+      if (associated(this%prop)) then
+         call this%prop%vertical_dimension(dimname)
+         is_interface = trim(dimname) == 'vertical_interface_dimension'
+      else
+         is_interface = .false.
+      end if
+
+   end function ccpt_is_interface_var
+
+   !#######################################################################
+
+   logical function ccpt_is_2d_var(this) result(is_2d)
+      ! Return .true. iff this constituent has a 2d vertical dimension
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
+      ! Local variables
+      character(len=dimname_len)  :: dimname
+      character(len=*), parameter :: subname = 'ccpt_is_2d_var'
+
+      if (associated(this%prop)) then
+         call this%prop%vertical_dimension(dimname)
+         is_2d = len_trim(dimname) == 0
+      else
+         is_2d = .false.
+      end if
+
+   end function ccpt_is_2d_var
 
    !#######################################################################
 
@@ -1303,8 +1419,16 @@ CONTAINS
       class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
       integer,          optional,         intent(out) :: errcode
       character(len=*), optional,         intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_const_index'
 
-      ccpt_const_index = this%prop%const_ind(errcode, errmsg)
+      if (associated(this%prop)) then
+         ccpt_const_index = this%prop%const_index(errcode, errmsg)
+      else
+         ccpt_const_index = int_unassigned
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end function ccpt_const_index
 
@@ -1316,8 +1440,16 @@ CONTAINS
       class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
       integer,          optional,         intent(out) :: errcode
       character(len=*), optional,         intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_is_advected'
 
-      ccpt_is_advected = this%prop%is_advected(errcode, errmsg)
+      if (associated(this%prop)) then
+         ccpt_is_advected = this%prop%is_advected(errcode, errmsg)
+      else
+         ccpt_is_advected = .false.
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end function ccpt_is_advected
 
@@ -1329,8 +1461,17 @@ CONTAINS
       class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
       integer,                            intent(out) :: errcode
       character(len=*),                   intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_is_mass_mixing_ratio'
 
-      ccpt_is_mass_mixing_ratio = this%prop%is_mass_mixing_ratio(errcode, errmsg)
+      if (associated(this%prop)) then
+         ccpt_is_mass_mixing_ratio =                                          &
+              this%prop%is_mass_mixing_ratio(errcode, errmsg)
+      else
+         ccpt_is_mass_mixing_ratio = .false.
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end function ccpt_is_mass_mixing_ratio
 
@@ -1342,8 +1483,17 @@ CONTAINS
       class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
       integer,                            intent(out) :: errcode
       character(len=*),                   intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_is_volume_mixing_ratio'
 
-      ccpt_is_volume_mixing_ratio = this%prop%is_volume_mixing_ratio(errcode, errmsg)
+      if (associated(this%prop)) then
+         ccpt_is_volume_mixing_ratio =                                        &
+              this%prop%is_volume_mixing_ratio(errcode, errmsg)
+      else
+         ccpt_is_volume_mixing_ratio = .false.
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end function ccpt_is_volume_mixing_ratio
 
@@ -1355,8 +1505,17 @@ CONTAINS
       class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
       integer,                            intent(out) :: errcode
       character(len=*),                   intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_is_number_concentration'
 
-      ccpt_is_number_concentration = this%prop_is_number_concentration(errcode, errmsg)
+      if (associated(this%prop)) then
+         ccpt_is_number_concentration =                                       &
+              this%prop%is_number_concentration(errcode, errmsg)
+      else
+         ccpt_is_number_concentration = .false.
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end function ccpt_is_number_concentration
 
@@ -1368,8 +1527,16 @@ CONTAINS
       class(ccpp_constituent_prop_ptr_t), intent(in)  :: this
       integer,                            intent(out) :: errcode
       character(len=*),                   intent(out) :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_is_moist'
 
-      ccpt_is_moist = this%prop%is_moist(errcode, errmsg)
+      if (associated(this%prop)) then
+         ccpt_is_moist = this%prop%is_moist(errcode, errmsg)
+      else
+         ccpt_is_moist = .false.
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
 
    end function ccpt_is_moist
 
@@ -1419,5 +1586,36 @@ CONTAINS
       nullify(this%prop)
 
    end subroutine ccpt_deallocate
+
+   !#######################################################################
+
+   subroutine ccpt_set_const_index(this, index, errcode, errmsg)
+      ! Set this constituent's index in the master constituent array
+      ! It is an error to try to set an index if it is already set
+
+      ! Dummy arguments
+      class(ccpp_constituent_prop_ptr_t), intent(inout) :: this
+      integer,                              intent(in)    :: index
+      integer,          optional,           intent(out)   :: errcode
+      character(len=*), optional,           intent(out)   :: errmsg
+      ! Local variable
+      character(len=*), parameter :: subname = 'ccpt_set_const_index'
+
+      if (associated(this%prop)) then
+         if (this%prop%is_initialized(errcode, errmsg)) then
+            if (this%prop%const_ind == int_unassigned) then
+               this%prop%const_ind = index
+            else
+               call set_errvars(1, "ccpp_constituent_prop_ptr_t ",            &
+                    errcode=errcode, errmsg=errmsg,                           &
+                    errmsg2="const index is already set")
+            end if
+         end if
+      else
+         call set_errvars(1, subname//": invalid constituent pointer",        &
+              errcode=errcode, errmsg=errmsg)
+      end if
+
+   end subroutine ccpt_set_const_index
 
 end module ccpp_constituent_prop_mod
