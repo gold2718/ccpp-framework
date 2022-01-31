@@ -186,6 +186,8 @@ class Var:
                     VariableProperty('active', str, optional_in=True,
                                      default_in='.true.'),
                     VariableProperty('polymorphic', bool, optional_in=True,
+                                     default_in='.false.'),
+                    VariableProperty('target', bool, optional_in=True,
                                      default_in='.false.')]
 
 # XXgoldyXX: v debug only
@@ -927,7 +929,7 @@ class Var:
         return find_vertical_dimension(vdims)[0]
 
     def write_def(self, outfile, indent, wdict, allocatable=False,
-                  dummy=False, add_intent=None, extra_space=0):
+                  dummy=False, add_intent=None, extra_space=0, public=False):
         """Write the definition line for the variable to <outfile>.
         If <dummy> is True, include the variable's intent.
         If <dummy> is True but the variable has no intent, add the
@@ -989,10 +991,9 @@ class Var:
         elif intent is not None:
             alloval = self.get_prop_value('allocatable')
             if (intent.lower()[-3:] == 'out') and alloval:
-                intent_str = 'allocatable, intent({})'.format(intent)
+                intent_str = f"allocatable, intent({intent})"
             else:
-                intent_str = 'intent({}){}'.format(intent,
-                                                   ' '*(5 - len(intent)))
+                intent_str = f"intent({intent}){' '*(5 - len(intent))}"
             # end if
         elif not dummy:
             intent_str = ''
@@ -1004,6 +1005,13 @@ class Var:
         else:
             comma = ' '
         # end if
+        if self.get_prop_value('target'):
+            targ = ", target"
+        else:
+            targ = ""
+        # end if
+        comma = targ + comma
+        extra_space -= len(targ)
         if self.is_ddt():
             if polymorphic:
                 dstr = "class({kind}){cspc}{intent} :: {name}{dims} ! {sname}"

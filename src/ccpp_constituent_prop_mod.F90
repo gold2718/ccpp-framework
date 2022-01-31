@@ -10,6 +10,9 @@ module ccpp_constituent_prop_mod
    implicit none
    private
 
+   !!XXgoldyXX: Implement "last_error" method so that functions do not
+   !!           need to have output variables.
+
    ! Private module data
    integer,         parameter :: stdname_len = 256
    integer,         parameter :: dimname_len = 32
@@ -118,14 +121,18 @@ module ccpp_constituent_prop_mod
       procedure :: reset => ccp_model_const_reset
       ! Query number of constituents matching pattern
       procedure :: num_constituents => ccp_model_const_num_match
-      ! Gather constituent fields matching pattern
-      procedure :: copy_in => ccp_model_const_copy_in_3d
-      ! Update constituent fields matching pattern
-      procedure :: copy_out => ccp_model_const_copy_out_3d
       ! Return index of constituent matching standard name
       procedure :: const_index => ccp_model_const_index
       ! Return metadata matching standard name
       procedure :: field_metada => ccp_model_const_metadata
+      ! Gather constituent fields matching pattern
+      procedure :: copy_in => ccp_model_const_copy_in_3d
+      ! Update constituent fields matching pattern
+      procedure :: copy_out => ccp_model_const_copy_out_3d
+      ! Return pointer to constituent array (for use by host model)
+      procedure :: field_data_ptr => ccp_field_data_ptr
+      ! Return pointer to advected constituent array (for use by host model)
+      procedure :: advected_constituents_ptr => ccp_advected_data_ptr
    end type ccpp_model_constituents_t
 
    ! Private interfaces
@@ -1071,6 +1078,60 @@ CONTAINS
 
    !########################################################################
 
+   integer function ccp_model_const_index(this, standard_name, errcode, errmsg)
+      ! Return index of metadata matching <standard_name>.
+      ! <this> must be locked to execute this function
+
+      ! Dummy arguments
+      class(ccpp_model_constituents_t), intent(in)  :: this
+      character(len=*),                 intent(in)  :: standard_name
+      integer,          optional,       intent(out) :: errcode
+      character(len=*), optional,       intent(out) :: errmsg
+      ! Local variables
+      type(ccpp_constituent_properties_t), pointer  :: cprop
+      character(len=*), parameter :: subname = "ccp_model_const_index"
+
+      if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
+         cprop => this%find_const(standard_name, errcode=errcode, errmsg=errmsg)
+         if (associated(cprop)) then
+            ccp_model_const_index = cprop%const_index()
+         else
+            ccp_model_const_index = int_unassigned
+         end if
+      else
+         ccp_model_const_index = int_unassigned
+      end if
+
+   end function ccp_model_const_index
+
+   !########################################################################
+
+   subroutine ccp_model_const_metadata(this, standard_name, const_data,       &
+        errcode, errmsg)
+      ! Return metadata matching standard name
+      ! <this> must be locked to execute this function
+
+      ! Dummy arguments
+      class(ccpp_model_constituents_t),    intent(in)  :: this
+      character(len=*),                    intent(in)  :: standard_name
+      type(ccpp_constituent_properties_t), intent(out) :: const_data
+      integer,                   optional, intent(out) :: errcode
+      character(len=*),          optional, intent(out) :: errmsg
+      ! Local variables
+      type(ccpp_constituent_properties_t), pointer     :: cprop
+      character(len=*), parameter :: subname = "ccp_model_const_metadata"
+
+      if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
+         cprop => this%find_const(standard_name, errcode=errcode, errmsg=errmsg)
+         if (associated(cprop)) then
+            const_data = cprop
+         end if
+      end if
+
+   end subroutine ccp_model_const_metadata
+
+   !########################################################################
+
    subroutine ccp_model_const_copy_in_3d(this, const_array, advected,         &
         errcode, errmsg)
       ! Gather constituent fields matching pattern
@@ -1221,57 +1282,49 @@ CONTAINS
 
    !########################################################################
 
-   integer function ccp_model_const_index(this, standard_name, errcode, errmsg)
-      ! Return index of metadata matching <standard_name>.
-      ! <this> must be locked to execute this function
+   function ccp_field_data_ptr(this) result(const_ptr)
+      ! Return pointer to constituent array (for use by host model)
 
       ! Dummy arguments
-      class(ccpp_model_constituents_t), intent(in)  :: this
-      character(len=*),                 intent(in)  :: standard_name
-      integer,          optional,       intent(out) :: errcode
-      character(len=*), optional,       intent(out) :: errmsg
+      class(ccpp_model_constituents_t), target, intent(inout) :: this
+      real(kind_phys),                  pointer              :: const_ptr(:,:,:)
       ! Local variables
-      type(ccpp_constituent_properties_t), pointer  :: cprop
-      character(len=*), parameter :: subname = "ccp_model_const_index"
+      integer                     :: errcode
+      character(len=errmsg_len)   :: errmsg
+      character(len=*), parameter :: subname = 'ccp_field_data_ptr'
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
-         cprop => this%find_const(standard_name, errcode=errcode, errmsg=errmsg)
-         if (associated(cprop)) then
-            ccp_model_const_index = cprop%const_index()
-         else
-            ccp_model_const_index = int_unassigned
-         end if
+         const_ptr => this%vars_layer
       else
-         ccp_model_const_index = int_unassigned
+         ! We don't want output variables in a function so just nullify
+         ! See note above about creating a 'last_error' method
+         nullify(const_ptr)
       end if
 
-   end function ccp_model_const_index
+   end function ccp_field_data_ptr
 
    !########################################################################
 
-   subroutine ccp_model_const_metadata(this, standard_name, const_data,       &
-        errcode, errmsg)
-      ! Return metadata matching standard name
-      ! <this> must be locked to execute this function
+   function ccp_advected_data_ptr(this) result(const_ptr)
+      ! Return pointer to advected constituent array (for use by host model)
 
       ! Dummy arguments
-      class(ccpp_model_constituents_t),    intent(in)  :: this
-      character(len=*),                    intent(in)  :: standard_name
-      type(ccpp_constituent_properties_t), intent(out) :: const_data
-      integer,                   optional, intent(out) :: errcode
-      character(len=*),          optional, intent(out) :: errmsg
+      class(ccpp_model_constituents_t), target, intent(inout) :: this
+      real(kind_phys), pointer                               :: const_ptr(:,:,:)
       ! Local variables
-      type(ccpp_constituent_properties_t), pointer     :: cprop
-      character(len=*), parameter :: subname = "ccp_model_const_metadata"
+      integer                     :: errcode
+      character(len=errmsg_len)   :: errmsg
+      character(len=*), parameter :: subname = 'ccp_field_data_ptr'
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
-         cprop => this%find_const(standard_name, errcode=errcode, errmsg=errmsg)
-         if (associated(cprop)) then
-            const_data = cprop
-         end if
+         const_ptr => this%vars_layer(:,:,1:this%num_advected_vars)
+      else
+         ! We don't want output variables in a function so just nullify
+         ! See note above about creating a 'last_error' method
+         nullify(const_ptr)
       end if
 
-   end subroutine ccp_model_const_metadata
+   end function ccp_advected_data_ptr
 
    !########################################################################
 

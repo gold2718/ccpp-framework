@@ -457,7 +457,7 @@ class ConstituentVarDict(VarDictionary):
     def write_host_routines(cap, host, reg_funcname, num_const_funcname,
                             copy_in_funcname, copy_out_funcname, const_obj_name,
                             const_names_name, const_indices_name,
-                            suite_list, err_vars):
+                            advect_array_func, suite_list, err_vars):
         """Write out the host model <reg_funcname> routine which will
         instantiate constituent fields for all the constituents in <suite_list>.
         <err_vars> is a list of the host model's error variables.
@@ -636,8 +636,21 @@ class ConstituentVarDict(VarDictionary):
         # end for
         cap.write("", 0)
         cap.write("call {}%copy_out(const_array, {})".format(const_obj_name,
-                                                             obj_err_callstr), 2)
+                                                             obj_err_callstr),
+                  2)
         cap.write("end {}".format(substmt), 1)
+        # Next, write advected constituents routine
+        cap.write("", 0)
+        cap.write(f"function {advect_array_func}() result(const_ptr)", 1)
+        cap.write("", 0)
+        cap.comment("Return pointer to advected constituent array", 2)
+        cap.write("", 0)
+        cap.comment("Dummy argument", 2)
+        cap.write("real(kind_phys), pointer :: const_ptr(:,:,:)", 2)
+        cap.write("", 0)
+        cap.write(f"const_ptr => {const_obj_name}%advected_constituents_ptr()",
+                  2)
+        cap.write(f"end function {advect_array_func}", 1)
 
     @staticmethod
     def constitutent_source_type():

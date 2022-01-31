@@ -32,9 +32,9 @@ module test_host_mod
 
 contains
 
-   subroutine init_data(num_advected)
+   subroutine init_data(constituent_array)
 
-      integer, intent(in) :: num_advected ! From suites
+      real(kind_phys), pointer :: constituent_array(:,:,:) ! From host & suites
 
       integer             :: col
       integer             :: lev
@@ -45,8 +45,8 @@ contains
       ! Allocate and initialize state
       ! Temperature starts above freezing and decreases to -30C
       ! water vapor is initialized in odd columns to different amounts
-      ncnst = num_advected
-      call allocate_physics_state(ncols, pver, ncnst, phys_state)
+      ncnst = SIZE(constituent_array, 3)
+      call allocate_physics_state(ncols, pver, constituent_array, phys_state)
       allocate(check_vals(ncols, pver, ncnst))
       check_vals(:,:,:) = 0.0_kind_phys
       do lev = 1, pver

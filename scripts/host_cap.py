@@ -129,8 +129,8 @@ def unique_local_name(loc_name, host_model):
 ###############################################################################
 def constituent_model_object_name(host_model):
 ###############################################################################
-    """Return the variable name of the object which holds the constiteunt
-    medata and field information."""
+    """Return the variable name of the object which holds the constituent
+       metadata and field information."""
     hstr = "{}_constituents_obj".format(host_model.name)
     return unique_local_name(hstr, host_model)
 
@@ -146,6 +146,14 @@ def constituent_model_const_indices(host_model):
 ###############################################################################
     """Return the name of the array of constituent field array indices"""
     hstr = "{}_model_const_indices".format(host_model.name)
+    return unique_local_name(hstr, host_model)
+
+###############################################################################
+def constituent_model_advected_consts(host_model):
+###############################################################################
+    """Return the name of the function that will return a pointer to the
+       array of advected constituents"""
+    hstr = "{}_advected_constituents".format(host_model.name)
     return unique_local_name(hstr, host_model)
 
 ###############################################################################
@@ -278,7 +286,8 @@ def add_constituent_vars(cap, host_model, suite_list, run_env):
     # Add in the constituents object
     prop_dict = {'standard_name' : "ccpp_model_constituents_object",
                  'local_name' : constituent_model_object_name(host_model),
-                 'dimensions' : '()', 'units' : "None", 'ddt_type' : ddt_name}
+                 'dimensions' : '()', 'units' : "None", 'ddt_type' : ddt_name,
+                 'target' : 'True'}
     const_var = Var(prop_dict, _API_SOURCE, run_env)
     const_var.write_def(cap, 1, const_dict)
     ddt_lib.collect_ddt_fields(const_dict, const_var, run_env)
@@ -404,14 +413,13 @@ def write_host_cap(host_model, api, output_dir, run_env):
             cap.write("use {}, {}only: {}".format(mod[0], mspc, mod[1]), 1)
         # End for
         mspc = ' '*(maxmod - len(CONST_DDT_MOD))
-        cap.write("use {}, {}only: {}".format(CONST_DDT_MOD, mspc,
-                                              CONST_DDT_NAME), 1)
+        cap.write(f"use {CONST_DDT_MOD}, {mspc}only: {CONST_DDT_NAME}", 1)
         cap.write_preamble()
         max_suite_len = 0
         for suite in api.suites:
             max_suite_len = max(max_suite_len, len(suite.module))
         # End for
-        cap.write("! Public Interfaces", 1)
+        cap.comment("Public Interfaces", 1)
         # CCPP_STATE_MACH.transitions represents the host CCPP interface
         for stage in CCPP_STATE_MACH.transitions():
             stmt = "public :: {host_model}_ccpp_physics_{stage}"
@@ -427,6 +435,8 @@ def write_host_cap(host_model, api, output_dir, run_env):
         cap.write("public :: {}".format(copyin_name), 1)
         copyout_name = constituent_copyout_subname(host_model)
         cap.write("public :: {}".format(copyout_name), 1)
+        cap.write(f"public :: {constituent_model_advected_consts(host_model)}",
+                  1)
         cap.write("", 0)
         cap.write("! Private module variables", 1)
         const_dict = add_constituent_vars(cap, host_model, api.suites, run_env)
@@ -560,6 +570,7 @@ def write_host_cap(host_model, api, output_dir, run_env):
         # Write the constituent initialization interfaces
         err_vars = host_model.find_error_variables()
         const_obj_name = constituent_model_object_name(host_model)
+        advect_array_func = constituent_model_advected_consts(host_model)
         cap.write("", 0)
         const_names_name = constituent_model_const_stdnames(host_model)
         const_indices_name = constituent_model_const_indices(host_model)
@@ -568,6 +579,7 @@ def write_host_cap(host_model, api, output_dir, run_env):
                                                copyout_name, const_obj_name,
                                                const_names_name,
                                                const_indices_name,
+                                               advect_array_func,
                                                api.suites, err_vars)
     # End with
     return cap_filename

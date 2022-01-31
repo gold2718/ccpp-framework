@@ -249,6 +249,7 @@ CONTAINS
        use test_host_mod,      only: ncols, pver
        use test_host_ccpp_cap, only: test_host_ccpp_register_constituents
        use test_host_ccpp_cap, only: test_host_ccpp_number_constituents
+       use test_host_ccpp_cap, only: test_host_advected_constituents
        use test_host_ccpp_cap, only: test_host_ccpp_physics_initialize
        use test_host_ccpp_cap, only: test_host_ccpp_physics_timestep_initial
        use test_host_ccpp_cap, only: test_host_ccpp_physics_run
@@ -268,6 +269,7 @@ CONTAINS
        character(len=128), allocatable :: suite_names(:)
        character(len=512)              :: errmsg
        integer                         :: errflg
+       real(kind_phys), pointer        :: const_ptr(:,:,:)
 
        ! Gather and test the inspection routines
        num_suites = size(test_suites)
@@ -314,7 +316,8 @@ CONTAINS
        end if
 
        ! Initialize our 'data'
-       call init_data(num_advected)
+       const_ptr => test_host_advected_constituents()
+       call init_data(const_ptr)
 
        ! Use the suite information to setup the run
        do sind = 1, num_suites
