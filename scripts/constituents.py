@@ -457,7 +457,8 @@ class ConstituentVarDict(VarDictionary):
     def write_host_routines(cap, host, reg_funcname, num_const_funcname,
                             copy_in_funcname, copy_out_funcname, const_obj_name,
                             const_names_name, const_indices_name,
-                            advect_array_func, suite_list, err_vars):
+                            advect_array_func, const_index_func,
+                            suite_list, err_vars):
         """Write out the host model <reg_funcname> routine which will
         instantiate constituent fields for all the constituents in <suite_list>.
         <err_vars> is a list of the host model's error variables.
@@ -593,13 +594,13 @@ class ConstituentVarDict(VarDictionary):
         cap.write("end if", 3)
         cap.write("end do", 2)
         cap.write(f"end {substmt}", 1)
-        # Next, write num_consts routine
+        # Write num_consts routine
         substmt = "function {}".format(num_const_funcname)
         cap.write("", 0)
         cap.write("integer {}({})".format(substmt, err_dummy_str), 1)
-        cap.write("! Return the number of constituent fields for this run", 2)
+        cap.comment("Return the number of constituent fields for this run", 2)
         cap.write("", 0)
-        cap.write("! Dummy arguments", 2)
+        cap.comment("Dummy arguments", 2)
         for evar in err_vars:
             evar.write_def(cap, 2, host, dummy=True, add_intent="out")
         # end for
@@ -608,13 +609,13 @@ class ConstituentVarDict(VarDictionary):
                                                         const_obj_name,
                                                         obj_err_callstr), 2)
         cap.write("end {}".format(substmt), 1)
-        # Next, write copy_in routine
+        # Write copy_in routine
         substmt = "subroutine {}".format(copy_in_funcname)
         cap.write("", 0)
         cap.write("{}(const_array, {})".format(substmt, err_dummy_str), 1)
-        cap.write("! Copy constituent field info into <const_array>", 2)
+        cap.comment("Copy constituent field info into <const_array>", 2)
         cap.write("", 0)
-        cap.write("! Dummy arguments", 2)
+        cap.comment("Dummy arguments", 2)
         cap.write("real(kind_phys),    intent(out)   :: const_array(:,:,:)", 2)
         for evar in err_vars:
             evar.write_def(cap, 2, host, dummy=True, add_intent="out")
@@ -623,13 +624,13 @@ class ConstituentVarDict(VarDictionary):
         cap.write("call {}%copy_in(const_array, {})".format(const_obj_name,
                                                             obj_err_callstr), 2)
         cap.write("end {}".format(substmt), 1)
-        # Next, write copy_out routine
+        # Write copy_out routine
         substmt = "subroutine {}".format(copy_out_funcname)
         cap.write("", 0)
         cap.write("{}(const_array, {})".format(substmt, err_dummy_str), 1)
-        cap.write("! Update constituent field info from <const_array>", 2)
+        cap.comment("Update constituent field info from <const_array>", 2)
         cap.write("", 0)
-        cap.write("! Dummy arguments", 2)
+        cap.comment("Dummy arguments", 2)
         cap.write("real(kind_phys),    intent(in)    :: const_array(:,:,:)", 2)
         for evar in err_vars:
             evar.write_def(cap, 2, host, dummy=True, add_intent="out")
@@ -639,7 +640,7 @@ class ConstituentVarDict(VarDictionary):
                                                              obj_err_callstr),
                   2)
         cap.write("end {}".format(substmt), 1)
-        # Next, write advected constituents routine
+        # Write advected constituents routine
         cap.write("", 0)
         cap.write(f"function {advect_array_func}() result(const_ptr)", 1)
         cap.write("", 0)
@@ -651,6 +652,25 @@ class ConstituentVarDict(VarDictionary):
         cap.write(f"const_ptr => {const_obj_name}%advected_constituents_ptr()",
                   2)
         cap.write(f"end function {advect_array_func}", 1)
+        # Write constituent index function
+        substmt = f"subroutine {const_index_func}"
+        cap.write("", 0)
+        cap.write(f"{substmt}(stdname, const_index, {err_dummy_str})", 1)
+        cap.comment("Set <const_index> to the constituent array index " +     \
+                    "for <stdname>.", 2)
+        cap.comment("If <stdname> is not found, set <const_index> to -1 " +   \
+                    "set an error condition", 2)
+        cap.write("", 0)
+        cap.comment("Dummy arguments", 2)
+        cap.write("character(len=*),    intent(in)    :: stdname", 2)
+        cap.write("integer,             intent(out)   :: const_index", 2)
+        for evar in err_vars:
+            evar.write_def(cap, 2, host, dummy=True, add_intent="out")
+        # end for
+        cap.write("", 0)
+        cap.write(f"const_index = {const_obj_name}%const_index(stdname, " +   \
+                  f"{obj_err_callstr}", 2)
+        cap.write("end {}".format(substmt), 1)
 
     @staticmethod
     def constitutent_source_type():

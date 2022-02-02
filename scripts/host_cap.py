@@ -157,6 +157,14 @@ def constituent_model_advected_consts(host_model):
     return unique_local_name(hstr, host_model)
 
 ###############################################################################
+def constituent_model_const_index(host_model):
+###############################################################################
+    """Return the name of the interface that returns the array index of
+       a constituent array given its standard name"""
+    hstr = "{}_const_get_index".format(host_model.name)
+    return unique_local_name(hstr, host_model)
+
+###############################################################################
 def add_constituent_vars(cap, host_model, suite_list, run_env):
 ###############################################################################
     """Create a DDT library containing array reference variables
@@ -435,8 +443,10 @@ def write_host_cap(host_model, api, output_dir, run_env):
         cap.write("public :: {}".format(copyin_name), 1)
         copyout_name = constituent_copyout_subname(host_model)
         cap.write("public :: {}".format(copyout_name), 1)
-        cap.write(f"public :: {constituent_model_advected_consts(host_model)}",
-                  1)
+        advect_array_func = constituent_model_advected_consts(host_model)
+        cap.write(f"public :: {advect_array_func}", 1)
+        const_index_func = constituent_model_const_index(host_model)
+        cap.write(f"public :: {const_index_func}", 1)
         cap.write("", 0)
         cap.write("! Private module variables", 1)
         const_dict = add_constituent_vars(cap, host_model, api.suites, run_env)
@@ -570,7 +580,6 @@ def write_host_cap(host_model, api, output_dir, run_env):
         # Write the constituent initialization interfaces
         err_vars = host_model.find_error_variables()
         const_obj_name = constituent_model_object_name(host_model)
-        advect_array_func = constituent_model_advected_consts(host_model)
         cap.write("", 0)
         const_names_name = constituent_model_const_stdnames(host_model)
         const_indices_name = constituent_model_const_indices(host_model)
@@ -580,6 +589,7 @@ def write_host_cap(host_model, api, output_dir, run_env):
                                                const_names_name,
                                                const_indices_name,
                                                advect_array_func,
+                                               const_index_func,
                                                api.suites, err_vars)
     # End with
     return cap_filename

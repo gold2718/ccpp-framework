@@ -16,7 +16,7 @@ module test_host_mod
    integer,         parameter   :: pver = 5
    integer,         parameter   :: pverP = pver + 1
    integer,         protected   :: ncnst = -1
-   integer,         parameter   :: index_qv = 1
+   integer,         protected   :: index_qv = -1
    real(kind_phys)              :: dt
    real(kind_phys), parameter   :: tfreeze = 273.15_kind_phys
    type(physics_state)          :: phys_state
