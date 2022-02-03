@@ -669,7 +669,7 @@ class ConstituentVarDict(VarDictionary):
         # end for
         cap.write("", 0)
         cap.write(f"const_index = {const_obj_name}%const_index(stdname, " +   \
-                  f"{obj_err_callstr}", 2)
+                  f"{obj_err_callstr})", 2)
         cap.write("end {}".format(substmt), 1)
 
     @staticmethod

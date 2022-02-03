@@ -256,6 +256,7 @@ CONTAINS
        use test_host_ccpp_cap, only: test_host_ccpp_physics_timestep_final
        use test_host_ccpp_cap, only: test_host_ccpp_physics_finalize
        use test_host_ccpp_cap, only: ccpp_physics_suite_list
+       use test_host_ccpp_cap, only: test_host_const_get_index
 
        type(suite_info), intent(in)  :: test_suites(:)
        logical,          intent(out) :: retval
@@ -263,6 +264,7 @@ CONTAINS
        logical                         :: check
        integer                         :: col_start, col_end
        integer                         :: index, sind
+       integer                         :: index_liq, index_ice
        integer                         :: time_step
        integer                         :: num_suites
        integer                         :: num_advected ! Num advected species
@@ -317,7 +319,13 @@ CONTAINS
 
        ! Initialize our 'data'
        const_ptr => test_host_advected_constituents()
-       call init_data(const_ptr)
+       call test_host_const_get_index('specific_humidity', index,             &
+            errflg, errmsg)
+       call test_host_const_get_index('cloud_liquid_dry_mixing_ratio',        &
+            index_liq, errflg, errmsg)
+       call test_host_const_get_index('cloud_ice_dry_mixing_ratio',           &
+            index_ice, errflg, errmsg)
+       call init_data(const_ptr, index, index_liq, index_ice)
 
        ! Use the suite information to setup the run
        do sind = 1, num_suites

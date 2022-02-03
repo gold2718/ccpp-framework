@@ -36,6 +36,14 @@ PYSUBVER = sys.version_info[1]
 _LOGGER = None
 
 ###############################################################################
+class XMLToolsInternalError(ValueError):
+###############################################################################
+    """Error class for reporting internal errors"""
+    def __init__(self, message):
+        """Initialize this exception"""
+        super().__init__(message)
+
+###############################################################################
 def call_command(commands, logger, silent=False):
 ###############################################################################
     """
@@ -89,7 +97,7 @@ def call_command(commands, logger, silent=False):
             emsg = "Execution of '{}' failed with code:\n"
             outstr = emsg.format(cmd, err.returncode)
             outstr += "{}".format(err.output)
-            raise CCPPError(outstr)
+            raise CCPPError(outstr) from err
         # end if
     # end of try
     return result
@@ -129,7 +137,7 @@ def find_schema_version(root):
         try:
             verbits = [int(x) for x in versplit]
         except ValueError as verr:
-            raise CCPPError(verr)
+            raise CCPPError(verr) from verr
         # end try
         if verbits[0] < 1:
             raise CCPPError('Major version must be at least 1')
@@ -144,7 +152,7 @@ def find_schema_version(root):
         if ve_str:
             errstr = ve_str + '\n' + errstr
         # end if
-        raise CCPPError(errstr.format(version))
+        raise CCPPError(errstr.format(version)) from verr
     # end try
     return verbits
 
@@ -235,7 +243,7 @@ def read_xml_file(filename, logger=None):
                 root = tree.getroot()
             except ET.ParseError as perr:
                 emsg = "read_xml_file: Cannot read {}, {}"
-                raise CCPPError(emsg.format(filename, perr))
+                raise CCPPError(emsg.format(filename, perr)) from perr
     elif not os.access(filename, os.R_OK):
         raise CCPPError("read_xml_file: Cannot open '{}'".format(filename))
     else:
@@ -254,7 +262,7 @@ class PrettyElementTree(ET.ElementTree):
 
     def __init__(self, element=None, file=None):
         """Initialize a PrettyElementTree object"""
-        super(PrettyElementTree, self).__init__(element, file)
+        super().__init__(element, file)
 
     def _write(self, outfile, line, indent, eol=os.linesep):
         """Write <line> as an ASCII string to <outfile>"""
@@ -274,7 +282,7 @@ class PrettyElementTree(ET.ElementTree):
         # end if
         emsg = "No output at {} of {}\n{}".format(txt_beg, len(text),
                                                   text[txt_beg:txt_end])
-        raise DatatableInternalError(emsg)
+        raise XMLToolsInternalError(emsg)
 
     def write(self, file, encoding="us-ascii", xml_declaration=None,
               default_namespace=None, method="xml",
@@ -282,26 +290,26 @@ class PrettyElementTree(ET.ElementTree):
         """Subclassed write method to format output."""
         if PY3 and (PYSUBVER >= 4):
             if PYSUBVER >= 8:
-                input = ET.tostring(self.getroot(),
-                                   encoding=encoding, method=method,
-                                   xml_declaration=xml_declaration,
-                                   default_namespace=default_namespace,
-                                   short_empty_elements=short_empty_elements)
+                et_str = ET.tostring(self.getroot(),
+                                     encoding=encoding, method=method,
+                                     xml_declaration=xml_declaration,
+                                     default_namespace=default_namespace,
+                                     short_empty_elements=short_empty_elements)
             else:
-                input = ET.tostring(self.getroot(),
-                                    encoding=encoding, method=method,
-                                    short_empty_elements=short_empty_elements)
+                et_str = ET.tostring(self.getroot(),
+                                     encoding=encoding, method=method,
+                                     short_empty_elements=short_empty_elements)
             # end if
         else:
-            input = ET.tostring(self.getroot(),
-                                encoding=encoding, method=method)
+            et_str = ET.tostring(self.getroot(),
+                                 encoding=encoding, method=method)
         # end if
         if PY3:
             fmode = 'wt'
-            root = str(input, encoding="utf-8")
+            root = str(et_str, encoding="utf-8")
         else:
             fmode = 'w'
-            root = input
+            root = et_str
         # end if
         indent = 0
         last_write_text = False
