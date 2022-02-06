@@ -193,11 +193,14 @@ end module {module}'''
                 if best >= self.__line_fill:
                     best = min(best, self.find_best_break(commas))
                 # End if
+                line_continue = False
                 if best >= self.__line_max:
                     # This is probably a bad situation so we have to break
                     #   in an ugly spot
-                    line_continue = '&'
                     best = self.__line_max - 1
+                    if len(outstr) > best:
+                        line_continue = '&'
+                    # end if
                 # end if
                 if len(outstr) > best:
                     if self._in_quote(outstr[0:best+1]):
@@ -207,7 +210,7 @@ end module {module}'''
                         line_continue = outstr[best+1:].lstrip()[0] != '!'
                     # end if
                 elif not line_continue:
-                    line_continue = True
+                    line_continue = len(outstr) > best
                 # End if
                 if in_comment or is_comment_stmt:
                     line_continue = False
@@ -224,7 +227,7 @@ end module {module}'''
                     raise ValueError(f"Unable to break line, '{statement}'")
                 # end if
                 statement = in_comment + outstr[best+1:]
-                if isinstance(line_continue, str):
+                if isinstance(line_continue, str) and statement:
                     statement = line_continue + statement
                 # end if
                 self.write(statement, indent_level, continue_line=line_continue)

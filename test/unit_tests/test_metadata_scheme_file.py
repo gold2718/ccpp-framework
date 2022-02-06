@@ -40,7 +40,7 @@
 
  Command line arguments: none
 
- Usage: python test_metadata_scheme_file.py       # run the unit tests
+ Usage: python3 test_metadata_scheme_file.py       # run the unit tests
 -----------------------------------------------------------------------
 """
 import sys

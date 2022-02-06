@@ -8,14 +8,9 @@ The ConstituentVarDict class contains methods to generate the necessary code
 to implement this support.
 """
 
-# Python library imports
-from __future__ import print_function
-import os
 # CCPP framework imports
-from file_utils import KINDS_MODULE
-from fortran_tools import FortranWriter
 from parse_tools import ParseInternalError
-from metavar import Var, VarDictionary
+from metavar import VarDictionary
 
 ########################################################################
 
