@@ -157,6 +157,13 @@ def constituent_model_advected_consts(host_model):
     return unique_local_name(hstr, host_model)
 
 ###############################################################################
+def constituent_model_const_props(host_model):
+###############################################################################
+    """Return the name of the array of constituent property object pointers"""
+    hstr = "{}_model_const_properties".format(host_model.name)
+    return unique_local_name(hstr, host_model)
+
+###############################################################################
 def constituent_model_const_index(host_model):
 ###############################################################################
     """Return the name of the interface that returns the array index of
@@ -445,6 +452,8 @@ def write_host_cap(host_model, api, output_dir, run_env):
         cap.write("public :: {}".format(copyout_name), 1)
         advect_array_func = constituent_model_advected_consts(host_model)
         cap.write(f"public :: {advect_array_func}", 1)
+        prop_array_func = constituent_model_const_props(host_model)
+        cap.write(f"public :: {prop_array_func}", 1)
         const_index_func = constituent_model_const_index(host_model)
         cap.write(f"public :: {const_index_func}", 1)
         cap.write("", 0)
@@ -589,6 +598,7 @@ def write_host_cap(host_model, api, output_dir, run_env):
                                                const_names_name,
                                                const_indices_name,
                                                advect_array_func,
+                                               prop_array_func,
                                                const_index_func,
                                                api.suites, err_vars)
     # End with

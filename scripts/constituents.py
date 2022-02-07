@@ -17,6 +17,7 @@ from metavar import VarDictionary
 CONST_DDT_NAME = "ccpp_model_constituents_t"
 CONST_DDT_MOD = "ccpp_constituent_prop_mod"
 CONST_PROP_TYPE = "ccpp_constituent_properties_t"
+CONST_PROP_PTR_TYPE = "ccpp_constituent_prop_ptr_t"
 
 ########################################################################
 
@@ -452,8 +453,8 @@ class ConstituentVarDict(VarDictionary):
     def write_host_routines(cap, host, reg_funcname, num_const_funcname,
                             copy_in_funcname, copy_out_funcname, const_obj_name,
                             const_names_name, const_indices_name,
-                            advect_array_func, const_index_func,
-                            suite_list, err_vars):
+                            advect_array_func, prop_array_func,
+                            const_index_func, suite_list, err_vars):
         """Write out the host model <reg_funcname> routine which will
         instantiate constituent fields for all the constituents in <suite_list>.
         <err_vars> is a list of the host model's error variables.
@@ -647,6 +648,19 @@ class ConstituentVarDict(VarDictionary):
         cap.write(f"const_ptr => {const_obj_name}%advected_constituents_ptr()",
                   2)
         cap.write(f"end function {advect_array_func}", 1)
+        # Write the constituent property array routine
+        cap.write("", 0)
+        cap.write(f"function {prop_array_func}() result(const_ptr)", 1)
+        cap.write("", 0)
+        cap.comment("Return pointer to array of constituent properties", 2)
+        cap.write("", 0)
+        cap.comment("Dummy argument", 2)
+        cap.write("type(ccpp_constituent_prop_ptr_t), pointer :: const_ptr(:)",
+                  2)
+        cap.write("", 0)
+        cap.write(f"const_ptr => {const_obj_name}%ccp_constituent_props_ptr()",
+                  2)
+        cap.write(f"end function {prop_array_func}", 1)
         # Write constituent index function
         substmt = f"subroutine {const_index_func}"
         cap.write("", 0)

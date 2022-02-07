@@ -98,7 +98,7 @@ module ccpp_constituent_prop_mod
       ! These fields are public to allow for efficient (i.e., no copying)
       !   usage even though it breaks object independence
       real(kind_phys), allocatable     :: vars_layer(:,:,:)
-      real(kind_phys), allocatable     :: vars_minvalue(:,:,:)
+      real(kind_phys), allocatable     :: vars_minvalue(:)
       ! An array containing all the constituent metadata
       ! Each element contains a pointer to a constituent from the hash table
       type(ccpp_constituent_prop_ptr_t), allocatable :: const_metadata(:)
@@ -133,6 +133,8 @@ module ccpp_constituent_prop_mod
       procedure :: field_data_ptr => ccp_field_data_ptr
       ! Return pointer to advected constituent array (for use by host model)
       procedure :: advected_constituents_ptr => ccp_advected_data_ptr
+      ! Return pointer to constituent properties array (for use by host model)
+      procedure :: constituent_props_ptr => ccp_constituent_props_ptr
    end type ccpp_model_constituents_t
 
    ! Private interfaces
@@ -968,8 +970,14 @@ CONTAINS
             call handle_allocate_error(astat, 'vars_layer',                   &
                  errcode=errcode, errmsg=errmsg)
             if (astat == 0) then
+               allocate(this%vars_minvalue(index_const), stat=astat)
+               call handle_allocate_error(astat, 'vars_minvalue',             &
+                    errcode=errcode, errmsg=errmsg)
+            end if
+            if (astat == 0) then
                this%num_layers = num_layers
                this%vars_layer = kphys_unassigned
+               this%vars_minvalue = 0.0_kind_phys
             end if
             if (present(errcode)) then
                if (errcode /= 0) then
@@ -1004,6 +1012,9 @@ CONTAINS
       end if
       if (allocated(this%vars_layer)) then
          deallocate(this%vars_layer)
+      end if
+      if (allocated(this%vars_minvalue)) then
+         deallocate(this%vars_minvalue)
       end if
       if (allocated(this%const_metadata)) then
          if (clear_table) then
@@ -1314,7 +1325,7 @@ CONTAINS
       ! Local variables
       integer                     :: errcode
       character(len=errmsg_len)   :: errmsg
-      character(len=*), parameter :: subname = 'ccp_field_data_ptr'
+      character(len=*), parameter :: subname = 'ccp_advected_data_ptr'
 
       if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
          const_ptr => this%vars_layer(:,:,1:this%num_advected_vars)
@@ -1325,6 +1336,27 @@ CONTAINS
       end if
 
    end function ccp_advected_data_ptr
+
+   function ccp_constituent_props_ptr(this) result(const_ptr)
+      ! Return pointer to constituent properties array (for use by host model)
+
+      ! Dummy arguments
+      class(ccpp_model_constituents_t),  target, intent(inout) :: this
+      type(ccpp_constituent_prop_ptr_t), pointer               :: const_ptr(:)
+      ! Local variables
+      integer                     :: errcode
+      character(len=errmsg_len)   :: errmsg
+      character(len=*), parameter :: subname = 'ccp_constituent_props_ptr'
+
+      if (this%locked(errcode=errcode, errmsg=errmsg, warn_func=subname)) then
+         const_ptr => this%const_metadata
+      else
+         ! We don't want output variables in a function so just nullify
+         ! See note above about creating a 'last_error' method
+         nullify(const_ptr)
+      end if
+
+   end function ccp_constituent_props_ptr
 
    !########################################################################
 
