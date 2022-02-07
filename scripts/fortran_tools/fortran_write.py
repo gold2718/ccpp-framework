@@ -189,6 +189,18 @@ end module {module}'''
                     # End if (no else, other characters will be ignored)
                     sptr = sptr + 1
                 # End while
+                # Before looking for best space, reject any that are on a
+                #    comment line but before any significant characters
+                if outstr.lstrip()[0] == '!':
+                    first_space = outstr.index('!') + 1
+                    while ((outstr[first_space] == '!' or
+                            outstr[first_space] == ' ') and
+                           (first_space < line_len)):
+                        first_space += 1
+                    # end while
+                    if min(spaces) < first_space:
+                        spaces = [x for x in spaces if x >= first_space]
+                    # end if
                 best = self.find_best_break(spaces)
                 if best >= self.__line_fill:
                     best = min(best, self.find_best_break(commas))
@@ -222,9 +234,9 @@ end module {module}'''
                 # End if
                 outline = f"{outstr[0:best+1]}{fill}".rstrip()
                 self.__file.write(f"{outline}\n")
-
                 if best <= 0:
-                    raise ValueError(f"Unable to break line, '{statement}'")
+                    imsg = "Internal ERROR: Unable to break line"
+                    raise ValueError(f"{imsg}, '{statement}'")
                 # end if
                 statement = in_comment + outstr[best+1:]
                 if isinstance(line_continue, str) and statement:

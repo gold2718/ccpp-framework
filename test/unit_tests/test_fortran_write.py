@@ -109,7 +109,7 @@ class MetadataTableTestCase(unittest.TestCase):
             gen.write("integer :: foo ! Comment at end of line works", 1)
             # Test long comments at end of line
             gen.write(f"integer :: bar ! {'x'*100}", 1)
-            gen.write(f"integer :: bar ! {'y'*130}", 1)
+            gen.write(f"integer :: baz ! {'y'*130}", 1)
             gen.end_module_header()
             # Test comment line in body
             gen.comment("We can write comments in the module body", 1)
