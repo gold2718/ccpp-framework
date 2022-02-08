@@ -651,6 +651,7 @@ class ConstituentVarDict(VarDictionary):
         # Write the constituent property array routine
         cap.write("", 0)
         cap.write(f"function {prop_array_func}() result(const_ptr)", 1)
+        cap.write(f"use {CONST_DDT_MOD}, only: {CONST_PROP_PTR_TYPE}", 2)
         cap.write("", 0)
         cap.comment("Return pointer to array of constituent properties", 2)
         cap.write("", 0)
@@ -658,7 +659,7 @@ class ConstituentVarDict(VarDictionary):
         cap.write("type(ccpp_constituent_prop_ptr_t), pointer :: const_ptr(:)",
                   2)
         cap.write("", 0)
-        cap.write(f"const_ptr => {const_obj_name}%ccp_constituent_props_ptr()",
+        cap.write(f"const_ptr => {const_obj_name}%constituent_props_ptr()",
                   2)
         cap.write(f"end function {prop_array_func}", 1)
         # Write constituent index function

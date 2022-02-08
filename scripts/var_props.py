@@ -1011,6 +1011,12 @@ class VarCompatObj:
         >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'K')
         ('{var}+273.15{kind}', '{var}-273.15{kind}')
 
+        # Try an invalid conversion
+        >>> _DOCTEST_VCOMPAT._get_unit_convstrs('1', 'none') #doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        ...
+        parse_source.ParseSyntaxError: Unsupported units entry for var_stdname, '1', at foo.F90:4
+
         # Try an unsupported conversion
         >>> _DOCTEST_VCOMPAT._get_unit_convstrs('C', 'm') #doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
@@ -1157,8 +1163,7 @@ class VarCompatObj:
         # end if (no else, kind_ok already False)
         return kind_ok
 
-    @staticmethod
-    def units_to_string(units, context=None):
+    def units_to_string(self, units, context=None):
         """Replace variable unit description with string that is a legal
         Python identifier.
         If the resulting string is a Python keyword, raise an exception."""
@@ -1170,9 +1175,9 @@ class VarCompatObj:
         string = string.replace("+","_plus_")
         # Test that the resulting string is a valid Python identifier
         if not string.isidentifier():
-            emsg = "Unsupported units entry, '{}'{}"
+            emsg = "Unsupported units entry for {}, '{}'{}"
             ctx = context_string(context)
-            raise ParseSyntaxError(emsg.format(units ,ctx))
+            raise ParseSyntaxError(emsg.format(self.__stdname, units ,ctx))
         # end if
         # Test that the resulting string is NOT a Python keyword
         if keyword.iskeyword(string):
@@ -1285,10 +1290,15 @@ if __name__ == "__main__":
                                        kind_types=["kind_phys=REAL64",
                                                    "kind_dyn=REAL32",
                                                    "kind_host=REAL64"])
+    _DOCTEST_CONTEXT1 = ParseContext(linenum=3, filename='foo.F90')
+    _DOCTEST_CONTEXT2 = ParseContext(linenum=5, filename='bar.F90')
     _DOCTEST_VCOMPAT = VarCompatObj("var_stdname", "real", "kind_phys",
                                     "m", [], "var1_lname", "var_stdname",
                                     "real", "kind_phys", "m", [],
-                                    "var2_lname", _DOCTEST_RUNENV)
-    fail, _ = doctest.testmod()
+                                    "var2_lname", _DOCTEST_RUNENV,
+                                    v1_context=_DOCTEST_CONTEXT1,
+                                    v2_context=_DOCTEST_CONTEXT2)
+    OPTIONS = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+    fail, _ = doctest.testmod(optionflags=OPTIONS)
     sys.exit(fail)
 # end if
