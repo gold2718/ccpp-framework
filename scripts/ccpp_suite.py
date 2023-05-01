@@ -485,7 +485,55 @@ character(len=16) :: {css_var_name} = '{state}'
         """Return the constituent dictionary for this suite"""
         return self.parent
 
-    def write(self, output_dir, run_env):
+    def interface_vars_dict(self, check_dict, ddt_lib):
+        """Collect the input, output, and inout variables for each phase
+        of this suite."""
+        parent = self.parent
+        # Collect all the suite variables, by type and phase
+        input_vars = [set(), set(), set()] # leaves, arrays, leaf elements
+        inout_vars = [set(), set(), set()] # leaves, arrays, leaf elements
+        output_vars = [set(), set(), set()] # leaves, arrays, leaf elements
+        iv_dict
+        for part in self.groups:
+            for var in part.call_list.variable_list():
+                stdname = var.get_prop_value("standard_name")
+                intent = var.get_prop_value("intent")
+                protected = var.get_prop_value("protected")
+                if (parent is not None) and (not protected):
+                    pvar = parent.find_variable(standard_name=stdname)
+                    if pvar is not None:
+                        protected = pvar.get_prop_value("protected")
+                    # end if
+                # end if
+                elements = var.intrinsic_elements(check_dict=check_dict,
+                                                  ddt_lib=ddt_lib)
+                if (intent == 'in') and (not protected):
+                    if isinstance(elements, list):
+                        input_vars[1].add(stdname)
+                        input_vars[2].update(elements)
+                    else:
+                        input_vars[0].add(stdname)
+                    # end if
+                elif intent == 'inout':
+                    if isinstance(elements, list):
+                        inout_vars[1].add(stdname)
+                        inout_vars[2].update(elements)
+                    else:
+                        inout_vars[0].add(stdname)
+                    # end if
+                elif intent == 'out':
+                    if isinstance(elements, list):
+                        output_vars[1].add(stdname)
+                        output_vars[2].update(elements)
+                    else:
+                        output_vars[0].add(stdname)
+                    # end if
+                # end if
+            # end for
+        # end for
+        return iv_dict
+
+    def write(self, output_dir, run_env, check_dict, ddt_lib):
         """Create caps for all groups in the suite and for the entire suite
         (calling the group caps one after another)"""
         # Set name of module and filename of cap
@@ -569,6 +617,17 @@ class API(VarDictionary):
     __subhead = 'subroutine {subname}({api_call_list})'
 
     __subfoot = 'end subroutine {subname}\n'
+
+    # The var_type_vals are bits to describe the status of a variable in
+    # each phase with a single number.
+    # Each phase is 2 bits with the following table:
+    #   0: Variable not present in this phase
+    #   1: Variable is intent(in) in this phase
+    #   2: Variable is intent(out) in this phase
+    #   3: Variable is intent(inout) in this phase
+    __var_type_vals = [f"{phase}_{bit}_bitpos"
+                       for phase in CCPP_STATE_MACH.transitions()
+                       for bit in ("input", "output")]
 
     # Note, we cannot add these vars to our dictionary as we do not want
     #    them showing up in group dummy arg lists
@@ -687,7 +746,8 @@ class API(VarDictionary):
         api_filenames = list()
         # Write out the suite files
         for suite in self.suites:
-            out_file_name = suite.write(output_dir, run_env)
+            out_file_name = suite.write(output_dir, run_env,
+                                        self.parent, self.__ddt_lib)
             api_filenames.append(out_file_name)
         # end for
         return api_filenames
