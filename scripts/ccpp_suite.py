@@ -78,6 +78,20 @@ character(len=16) :: {css_var_name} = '{state}'
 
     __scheme_template = '<scheme>{}</scheme>'
 
+    # The var_type_vals are bits to describe the status of a variable in
+    # each phase with a single number.
+    # Each phase is 2 bits with the following table:
+    #   0: Variable not present in this phase
+    #   1: Variable is intent(in) in this phase
+    #   2: Variable is intent(out) in this phase
+    #   3: Variable is intent(inout) in this phase
+    __var_type_vals = [f"{phase}_{bit}_bitpos"
+                       for phase in CCPP_STATE_MACH.transitions()
+                       for bit in ("input", "output")]
+    # __struct_element is a bit for variables which are part of a DDT
+    __struct_element = "STRUCT_ELEMENT"
+    __var_type_vals.append(__struct_element)
+
     def __init__(self, filename, api, run_env):
         """Initialize this Suite object from the SDF, <filename>.
         <api> serves as the Suite's parent."""
@@ -485,16 +499,32 @@ character(len=16) :: {css_var_name} = '{state}'
         """Return the constituent dictionary for this suite"""
         return self.parent
 
+    @staticmethod
+    def _add_vars_to_dict(vdict, stdname, phase, inout):
+        # A a presence flag to the <stdname> set in <vdict>
+        # Add a new set if <stdname> is not in <vdict>
+        # If <stdname> is a list, apply this function to each element
+        if isinstance(stdname, list):
+            for var in stdname:
+                _add_vars_to_dict(vdict, var, phase, inout)
+            # end for
+        else:
+            if not stdname in vdict:
+                vdict[stdname] = set()
+            # end if
+            vdict[stdname].add(f"{phase}_{inout}_bitpos")
+        # end if
+
     def interface_vars_dict(self, check_dict, ddt_lib):
         """Collect the input, output, and inout variables for each phase
         of this suite."""
         parent = self.parent
-        # Collect all the suite variables, by type and phase
-        input_vars = [set(), set(), set()] # leaves, arrays, leaf elements
-        inout_vars = [set(), set(), set()] # leaves, arrays, leaf elements
-        output_vars = [set(), set(), set()] # leaves, arrays, leaf elements
-        iv_dict
+        # Collect all the suite variables, by type
+        regular_vars = {} # Fortran intrinsics
+        parent_vars = {}  # E.g., DDT
+        elem_vars = {} # Intrinsic vars inside a DDT
         for part in self.groups:
+            phase = part.phase()
             for var in part.call_list.variable_list():
                 stdname = var.get_prop_value("standard_name")
                 intent = var.get_prop_value("intent")
@@ -509,29 +539,32 @@ character(len=16) :: {css_var_name} = '{state}'
                                                   ddt_lib=ddt_lib)
                 if (intent == 'in') and (not protected):
                     if isinstance(elements, list):
-                        input_vars[1].add(stdname)
-                        input_vars[2].update(elements)
+                        _add_vars_to_dict(parent_vars, stdname, phase, "input")
+                        _add_vars_to_dict(elem_vars, elements, phase, "input")
                     else:
-                        input_vars[0].add(stdname)
+                        _add_vars_to_dict(regular_vars, stdname, phase, "input")
                     # end if
                 elif intent == 'inout':
                     if isinstance(elements, list):
-                        inout_vars[1].add(stdname)
-                        inout_vars[2].update(elements)
+                        _add_vars_to_dict(parent_vars, stdname, phase, "input")
+                        _add_vars_to_dict(elem_vars, elements, phase, "input")
+                        _add_vars_to_dict(parent_vars, stdname, phase, "output")
+                        _add_vars_to_dict(elem_vars, elements, phase, "output")
                     else:
-                        inout_vars[0].add(stdname)
+                        _add_vars_to_dict(regular_vars, stdname, phase, "input")
+                        _add_vars_to_dict(regular_vars, stdname, phase, "output")
                     # end if
                 elif intent == 'out':
                     if isinstance(elements, list):
-                        output_vars[1].add(stdname)
-                        output_vars[2].update(elements)
+                        _add_vars_to_dict(parent_vars, stdname, phase, "output")
+                        _add_vars_to_dict(elem_vars, elements, phase, "output")
                     else:
-                        output_vars[0].add(stdname)
+                        _add_vars_to_dict(regular_vars, stdname, phase, "output")
                     # end if
                 # end if
             # end for
         # end for
-        return iv_dict
+        return regular_vars, parent_vars, elem_vars
 
     def write(self, output_dir, run_env, check_dict, ddt_lib):
         """Create caps for all groups in the suite and for the entire suite
@@ -617,17 +650,6 @@ class API(VarDictionary):
     __subhead = 'subroutine {subname}({api_call_list})'
 
     __subfoot = 'end subroutine {subname}\n'
-
-    # The var_type_vals are bits to describe the status of a variable in
-    # each phase with a single number.
-    # Each phase is 2 bits with the following table:
-    #   0: Variable not present in this phase
-    #   1: Variable is intent(in) in this phase
-    #   2: Variable is intent(out) in this phase
-    #   3: Variable is intent(inout) in this phase
-    __var_type_vals = [f"{phase}_{bit}_bitpos"
-                       for phase in CCPP_STATE_MACH.transitions()
-                       for bit in ("input", "output")]
 
     # Note, we cannot add these vars to our dictionary as we do not want
     #    them showing up in group dummy arg lists
