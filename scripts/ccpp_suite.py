@@ -89,7 +89,7 @@ character(len=16) :: {css_var_name} = '{state}'
                        for phase in CCPP_STATE_MACH.transitions()
                        for bit in ("input", "output")]
     # __struct_element is a bit for variables which are part of a DDT
-    __struct_element = "STRUCT_ELEMENT"
+    __struct_element = "struct_element"
     __var_type_vals.append(__struct_element)
 
     def __init__(self, filename, api, run_env):
@@ -125,6 +125,11 @@ character(len=16) :: {css_var_name} = '{state}'
         # end if
         # Parse the SDF
         self.parse(run_env)
+        # For completeness, we initilize these here, however,
+        #   they will receive correct values at the end of analyze
+        self.__regular_vars = None
+        self.__parent_vars = None
+        self.__elem_vars = None
 
     @property
     def name(self):
@@ -274,6 +279,78 @@ character(len=16) :: {css_var_name} = '{state}'
     def groups(self):
         """Get the list of groups in this suite."""
         return self.__groups
+
+    def _interface_vars_dict(self, check_dict, ddt_lib):
+        """Collect the input, output, and inout variables for each phase
+        of this suite."""
+        parent = self.parent
+        # Collect all the suite variables, by type
+        regular_vars = {} # Fortran intrinsics
+        parent_vars = {}  # E.g., DDT
+        elem_vars = {} # Intrinsic vars inside a DDT
+        for part in self.groups:
+            phase = part.phase()
+            for var in part.call_list.variable_list():
+                stdname = var.get_prop_value("standard_name")
+                intent = var.get_prop_value("intent")
+                protected = var.get_prop_value("protected")
+                if (parent is not None) and (not protected):
+                    pvar = parent.find_variable(standard_name=stdname)
+                    if pvar is not None:
+                        protected = pvar.get_prop_value("protected")
+                    # end if
+                # end if
+                elements = var.intrinsic_elements(check_dict=check_dict,
+                                                  ddt_lib=ddt_lib)
+                if (intent == 'in') and (not protected):
+                    if isinstance(elements, list):
+                        self._add_vars_to_dict(parent_vars, stdname,
+                                               phase, "input")
+                        self._add_vars_to_dict(elem_vars, elements,
+                                               phase, "input")
+                    else:
+                        self._add_vars_to_dict(regular_vars, stdname,
+                                               phase, "input")
+                    # end if
+                elif intent == 'inout':
+                    if isinstance(elements, list):
+                        self._add_vars_to_dict(parent_vars, stdname,
+                                               phase, "input")
+                        self._add_vars_to_dict(elem_vars, elements,
+                                               phase, "input")
+                        self._add_vars_to_dict(parent_vars, stdname,
+                                               phase, "output")
+                        self._add_vars_to_dict(elem_vars, elements,
+                                               phase, "output")
+                    else:
+                        self._add_vars_to_dict(regular_vars, stdname,
+                                               phase, "input")
+                        self._add_vars_to_dict(regular_vars, stdname,
+                                               phase, "output")
+                    # end if
+                elif intent == 'out':
+                    if isinstance(elements, list):
+                        self._add_vars_to_dict(parent_vars, stdname,
+                                               phase, "output")
+                        self._add_vars_to_dict(elem_vars, elements,
+                                               phase, "output")
+                    else:
+                        self._add_vars_to_dict(regular_vars, stdname,
+                                               phase, "output")
+                    # end if
+                # end if
+            # end for
+        # end for
+        # Check for overlap (there should not be any)
+        reg_set = set(regular_vars.keys())
+        par_set = set(parent_vars.keys())
+        if not reg_set.isdisjoint(par_set):
+            overlap = reg_set.intersection(par_set)
+            emsg = (f"Suite {self.name}: Standard name overlap with: " +
+                    f"{', '.join(overlap)}.")
+            raise CCPPError(emsg)
+        # end if
+        return regular_vars, parent_vars, elem_vars
 
     def find_variable(self, standard_name=None, source_var=None,
                       any_scope=True, clone=None,
@@ -460,6 +537,9 @@ character(len=16) :: {css_var_name} = '{state}'
                 # end if
             # end for
         # end for
+        # Finally, collect usage dictionaries of Suite variables
+        args = self._interface_vars_dict(host_model, ddt_library)
+        self.__regular_vars, self.__parent_vars, self.__elem_vars = args
 
     def is_run_group(self, group):
         """Method to separate out run-loop groups from special initial
@@ -501,12 +581,12 @@ character(len=16) :: {css_var_name} = '{state}'
 
     @staticmethod
     def _add_vars_to_dict(vdict, stdname, phase, inout):
-        # A a presence flag to the <stdname> set in <vdict>
+        # Add a presence flag to the <stdname> set in <vdict>
         # Add a new set if <stdname> is not in <vdict>
         # If <stdname> is a list, apply this function to each element
         if isinstance(stdname, list):
             for var in stdname:
-                _add_vars_to_dict(vdict, var, phase, inout)
+                self._add_vars_to_dict(vdict, var, phase, inout)
             # end for
         else:
             if not stdname in vdict:
@@ -514,57 +594,6 @@ character(len=16) :: {css_var_name} = '{state}'
             # end if
             vdict[stdname].add(f"{phase}_{inout}_bitpos")
         # end if
-
-    def interface_vars_dict(self, check_dict, ddt_lib):
-        """Collect the input, output, and inout variables for each phase
-        of this suite."""
-        parent = self.parent
-        # Collect all the suite variables, by type
-        regular_vars = {} # Fortran intrinsics
-        parent_vars = {}  # E.g., DDT
-        elem_vars = {} # Intrinsic vars inside a DDT
-        for part in self.groups:
-            phase = part.phase()
-            for var in part.call_list.variable_list():
-                stdname = var.get_prop_value("standard_name")
-                intent = var.get_prop_value("intent")
-                protected = var.get_prop_value("protected")
-                if (parent is not None) and (not protected):
-                    pvar = parent.find_variable(standard_name=stdname)
-                    if pvar is not None:
-                        protected = pvar.get_prop_value("protected")
-                    # end if
-                # end if
-                elements = var.intrinsic_elements(check_dict=check_dict,
-                                                  ddt_lib=ddt_lib)
-                if (intent == 'in') and (not protected):
-                    if isinstance(elements, list):
-                        _add_vars_to_dict(parent_vars, stdname, phase, "input")
-                        _add_vars_to_dict(elem_vars, elements, phase, "input")
-                    else:
-                        _add_vars_to_dict(regular_vars, stdname, phase, "input")
-                    # end if
-                elif intent == 'inout':
-                    if isinstance(elements, list):
-                        _add_vars_to_dict(parent_vars, stdname, phase, "input")
-                        _add_vars_to_dict(elem_vars, elements, phase, "input")
-                        _add_vars_to_dict(parent_vars, stdname, phase, "output")
-                        _add_vars_to_dict(elem_vars, elements, phase, "output")
-                    else:
-                        _add_vars_to_dict(regular_vars, stdname, phase, "input")
-                        _add_vars_to_dict(regular_vars, stdname, phase, "output")
-                    # end if
-                elif intent == 'out':
-                    if isinstance(elements, list):
-                        _add_vars_to_dict(parent_vars, stdname, phase, "output")
-                        _add_vars_to_dict(elem_vars, elements, phase, "output")
-                    else:
-                        _add_vars_to_dict(regular_vars, stdname, phase, "output")
-                    # end if
-                # end if
-            # end for
-        # end for
-        return regular_vars, parent_vars, elem_vars
 
     def write(self, output_dir, run_env, check_dict, ddt_lib):
         """Create caps for all groups in the suite and for the entire suite
@@ -582,6 +611,8 @@ character(len=16) :: {css_var_name} = '{state}'
                            "CCPP Suite Cap for {}".format(self.name),
                            self.module) as outfile:
             # Write module 'use' statements here
+            # For proper conversion of binary literals
+            outfile.write("use ISO_FORTRAN_ENV, only: INT32, INT64", 1)
             outfile.write('use {}'.format(KINDS_MODULE), 1)
             # Look for any DDT types
             self.__ddt_library.write_ddt_use_statements(self.values(),
@@ -607,6 +638,68 @@ character(len=16) :: {css_var_name} = '{state}'
             for svar in self.keys():
                 self[svar].write_def(outfile, 1, self, allocatable=True)
             # end for
+            # Declare suite variable variables and parameters
+            bitmax = len(self.__var_type_vals) + 1
+            if bitmax >= 64:
+                raise ParseInternalError("Not enough bits for Suite var types")
+            # end if
+            if bitmax >= 32:
+                int_str = "INT64"
+            else:
+                int_str = "INT32"
+            # end if
+            int_type = f"integer({int_str})"
+            bitpos = 1 # Position in value where 1 is least significant
+            bitfld = 1 # Value of binary digit at bitpos
+            valbits = {} # Remember bitfld of each entry type
+            mspc = max([len(x) for x in self.__var_type_vals])
+            # First, the bitpos parameters
+            for vtype in self.__var_type_vals:
+                vfld = f"{vtype}{' '*(mspc - len(vtype))}"
+                bitstr = f"int(b'{bitfld:0{bitmax}b}', {int_str})"
+                outfile.write(f"{int_type}, parameter :: {vfld} = {bitstr}", 1)
+                valbits[f"{vtype}"] = bitfld
+                bitpos += 1
+                bitfld *= 2
+            # end for
+            allvars = set()
+            allvars.update(self.__regular_vars.keys())
+            allvars.update(self.__parent_vars.keys())
+            allvars.update(self.__elem_vars.keys())
+            # Change allvars to a list for a consistent ordering
+            allvars = sorted(allvars)
+            mspc = max([len(x) for x in allvars])
+            nvars = len(allvars)
+            # Declare an array of all this Suite's variable standard names
+            decl = f"character(len={mspc}), private :: suite_allvars({nvars}) = "
+            vlist = ', '.join([f"\"{x}{' '*(mspc - len(x))}\"" for x in allvars])
+            decl += f"(/ {vlist} /)"
+            outfile.write(decl, 1)
+
+            # Declare a bitfield for each variable with phase and type info
+            decl = f"{int_type}, private :: suite_bitvals({nvars}) = "
+            vlist = []
+            for stdname in allvars:
+                if stdname in self.__regular_vars:
+                    var = self.__regular_vars[stdname]
+                    varval = 0
+                elif stdname in self.__parent_vars:
+                    var = self.__parent_vars[stdname]
+                    varval = 0
+                elif stdname in self.__elem_vars:
+                    var = self.__elem_vars[stdname]
+                    varval = valbits[self.__struct_element]
+                else:
+                    raise ParseInternalError(f"No var for '{stdname}'?")
+                # end if
+                # Compute value of variable
+                for entry in var:
+                    varval += valbits[entry]
+                # end for
+                vlist.append(f"int(b'{varval:0{bitmax}b}', {int_str})")
+            # end for
+            decl += f"(/ {', '.join(vlist)} /)"
+            outfile.write(decl, 1)
             outfile.end_module_header()
             for group in self.__groups:
                 if group.name in self._beg_groups:
