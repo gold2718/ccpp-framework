@@ -266,13 +266,13 @@ class ConstituentVarDict(VarDictionary):
         use_errcode = all([x.get_prop_value('standard_name') in errcode_snames
                            for x in err_vars])
         errvar_alist = ", ".join([x for x in errvar_names.values()])
-        errvar_alist2 = ", {}".format(errvar_alist) if errvar_alist else ""
+        errvar_alist2 = f", {errvar_alist}" if errvar_alist else ""
         call_vnames = {'ccpp_error_code' : 'errcode',
                        'ccpp_error_message' : 'errmsg'}
-        errvar_call = ", ".join(["{}={}".format(call_vnames[x], errvar_names[x])
+        errvar_call = ", ".join([f"{call_vnames[x]}={errvar_names[x]}"
                                  for x in errcode_snames])
-        errvar_call2 = ", {}".format(errvar_call) if errvar_call else ""
-        local_call = ", ".join(["{}={}".format(errvar_names[x], errvar_names[x])
+        errvar_call2 = f", {errvar_call}" if errvar_call else ""
+        local_call = ", ".join([f"{errvar_names[x]}={errvar_names[x]}"
                                  for x in errcode_snames])
         # Allocate and define constituents
         stmt = "subroutine {}({})".format(self.constituent_prop_init_consts(),

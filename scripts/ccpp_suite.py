@@ -595,6 +595,98 @@ character(len=16) :: {css_var_name} = '{state}'
             vdict[stdname].add(f"{phase}_{inout}_bitpos")
         # end if
 
+    def req_vars_subname(self):
+        """Return the name of the required variables subroutine for this suite"""
+        return f"suite_{self.name}_variables"
+
+    def write_req_vars_sub(self, ofile, errvars):
+        """Write the required variables subroutine"""
+        # Find error variables (only support old style for now)
+        errmsg_var = None
+        errcode_var= None
+        for evar in errvars:
+            if evar.get_prop_value('standard_name') == 'ccpp_error_code':
+                errcode_var = evar
+            elif evar.get_prop_value('standard_name') == 'ccpp_error_message':
+                errmsg_var = evar
+            else:
+                raise ParseInternalError("Unsupported error variable")
+            # end if
+        # end for
+        if (errmsg_var == None) or (errcode_var == None):
+            emsg = "Could not find error variable names: errvars = "
+            emsg += f"{', '.join([str(x) for x in errvars])}"
+            raise ParseInternalError(emsg)
+        # end if
+        errmsg = errmsg_var.get_prop_value('local_name')
+        errcode = errcode_var.get_prop_value('local_name')
+        inargs = f"suite_name, variable_list, {errmsg}, {errcode}"
+        inargs += ", input_vars, output_vars, phases, struct_elements"
+        ofile.blank_line()
+        ofile.write(f"subroutine {self.req_vars_subname()}({inargs})", 1)
+        ofile.write("! Dummy arguments", 2)
+        ofile.write(f"character(len=*), {' '*12} intent(in)  :: suite_name", 2)
+        oline = "character(len=*), allocatable, intent(out) :: variable_list(:)"
+        ofile.write(oline, 2)
+        errmsg_var.write_def(ofile, 2, self, extra_space=22)
+        errcode_var.write_def(ofile, 2, self, extra_space=22)
+        oline = "logical,          optional,    intent(in) :: input_vars"
+        ofile.write(oline, 2)
+        oline = "logical,          optional,    intent(in) :: output_vars"
+        ofile.write(oline, 2)
+        oline = "character(len=*), optional,    intent(in) :: phases(:)"
+        ofile.write(oline, 2)
+        oline = "logical,          optional,    intent(in) :: struct_elements"
+        ofile.write(oline, 2)
+        ofile.write("! Local variables", 2)
+        ofile.write(f"logical {' '*34}:: input_vars_use", 2)
+        ofile.write(f"logical {' '*34}:: output_vars_use", 2)
+        ofile.write(f"logical {' '*34}:: struct_elements_use", 2)
+        mlen = max([len(x.phase()) for x in self.groups])
+        mspc = ' '*23
+        ofile.write(f"character(len={mlen}), allocatable{mspc}:: phases_use(:)",
+                    2)
+        ofile.write(f"integer {' '*34}:: num_vars", 2)
+        ofile.write(f"integer {' '*34}:: ierr", 2)
+        ofile.blank_line()
+        ofile.write(f"{errcode} = 0", 2)
+        ofile.write(f"{errmsg} = ''", 2)
+        ofile.write("if (present(input_vars)) then", 2)
+        ofile.write("input_vars_use = input_vars", 3)
+        ofile.write("else", 2)
+        ofile.write("input_vars_use = .true.", 3)
+        ofile.write("end if", 2)
+        ofile.write("if (present(output_vars)) then", 2)
+        ofile.write("output_vars_use = output_vars", 3)
+        ofile.write("else", 2)
+        ofile.write("output_vars_use = .true.", 3)
+        ofile.write("end if", 2)
+        ofile.write("if (present(phases)) then", 2)
+        ofile.write("allocate(phases_use(size(phases, 1)), stat=ierr)", 3)
+        ofile.write("if (ierr /= 0) then", 3)
+        ofile.write(f"{errcode} = ierr", 4)
+        ofile.write(f"{errmsg} = 'Unable to allocate phases_use'", 4)
+        ofile.write("return", 4)
+        ofile.write("end if", 3)
+        ofile.write("phases_use(:) = phases(:)", 3)
+        ofile.write("else", 2)
+        pnames = [f"\"{x.phase()}{' '*(mlen - len(x.phase()))}\""
+                  for x in self.groups]
+        ofile.write(f"allocate(phases_use({len(pnames)}), stat=ierr)", 3)
+        ofile.write("if (ierr /= 0) then", 3)
+        ofile.write(f"{errcode} = ierr", 4)
+        ofile.write(f"{errmsg} = 'Unable to allocate phases_use'", 4)
+        ofile.write("return", 4)
+        ofile.write("end if", 3)
+        ofile.write(f"phases_use(:) = (/ {', '.join(pnames)} /)", 3)
+        ofile.write("end if", 2)
+        ofile.write("if (present(struct_elements)) then", 2)
+        ofile.write("struct_elements_use = struct_elements", 3)
+        ofile.write("else", 2)
+        ofile.write("struct_elements_use = .true.", 3)
+        ofile.write("end if", 2)
+        ofile.write(f"end subroutine {self.req_vars_subname()}", 1)
+
     def write(self, output_dir, run_env, check_dict, ddt_lib):
         """Create caps for all groups in the suite and for the entire suite
         (calling the group caps one after another)"""
@@ -628,8 +720,9 @@ character(len=16) :: {css_var_name} = '{state}'
             outfile.write(line.format(css_var_name=var_name,
                                       state=var_state), 1)
             for group in self.__groups:
-                outfile.write('public :: {}'.format(group.name), 1)
+                outfile.write(f"public :: {group.name}", 1)
             # end for
+            outfile.write(f"public :: {self.req_vars_subname()}", 1)
             # Declare constituent public interfaces
             const_dict.declare_public_interfaces(outfile, 1)
             # Declare constituent private suite interfaces and data
@@ -715,6 +808,8 @@ character(len=16) :: {css_var_name} = '{state}'
             # end for
             err_vars = self.find_error_variables(any_scope=True,
                                                  clone_as_out=True)
+            # Write the required variables subroutine for this suite
+            self.write_req_vars_sub(outfile, err_vars)
             # Write the constituent properties interface
             const_dict.write_constituent_routines(outfile, 1,
                                                   self.name, err_vars)
