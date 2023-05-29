@@ -630,24 +630,26 @@ character(len=16) :: {css_var_name} = '{state}'
         ofile.write(oline, 2)
         errmsg_var.write_def(ofile, 2, self, extra_space=22)
         errcode_var.write_def(ofile, 2, self, extra_space=22)
-        oline = "logical,          optional,    intent(in) :: input_vars"
+        oline = "logical,          optional,    intent(in) ::  input_vars"
         ofile.write(oline, 2)
-        oline = "logical,          optional,    intent(in) :: output_vars"
+        oline = "logical,          optional,    intent(in) ::  output_vars"
         ofile.write(oline, 2)
-        oline = "character(len=*), optional,    intent(in) :: phases(:)"
+        oline = "character(len=*), optional,    intent(in) ::  phases(:)"
         ofile.write(oline, 2)
-        oline = "logical,          optional,    intent(in) :: struct_elements"
+        oline = "logical,          optional,    intent(in) ::  struct_elements"
         ofile.write(oline, 2)
         ofile.write("! Local variables", 2)
-        ofile.write(f"logical {' '*34}:: input_vars_use", 2)
-        ofile.write(f"logical {' '*34}:: output_vars_use", 2)
-        ofile.write(f"logical {' '*34}:: struct_elements_use", 2)
+        ofile.write(f"logical {' '*35}:: input_vars_use", 2)
+        ofile.write(f"logical {' '*35}:: output_vars_use", 2)
+        ofile.write(f"logical {' '*35}:: struct_elements_use", 2)
         mlen = max([len(x.phase()) for x in self.groups])
-        mspc = ' '*23
+        mspc = ' '*16
         ofile.write(f"character(len={mlen}), allocatable{mspc}:: phases_use(:)",
                     2)
-        ofile.write(f"integer {' '*34}:: num_vars", 2)
-        ofile.write(f"integer {' '*34}:: ierr", 2)
+        ofile.write(f"integer {' '*35}:: num_vars", 2)
+        ofile.write(f"integer {' '*35}:: var_index", 2)
+        ofile.write(f"integer(int_kind) {' '*24}:: var_mask", 2)
+        ofile.write(f"integer {' '*35}:: ierr", 2)
         ofile.blank_line()
         ofile.write(f"{errcode} = 0", 2)
         ofile.write(f"{errmsg} = ''", 2)
@@ -685,6 +687,13 @@ character(len=16) :: {css_var_name} = '{state}'
         ofile.write("else", 2)
         ofile.write("struct_elements_use = .true.", 3)
         ofile.write("end if", 2)
+        ofile.comment("Find the correct variable mask based on phase and type")
+        ofile.write("do var_index = 1, size(phases_use, 1)", 2)
+        ofile.write("if (input_vars_use) then", 3)
+        add flag for phase and input
+        ofile.write("end do", 2)
+        ofile.write("var_mask = 0_int_kind", 2)
+        ofile.write("num_vars = 0", 2)
         ofile.write(f"end subroutine {self.req_vars_subname()}", 1)
 
     def write(self, output_dir, run_env, check_dict, ddt_lib):
@@ -704,7 +713,16 @@ character(len=16) :: {css_var_name} = '{state}'
                            self.module) as outfile:
             # Write module 'use' statements here
             # For proper conversion of binary literals
-            outfile.write("use ISO_FORTRAN_ENV, only: INT32, INT64", 1)
+            bitmax = len(self.__var_type_vals) + 1
+            if bitmax >= 64:
+                raise ParseInternalError("Not enough bits for Suite var types")
+            # end if
+            if bitmax >= 32:
+                int_str = "INT64"
+            else:
+                int_str = "INT32"
+            # end if
+            outfile.write(f"use ISO_FORTRAN_ENV, only: int_kind => {int_str}", 1)
             outfile.write('use {}'.format(KINDS_MODULE), 1)
             # Look for any DDT types
             self.__ddt_library.write_ddt_use_statements(self.values(),
@@ -732,16 +750,7 @@ character(len=16) :: {css_var_name} = '{state}'
                 self[svar].write_def(outfile, 1, self, allocatable=True)
             # end for
             # Declare suite variable variables and parameters
-            bitmax = len(self.__var_type_vals) + 1
-            if bitmax >= 64:
-                raise ParseInternalError("Not enough bits for Suite var types")
-            # end if
-            if bitmax >= 32:
-                int_str = "INT64"
-            else:
-                int_str = "INT32"
-            # end if
-            int_type = f"integer({int_str})"
+            int_type = f"integer(int_kind)"
             bitpos = 1 # Position in value where 1 is least significant
             bitfld = 1 # Value of binary digit at bitpos
             valbits = {} # Remember bitfld of each entry type
@@ -749,7 +758,7 @@ character(len=16) :: {css_var_name} = '{state}'
             # First, the bitpos parameters
             for vtype in self.__var_type_vals:
                 vfld = f"{vtype}{' '*(mspc - len(vtype))}"
-                bitstr = f"int(b'{bitfld:0{bitmax}b}', {int_str})"
+                bitstr = f"int(b'{bitfld:0{bitmax}b}', int_kind)"
                 outfile.write(f"{int_type}, parameter :: {vfld} = {bitstr}", 1)
                 valbits[f"{vtype}"] = bitfld
                 bitpos += 1
@@ -789,7 +798,7 @@ character(len=16) :: {css_var_name} = '{state}'
                 for entry in var:
                     varval += valbits[entry]
                 # end for
-                vlist.append(f"int(b'{varval:0{bitmax}b}', {int_str})")
+                vlist.append(f"int(b'{varval:0{bitmax}b}', int_kind)")
             # end for
             decl += f"(/ {', '.join(vlist)} /)"
             outfile.write(decl, 1)
