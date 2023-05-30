@@ -601,6 +601,8 @@ character(len=16) :: {css_var_name} = '{state}'
 
     def write_req_vars_sub(self, ofile, errvars):
         """Write the required variables subroutine"""
+        bitfield_funcname = "find_bitfld_val"
+        varmatch_funcname = "var_match"
         # Find error variables (only support old style for now)
         errmsg_var = None
         errcode_var= None
@@ -649,6 +651,8 @@ character(len=16) :: {css_var_name} = '{state}'
         ofile.write(f"integer {' '*35}:: num_vars", 2)
         ofile.write(f"integer {' '*35}:: var_index", 2)
         ofile.write(f"integer(int_kind) {' '*24}:: var_mask", 2)
+        ofile.write(f"integer(int_kind) {' '*24}:: ptype_val", 2)
+        ofile.write(f"integer {' '*35}:: out_index", 2)
         ofile.write(f"integer {' '*35}:: ierr", 2)
         ofile.blank_line()
         ofile.write(f"{errcode} = 0", 2)
@@ -687,14 +691,90 @@ character(len=16) :: {css_var_name} = '{state}'
         ofile.write("else", 2)
         ofile.write("struct_elements_use = .true.", 3)
         ofile.write("end if", 2)
-        ofile.comment("Find the correct variable mask based on phase and type")
+        ofile.comment("Find the correct variable mask based on phase and type",
+                      2)
+        ofile.write("var_mask = 0_int_kind", 2)
         ofile.write("do var_index = 1, size(phases_use, 1)", 2)
         ofile.write("if (input_vars_use) then", 3)
-        add flag for phase and input
+        args = f"(phases_use(var_index), 'input')"
+        ofile.write(f"ptype_val = {bitfield_funcname}{args}", 4)
+        ofile.write("if (ptype_val == 0_int_kind) then", 4)
+        ofile.write(f"{errcode} = 1", 5)
+        emsg = "'No bitval for input phase = '//trim(phases_use(var_index))"
+        ofile.write(f"{errmsg} = {emsg}", 5)
+        ofile.write("return", 5)
+        ofile.write("end if", 4)
+        ofile.write("var_mask = var_mask + ptype_val", 4)
+        ofile.write("else if (output_vars_use) then", 3)
+        args = f"(phases_use(var_index), 'output')"
+        ofile.write(f"ptype_val = {bitfield_funcname}{args}", 4)
+        ofile.write("if (ptype_val == 0_int_kind) then", 4)
+        ofile.write(f"{errcode} = 1", 5)
+        emsg = "'No bitval for output phase = '//trim(phases_use(var_index))"
+        ofile.write(f"{errmsg} = {emsg}", 5)
+        ofile.write("return", 5)
+        ofile.write("end if", 4)
+        ofile.write("var_mask = var_mask + ptype_val", 4)
+        ofile.write("end if", 3)
         ofile.write("end do", 2)
-        ofile.write("var_mask = 0_int_kind", 2)
+        ofile.comment("Find the number of variables that match the pattern", 2)
         ofile.write("num_vars = 0", 2)
+        ofile.write("do var_index = 1, size(suite_bitvals, 1)", 2)
+        ofile.write(f"if ({varmatch_funcname}(suite_bitvals(var_index))) then",
+                    3)
+        ofile.write("num_vars = num_vars + 1", 4)
+        ofile.write("end if", 3)
+        ofile.write("end do", 2)
+        ofile.write("allocate(variable_list(num_vars), stat=ierr)", 2)
+        ofile.write("if (ierr /= 0) then", 2)
+        ofile.write(f"{errcode} = ierr", 3)
+        ofile.write(f"{errmsg} = 'Unable to allocate variable_list'", 3)
+        ofile.write("return", 3)
+        ofile.write("end if", 2)
+        out_index = 0
+        ofile.write("do var_index = 1, size(suite_allvars, 1)", 2)
+        ofile.write(f"if ({varmatch_funcname}(suite_bitvals(var_index))) then",
+                    3)
+        ofile.write("out_index = out_index + 1", 4)
+        ofile.write("variable_list(out_index) = suite_allvars(var_index)", 4)
+        ofile.write("end if", 3)
+        ofile.write("end do", 2)
+        ofile.blank_line()
+        ofile.write("contains", 1)
+        ofile.blank_line()
+        ofile.comment("Find the bit value for this phase and inout type", 2)
+        int_type = "integer(int_kind)"
+        ofile.write(f"{int_type} function {bitfield_funcname}(phase, iotype)", 2)
+        ofile.write("character(len=*), intent(in)  :: phase", 3)
+        ofile.write("character(len=*), intent(in)  :: iotype", 3)
+        ofile.write("character(len=:), allocatable :: ptype_name", 3)
+        ofile.write("ptype_name = trim(phase)//'_'//trim(iotype)//'_bitpos'", 3)
+        ofile.write("select case(trim(ptype_name))", 3)
+        for vtype in self.__var_type_vals:
+            if vtype == self.__struct_element:
+                continue
+            # end if
+            ofile.write(f"case ('{vtype}')", 3)
+            ofile.write(f"{bitfield_funcname} = {vtype}", 4)
+        # end for
+        ofile.write("case default", 3)
+        ofile.comment("Error, return 0: Caller must trap", 4)
+        ofile.write(f"{bitfield_funcname} = 0", 4)
+        ofile.write("end select", 3)
+        ofile.write(f"end function {bitfield_funcname}", 2)
+        ofile.blank_line()
+        ofile.write(f"logical function {varmatch_funcname}(var_bfield)", 2)
+        ofile.write("integer(int_kind), intent(in)  :: var_bfield", 3)
+        ofile.write(f"{varmatch_funcname} = .false.", 3)
+        etest = "if (struct_elements_use .or. "
+        etest += "(iand(struct_element, var_bfield) == 0_int_kind)) then"
+        ofile.write(etest, 3)
+        ofile.write(f"{varmatch_funcname} = iand(var_bfield, var_mask) /= 0", 4)
+        ofile.write("end if", 3)
+        ofile.write(f"end function {varmatch_funcname}", 2)
+        ofile.blank_line()
         ofile.write(f"end subroutine {self.req_vars_subname()}", 1)
+        ofile.blank_line()
 
     def write(self, output_dir, run_env, check_dict, ddt_lib):
         """Create caps for all groups in the suite and for the entire suite
@@ -722,7 +802,8 @@ character(len=16) :: {css_var_name} = '{state}'
             else:
                 int_str = "INT32"
             # end if
-            outfile.write(f"use ISO_FORTRAN_ENV, only: int_kind => {int_str}", 1)
+            outfile.write(f"use ISO_FORTRAN_ENV, only: int_kind => {int_str}",
+                          1)
             outfile.write('use {}'.format(KINDS_MODULE), 1)
             # Look for any DDT types
             self.__ddt_library.write_ddt_use_statements(self.values(),
@@ -755,15 +836,22 @@ character(len=16) :: {css_var_name} = '{state}'
             bitfld = 1 # Value of binary digit at bitpos
             valbits = {} # Remember bitfld of each entry type
             mspc = max([len(x) for x in self.__var_type_vals])
+            vtype_names = []
             # First, the bitpos parameters
             for vtype in self.__var_type_vals:
                 vfld = f"{vtype}{' '*(mspc - len(vtype))}"
                 bitstr = f"int(b'{bitfld:0{bitmax}b}', int_kind)"
                 outfile.write(f"{int_type}, parameter :: {vfld} = {bitstr}", 1)
                 valbits[f"{vtype}"] = bitfld
+                vtype_names.append(f'"{vfld}"')
                 bitpos += 1
                 bitfld *= 2
             # end for
+            # Now some strings so we can find the right pos
+            oline = f"character(len={mspc}), private :: vartype_names"
+            oline += f"({len(valbits)}) = (/ {', '.join(vtype_names)} /)"
+            outfile.write(oline, 1)
+            # Collect all the Suite variables in one list
             allvars = set()
             allvars.update(self.__regular_vars.keys())
             allvars.update(self.__parent_vars.keys())
