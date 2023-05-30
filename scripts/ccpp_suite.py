@@ -627,34 +627,36 @@ character(len=16) :: {css_var_name} = '{state}'
         ofile.blank_line()
         ofile.write(f"subroutine {self.req_vars_subname()}({inargs})", 1)
         ofile.write("! Dummy arguments", 2)
-        oline = "character(len=*), allocatable, intent(out) :: variable_list(:)"
+        vtype = "character(len=*)"
+        oline = f"{vtype}, allocatable, intent(out)   :: variable_list(:)"
         ofile.write(oline, 2)
         errmsg_var.write_def(ofile, 2, self,
-                             extra_space=22, dummy=True, add_intent="out")
+                             extra_space=11, dummy=True, add_intent="out")
         errcode_var.write_def(ofile, 2, self,
-                              extra_space=22, dummy=True, add_intent="out")
-        oline = "logical,          optional,    intent(in) :: input_vars"
+                              extra_space=11, dummy=True, add_intent="out")
+        oline = "logical,          optional,    intent(in)    :: input_vars"
         ofile.write(oline, 2)
-        oline = "logical,          optional,    intent(in) :: output_vars"
+        oline = "logical,          optional,    intent(in)    :: output_vars"
         ofile.write(oline, 2)
-        oline = "character(len=*), optional,    intent(in) :: phases(:)"
+        oline = "character(len=*), optional,    intent(in)    :: phases(:)"
         ofile.write(oline, 2)
-        oline = "logical,          optional,    intent(in) :: struct_elements"
+        oline = f"logical,{' '*9} optional,    intent(in)    :: struct_elements"
         ofile.write(oline, 2)
         ofile.write("! Local variables", 2)
-        ofile.write(f"logical {' '*34}:: input_vars_use", 2)
-        ofile.write(f"logical {' '*34}:: output_vars_use", 2)
-        ofile.write(f"logical {' '*34}:: struct_elements_use", 2)
+        spc = 37
+        ofile.write(f"logical {' '*spc}:: input_vars_use", 2)
+        ofile.write(f"logical {' '*spc}:: output_vars_use", 2)
+        ofile.write(f"logical {' '*spc}:: struct_elements_use", 2)
         mlen = max([len(x.phase()) for x in self.groups])
-        mspc = ' '*12
+        mspc = ' '*15
         ofile.write(f"character(len={mlen}), allocatable{mspc}:: phases_use(:)",
                     2)
-        ofile.write(f"integer {' '*34}:: num_vars", 2)
-        ofile.write(f"integer {' '*34}:: var_index", 2)
-        ofile.write(f"integer(int_kind) {' '*24}:: var_mask", 2)
-        ofile.write(f"integer(int_kind) {' '*24}:: ptype_val", 2)
-        ofile.write(f"integer {' '*34}:: out_index", 2)
-        ofile.write(f"integer {' '*34}:: ierr", 2)
+        ofile.write(f"integer {' '*spc}:: num_vars", 2)
+        ofile.write(f"integer {' '*spc}:: var_index", 2)
+        ofile.write(f"integer(int_kind) {' '*(spc - 10)}:: var_mask", 2)
+        ofile.write(f"integer(int_kind) {' '*(spc - 10)}:: ptype_val", 2)
+        ofile.write(f"integer {' '*spc}:: out_index", 2)
+        ofile.write(f"integer {' '*spc}:: ierr", 2)
         ofile.blank_line()
         ofile.write(f"{errcode} = 0", 2)
         ofile.write(f"{errmsg} = ''", 2)
@@ -706,7 +708,8 @@ character(len=16) :: {css_var_name} = '{state}'
         ofile.write("return", 5)
         ofile.write("end if", 4)
         ofile.write("var_mask = var_mask + ptype_val", 4)
-        ofile.write("else if (output_vars_use) then", 3)
+        ofile.write("end if", 3)
+        ofile.write("if (output_vars_use) then", 3)
         args = f"(phases_use(var_index), 'output')"
         ofile.write(f"ptype_val = {bitfield_funcname}{args}", 4)
         ofile.write("if (ptype_val == 0_int_kind) then", 4)
@@ -732,7 +735,7 @@ character(len=16) :: {css_var_name} = '{state}'
         ofile.write(f"{errmsg} = 'Unable to allocate variable_list'", 3)
         ofile.write("return", 3)
         ofile.write("end if", 2)
-        out_index = 0
+        ofile.write("out_index = 0", 2)
         ofile.write("do var_index = 1, size(suite_allvars, 1)", 2)
         ofile.write(f"if ({varmatch_funcname}(suite_bitvals(var_index))) then",
                     3)
@@ -1142,9 +1145,9 @@ class API(VarDictionary):
         ofile.write(oline, 2)
         oline = "character(len=*), allocatable, intent(out) :: variable_list(:)"
         ofile.write(oline, 2)
-        self._errmsg_var.write_def(ofile, 2, self, extra_space=22,
+        self._errmsg_var.write_def(ofile, 2, self, extra_space=11,
                                    dummy=True, add_intent="out")
-        self._errcode_var.write_def(ofile, 2, self, extra_space=22,
+        self._errcode_var.write_def(ofile, 2, self, extra_space=11,
                                     dummy=True, add_intent="out")
         oline = "logical,          optional,    intent(in) :: input_vars"
         ofile.write(oline, 2)
