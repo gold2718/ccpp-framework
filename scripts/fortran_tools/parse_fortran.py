@@ -699,6 +699,16 @@ def parse_fortran_var_decl(line, source, run_env):
     '(8)'
     >>> parse_fortran_var_decl("real(kind_phys), intent(out) :: foo(8)", ParseSource('foo.F90', 'scheme', ParseContext()), _DUMMY_RUN_ENV)[0].get_dimensions()
     ['8']
+    >>> parse_fortran_var_decl("real(kind_phys), intent(out) :: foo(8:)", ParseSource('foo.F90', 'scheme', ParseContext()), _DUMMY_RUN_ENV)[0].get_dimensions()
+    ['8:']
+    >>> parse_fortran_var_decl("real(kind_phys), intent(out) :: foo(bar:)", ParseSource('foo.F90', 'scheme', ParseContext()), _DUMMY_RUN_ENV)[0].get_dimensions()
+    ['bar:']
+    >>> parse_fortran_var_decl("real(kind_phys), intent(out) :: foo(bar:baz)", ParseSource('foo.F90', 'scheme', ParseContext()), _DUMMY_RUN_ENV)[0].get_dimensions()
+    ['bar:baz']
+    >>> parse_fortran_var_decl("real(kind_phys), intent(out) :: foo(:,bar:baz)", ParseSource('foo.F90', 'scheme', ParseContext()), _DUMMY_RUN_ENV)[0].get_dimensions()
+    [':', 'bar:baz']
+    >>> parse_fortran_var_decl("real(kind_phys), intent(out) :: foo(:,-bar+1:baz)", ParseSource('foo.F90', 'scheme', ParseContext()), _DUMMY_RUN_ENV)[0].get_dimensions()
+    [':', 'bar:baz']
     >>> parse_fortran_var_decl("character(len=*), intent(out) :: errmsg", ParseSource('foo.F90', 'module', ParseContext()), _DUMMY_RUN_ENV)[0].get_prop_value('local_name') #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ParseSyntaxError: Invalid variable declaration, character(len=*), intent(out) :: errmsg, intent not allowed in module variable, in <standard input>

@@ -244,6 +244,11 @@ def scan_free_line(line, in_continue, in_single_char, in_double_char, context):
     (-1, -1, False, False, -1)
     >>> scan_free_line('character(len=*), parameter :: foo = "This is continue line& ', False, False, False, ParseContext())
     (-1, 59, False, True, -1)
+    >>> scan_free_line('  & ! line continued', False, False, False, ParseContext()) #doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ParseSyntaxError: Cannot begin line with continue character (&), not on continued line
+    >>> scan_free_line('  & ! line continued"', True, False, False, ParseContext())
+    (2, -1, False, False, 4)
     >>> scan_free_line('  & line continued"', True, False, True, ParseContext())
     (2, -1, False, False, -1)
     >>> scan_free_line('  & line continued"', True, True, False, ParseContext()) #doctest: +IGNORE_EXCEPTION_DETAIL
