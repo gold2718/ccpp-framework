@@ -48,7 +48,7 @@ docleanup() {
     echo "WARNING: Cannot clean ${build_dir}"
   else
     cd ${currdir}
-    rm -rf ${build_dir}
+#    rm -rf ${build_dir}
   fi
 }
 
@@ -127,8 +127,9 @@ ccpp_files="${utility_files}"
 ccpp_files="${ccpp_files},${build_dir}/ccpp/test_host_ccpp_cap.F90"
 ccpp_files="${ccpp_files},${build_dir}/ccpp/ccpp_var_compatibility_suite_cap.F90"
 #process_list=""
-module_list="effr_calc,effr_diag,effr_post,mod_effr_pre,rad_lw,rad_sw"
+module_list="effr_calc,effr_diag,effr_post,mod_effr_pre,rad_lw,rad_sw,reset_physics"
 dependencies="module_rad_ddt"
+dependencies="${dependencies},test_host_data"
 suite_list="var_compatibility_suite"
 required_vars_var_compatibility="ccpp_error_code,ccpp_error_message"
 required_vars_var_compatibility="${required_vars_var_compatibility},cloud_graupel_number_concentration"
@@ -145,6 +146,7 @@ required_vars_var_compatibility="${required_vars_var_compatibility},horizontal_l
 required_vars_var_compatibility="${required_vars_var_compatibility},horizontal_loop_end"
 required_vars_var_compatibility="${required_vars_var_compatibility},longwave_radiation_fluxes"
 required_vars_var_compatibility="${required_vars_var_compatibility},num_subcycles_for_effr"
+required_vars_var_compatibility="${required_vars_var_compatibility},physics_state_derived_type"
 required_vars_var_compatibility="${required_vars_var_compatibility},scalar_variable_for_testing"
 required_vars_var_compatibility="${required_vars_var_compatibility},scalar_variable_for_testing_a"
 required_vars_var_compatibility="${required_vars_var_compatibility},scalar_variable_for_testing_b"
@@ -165,6 +167,7 @@ input_vars_var_compatibility="${input_vars_var_compatibility},horizontal_loop_be
 input_vars_var_compatibility="${input_vars_var_compatibility},horizontal_loop_end"
 input_vars_var_compatibility="${input_vars_var_compatibility},longwave_radiation_fluxes"
 input_vars_var_compatibility="${input_vars_var_compatibility},num_subcycles_for_effr"
+input_vars_var_compatibility="${input_vars_var_compatibility},physics_state_derived_type"
 input_vars_var_compatibility="${input_vars_var_compatibility},scalar_variable_for_testing"
 input_vars_var_compatibility="${input_vars_var_compatibility},scalar_variable_for_testing_a"
 input_vars_var_compatibility="${input_vars_var_compatibility},scalar_variable_for_testing_b"
@@ -179,6 +182,7 @@ output_vars_var_compatibility="${output_vars_var_compatibility},effective_radius
 output_vars_var_compatibility="${output_vars_var_compatibility},effective_radius_of_stratiform_cloud_rain_particle"
 output_vars_var_compatibility="${output_vars_var_compatibility},effective_radius_of_stratiform_cloud_snow_particle"
 output_vars_var_compatibility="${output_vars_var_compatibility},longwave_radiation_fluxes"
+output_vars_var_compatibility="${output_vars_var_compatibility},physics_state_derived_type"
 output_vars_var_compatibility="${output_vars_var_compatibility},scalar_variable_for_testing"
 output_vars_var_compatibility="${output_vars_var_compatibility},scheme_order_in_suite"
 output_vars_var_compatibility="${output_vars_var_compatibility},shortwave_radiation_fluxes"

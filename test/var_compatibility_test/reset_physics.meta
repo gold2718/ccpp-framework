@@ -1,0 +1,30 @@
+[ccpp-table-properties]
+  name = reset_physics
+  type = scheme
+  dependencies = test_host_data.F90
+
+########################################################################
+[ccpp-arg-table]
+  name = reset_physics_run
+  type = scheme
+[state]
+  standard_name = physics_state_derived_type
+  long_name = Physics State DDT
+  type = physics_state
+  dimensions = ()
+  intent = inout
+[errmsg]
+  standard_name = ccpp_error_message
+  long_name = Error message for error handling in CCPP
+  units = none
+  dimensions = ()
+  type = character
+  kind = len=512
+  intent = out
+[errflg]
+  standard_name = ccpp_error_code
+  long_name = Error flag for error handling in CCPP
+  units = 1
+  dimensions = ()
+  type = integer
+  intent = out

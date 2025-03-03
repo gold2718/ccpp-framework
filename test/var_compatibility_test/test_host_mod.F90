@@ -18,6 +18,7 @@ module test_host_mod
 
    public :: init_data
    public :: compare_data
+   public :: phys_state
 
 contains
 

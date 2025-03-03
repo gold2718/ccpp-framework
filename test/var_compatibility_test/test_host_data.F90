@@ -22,10 +22,11 @@ module test_host_data
      integer :: scalar_varC
      integer :: scheme_order
      integer :: num_subcycles
-
+   contains
+     procedure :: reset => physics_reset
   end type physics_state
 
-  public allocate_physics_state
+  public allocate_physics_state, physics_state
 
 contains
 
@@ -90,4 +91,13 @@ contains
 
   end subroutine allocate_physics_state
 
+  subroutine physics_reset(state)
+    class(physics_state), intent(inout) :: state
+
+    state%fluxLW%sfc_up_lw   = 0.
+    state%fluxLW%sfc_down_lw = 0.
+    state%fluxSW%sfc_up_sw   = 0.
+    state%fluxSW%sfc_down_sw = 0.
+
+  end subroutine physics_reset
 end module test_host_data

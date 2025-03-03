@@ -2,6 +2,7 @@
 
 <suite name="var_compatibility_suite" version="1.0">
   <group name="radiation">
+    <scheme>reset_physics</scheme>
     <subcycle loop="num_subcycles_for_effr">
       <scheme>effr_pre</scheme>
       <subcycle loop="2">

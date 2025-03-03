@@ -1,7 +1,9 @@
 module_rad_ddt.meta
+test_host_data.meta
 effr_calc.meta
 effr_diag.meta
 effr_pre.meta
 effr_post.meta
 rad_lw.meta
 rad_sw.meta
+reset_physics.meta
