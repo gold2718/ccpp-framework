@@ -1365,18 +1365,30 @@ class Scheme(SuiteObject):
                 if not ':' in dim:
                     dim_var = self.find_variable(standard_name=dim)
                     if not dim_var:
-                        raise Exception(f"No dimension with standard name '{dim}'")
-                    self.update_group_call_list_variable(dim_var)
+                        if not dim.isnumeric():
+                            raise Exception(f"No dimension with standard name '{dim}'")
+                        # end if
+                    else:
+                        self.update_group_call_list_variable(dim_var)
+                    # end if
                 else:
                     (ldim, udim) = dim.split(":")
                     ldim_var = self.find_variable(standard_name=ldim)
                     if not ldim_var:
-                        raise Exception(f"No dimension with standard name '{ldim}'")
-                    self.update_group_call_list_variable(ldim_var)
+                        if not ldim.isnumeric():
+                            raise Exception(f"No dimension with standard name '{ldim}'")
+                        # end if
+                    else:
+                        self.update_group_call_list_variable(ldim_var)
+                    # end if
                     udim_var = self.find_variable(standard_name=udim)
                     if not udim_var:
-                        raise Exception(f"No dimension with standard name '{udim}'")
-                    self.update_group_call_list_variable(udim_var)
+                        if not udim.isnumeric():
+                            raise Exception(f"No dimension with standard name '{udim}'")
+                        # end if
+                    else:
+                        self.update_group_call_list_variable(udim_var)
+                    # end if
 
         # Add the variable to the list of variables to check. Record which internal_var to use.
         self.__var_debug_checks.append([var, internal_var])
@@ -1537,18 +1549,24 @@ class Scheme(SuiteObject):
                         for var_dict in cldicts:
                             dvar = var_dict.find_variable(standard_name=ldim, any_scope=False)
                             if dvar is not None:
+                                ldim_lname = dvar.get_prop_value('local_name')
                                 break
                         if not dvar:
-                            raise Exception(f"No variable with standard name '{ldim}' in cldicts")
-                        ldim_lname = dvar.get_prop_value('local_name')
+                            if ldim.isnumeric():
+                                ldim_name = ldim
+                            else:
+                                raise Exception(f"No variable with standard name '{ldim}' in cldicts")
                         # Get dimension for upper bound
                         for var_dict in cldicts:
                             dvar = var_dict.find_variable(standard_name=udim, any_scope=False)
                             if dvar is not None:
+                                udim_lname = dvar.get_prop_value('local_name')
                                 break
                         if not dvar:
-                            raise Exception(f"No variable with standard name '{udim}' in cldicts")
-                        udim_lname = dvar.get_prop_value('local_name')
+                            if udim.isnumeric():
+                                udim_lname = udim
+                            else:
+                                raise Exception(f"No variable with standard name '{udim}' in cldicts")
                         # Assemble dimensions and bounds for size checking
                         dim_length = f'{udim_lname}-{ldim_lname}+1'
                         dim_string = ":"
