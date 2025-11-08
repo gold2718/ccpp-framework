@@ -81,7 +81,7 @@ class SDFParseTestCase(unittest.TestCase):
         Return None if items match, otherwise, return an error string"""
         res = None
         if txt1 and txt2:
-            if txt1 != txt2:
+            if txt1.strip() != txt2.strip():
                 res = f"{name} {typ}, '{txt1}', does not match {typ}, '{txt2}'"
             # end if
         elif txt1:
@@ -172,7 +172,8 @@ class SDFParseTestCase(unittest.TestCase):
             schema_version = find_schema_version(xml_root)
             self.assertEqual(schema_version[0], 1)
             self.assertEqual(schema_version[1], 0)
-            res = validate_xml_file(source, 'suite', schema_version, logger)
+            res = validate_xml_file(source, 'suite', schema_version, logger,
+                                    error_on_noxmllint=True)
             self.assertTrue(res)
             write_xml_file(xml_root, compare, logger)
             amsg = f"{compare} does not exist"
@@ -184,8 +185,54 @@ class SDFParseTestCase(unittest.TestCase):
             self.assertFalse(diffs, msg=amsg)
         # end for
 
+    def test_good_v2_sdf(self):
+        """Test that the parser recognizes a V1 SDF and parses it correctly
+        """
+        num_tests = 1
+        header = "Test of parsing of good V2 SDF"
+        for test_num in range(num_tests):
+            # Setup
+            testname = f"suite_good_v2_test{test_num+1:{0}{2}}"
+            source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+            source_exp = os.path.join(_SAMPLE_FILES_DIR, f"{testname}_exp.xml")
+            compare = os.path.join(_TMP_DIR, f"{testname}_out.xml")
+            logger = self.get_logger()
+            # Exercise
+            _, xml_root = read_xml_file(source, logger)
+            schema_version = find_schema_version(xml_root)
+            self.assertEqual(schema_version[0], 2)
+            self.assertEqual(schema_version[1], 0)
+            expand_nested_suites(xml_root, _SAMPLE_FILES_DIR, logger=logger)
+            res = validate_xml_file(source, 'suite', schema_version, logger,
+                                    error_on_noxmllint=True)
+            self.assertTrue(res)
+            write_xml_file(xml_root, compare, logger)
+            amsg = f"{compare} does not exist"
+            self.assertTrue(os.path.exists(compare), msg=amsg)
+            _, xml_root = read_xml_file(source_exp, logger)
+            _, compare_root = read_xml_file(compare, logger)
+            diffs = self.xml_diff(xml_root, compare_root)
+            lsep = '\n'
+            amsg = f"{source_exp} does not match {compare}\n{lsep.join(diffs)}"
+            self.assertFalse(diffs, msg=amsg)
+        # end for
+
+    def test_bad_v2_sdf(self):
+        """Test that verification system recognizes a misplaced version attribute"""
+        header = "Test trapping of version attribute on a v2 suite tag"
+        # Setup
+        testname = f"suite_bad_v2_on_suite"
+        source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+        logger = self.get_logger()
+        # Exercise
+        _, xml_root = read_xml_file(source, logger)
+        schema_version = find_schema_version(xml_root)
+        res = validate_xml_file(source, 'suite', schema_version, logger,
+                                error_on_noxmllint=True)
+        self.assertFalse(res, msg="version attribute should not be accepted on a v2 suite tag")
+
     def test_bad_schema_version(self):
-        """Test that verification system recognizes a bad version information"""
+        """Test that verification system recognizes a bad version entry"""
         num_tests = 4
         header = "Test trapping of invalid SDF version"
         exc_strings = ["Format must be <integer>.<integer>",

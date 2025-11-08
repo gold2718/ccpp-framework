@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<suite name="ver_test_suite" version="2.0">
+  <group name="group1">
+    <suite>suite_good_v1_test01</suite>
+  </group>
+</suite>
