@@ -128,7 +128,7 @@ def find_schema_version(root):
     versplit = version.split('.')
     try:
         if len(versplit) != 2:
-            raise CCPPError('oops')
+            raise CCPPError('')
         # end if (no else needed)
         try:
             verbits = [int(x) for x in versplit]
@@ -136,19 +136,19 @@ def find_schema_version(root):
             raise CCPPError(verr) from verr
         # end try
         if verbits[0] < 1:
-            raise CCPPError('Major version must be at least 1')
+            raise CCPPError("Major version must be at least 1")
         # end if
         if verbits[1] < 0:
-            raise CCPPError('Minor version must be non-negative')
+            raise CCPPError("Minor version must be non-negative")
         # end if
     except CCPPError as verr:
-        errstr = """Illegal version string, '{}'
+        errstr = f"""Illegal version string, '{version}'
         Format must be <integer>.<integer>"""
         ve_str = str(verr)
         if ve_str:
             errstr = ve_str + '\n' + errstr
         # end if
-        raise CCPPError(errstr.format(version)) from verr
+        raise CCPPError(errstr) from verr
     # end try
     return verbits
 
@@ -333,7 +333,7 @@ def replace_nested_suite(element, nested_suite, root, default_path, logger):
     or an external file (if specified), deep copies its children, and replaces the
     <nested_suite> element in the parent `element` with the copied contents.
 
-    If the nested suite being inserted contains its own <nested_suite> elements and 
+    If the nested suite being inserted contains its own <nested_suite> elements and
     within the same  external file, the `file` attribute is propagated into those.
 
     Parameters:
@@ -432,7 +432,7 @@ def replace_nested_suite(element, nested_suite, root, default_path, logger):
         file = os.path.join(default_path, file)
     referenced_suite = load_suite_by_name(suite_name, group_name, root,
                                           file=file, logger=logger)
-    imported_content = [ET.fromstring(ET.tostring(child)) 
+    imported_content = [ET.fromstring(ET.tostring(child))
                         for child in referenced_suite]
     # Swap nested suite with imported content
     for item in imported_content:
@@ -609,7 +609,7 @@ def write_xml_file(root, file_path, logger=None):
 
     # Convert ElementTree to a byte string
     byte_string = ET.tostring(root, 'us-ascii')
-    
+
     # Parse string using minidom for pretty printing
     reparsed = xml.dom.minidom.parseString(byte_string)
 

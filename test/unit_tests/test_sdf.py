@@ -161,9 +161,9 @@ class SDFParseTestCase(unittest.TestCase):
         """
         num_tests = 2
         header = "Test of parsing of good V1 SDF"
-        for test_num in range(1,num_tests):
+        for test_num in range(num_tests):
             # Setup
-            testname = f"suite_good_v1_test{test_num:{0}{2}}"
+            testname = f"suite_good_v1_test{test_num+1:{0}{2}}"
             source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
             compare = os.path.join(_TMP_DIR, f"{testname}_out.xml")
             logger = self.get_logger()
@@ -182,17 +182,29 @@ class SDFParseTestCase(unittest.TestCase):
             lsep = '\n'
             amsg = f"{source} does not match {compare}\n{lsep.join(diffs)}"
             self.assertFalse(diffs, msg=amsg)
+        # end for
 
-#def test_bad_schema_version
+    def test_bad_schema_version(self):
+        """Test that verification system recognizes a bad version information"""
+        num_tests = 4
+        header = "Test trapping of invalid SDF version"
+        exc_strings = ["Format must be <integer>.<integer>",
+                       "Format must be <integer>.<integer>",
+                       "Major version must be at least 1",
+                       "Minor version must be non-negative"]
+        for test_num in range(num_tests):
+            # Setup
+            testname = f"suite_bad_version{test_num+1:{0}{2}}"
+            source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+            logger = self.get_logger()
+            # Exercise
+            with self.assertRaises(Exception) as context:
+                _, xml_root = read_xml_file(source, logger)
+                schema_version = find_schema_version(xml_root)
+            # end with
+            # Check exception for expected error messages
+            exp_str = str(context.exception)
+            self.assertTrue(exc_strings[test_num] in exp_str,
+                            msg=f"Bad exception in test {test_num + 1}, '{exp_str}'")
+
 #def test_missing_schema_version
-
-
-
-#        with self.assertRaises(Exception) as context:
-#            # Parse the file
-#            _ = parse_fortran_file(source, self._run_env)
-#        # end if
-#
-#        # Check exception for expected error messages
-#        self.assertTrue("bad_arr1: ';' is not a valid Fortran identifier"
-#                        in str(context.exception))
