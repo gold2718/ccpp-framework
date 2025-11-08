@@ -206,5 +206,20 @@ class SDFParseTestCase(unittest.TestCase):
             exp_str = str(context.exception)
             self.assertTrue(exc_strings[test_num] in exp_str,
                             msg=f"Bad exception in test {test_num + 1}, '{exp_str}'")
+        # end for
 
-#def test_missing_schema_version
+    def test_missing_schema_version(self):
+        """Test that verification system recognizes a missing version num"""
+        header = "Test trapping of missing SDF version"
+        # Setup
+        testname = f"suite_missing_version"
+        source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+        logger = self.get_logger()
+        # Exercise
+        with self.assertRaises(Exception) as context:
+            _, xml_root = read_xml_file(source, logger)
+            schema_version = find_schema_version(xml_root)
+        # end with
+        # Check exception for expected error messages
+        self.assertTrue("version attribute required" in str(context.exception),
+                        msg=f"Bad exception for missing suite version")
