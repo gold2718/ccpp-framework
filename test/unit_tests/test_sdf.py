@@ -231,6 +231,20 @@ class SDFParseTestCase(unittest.TestCase):
                                 error_on_noxmllint=True)
         self.assertFalse(res, msg="version attribute should not be accepted on a v2 suite tag")
 
+    def test_bad_v2_suite_tag_sdf(self):
+        """Test that verification system recognizes a misplaced suite tag"""
+        header = "Test trapping of version attribute on a v2 suite tag"
+        # Setup
+        testname = f"suite_bad_v2_suite_tag"
+        source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+        logger = self.get_logger()
+        # Exercise
+        _, xml_root = read_xml_file(source, logger)
+        schema_version = find_schema_version(xml_root)
+        res = validate_xml_file(source, 'suite', schema_version, logger,
+                                error_on_noxmllint=True)
+        self.assertFalse(res, msg="version attribute should not be accepted on a v2 suite tag")
+
     def test_bad_schema_version(self):
         """Test that verification system recognizes a bad version entry"""
         num_tests = 4
