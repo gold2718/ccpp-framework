@@ -107,9 +107,13 @@ class SDFParseTestCase(unittest.TestCase):
         else:
             # Compare the attributes
             for name, value in xt1.attrib.items():
-                xt2v = xt2.attrib.get(name)
-                if xt2v != value:
-                    diffs.append(f"Attributes for {name} do not match: {str(value)} != {str(xt2v)}")
+                if name not in xt2.attrib:
+                    diffs.append(f"xt1 attribute, {name}, is missing in xt2")
+                else:
+                    xt2v = xt2.attrib.get(name)
+                    if xt2v != value:
+                        diffs.append(f"Attributes for {name} do not match: {str(value)} != {str(xt2v)}")
+                    # end if
                 # end if
             # end for
             for name in xt2.attrib.keys():
@@ -130,7 +134,7 @@ class SDFParseTestCase(unittest.TestCase):
             if len(xt1) != len(xt2):
                 diffs.append(f"Number of children length differs, {len(xt1)} != {len(xt2)}")
             else:
-                for child1, child2 in zip(xt2, xt2):
+                for child1, child2 in zip(xt1, xt2):
                     kid_diffs = cls.xml_diff(child1, child2)
                     if kid_diffs:
                         diffs.extend(kid_diffs)
@@ -140,21 +144,39 @@ class SDFParseTestCase(unittest.TestCase):
         # end if
         return diffs
 
-    @classmethod
-    def text_compare(cls, t1, t2):
-        """
-        Compare two text strings
-        :param t1: text one
-        :param t2: text two
-        :return:
-            True if a match
-        """
-        if not t1 and not t2:
-            return True
-        if t1 == '*' or t2 == '*':
-            return True
-        return (t1 or '').strip() == (t2 or '').strip()
-
+    def test_xml_diff(self):
+        """Test that xml_diff catches xml differences"""
+        root1 = ET.fromstring("<tag1>item</tag1>")
+        root2 = ET.fromstring("<taga>item</taga>")
+        diffs = self.xml_diff(root1, root2)
+        self.assertTrue(diffs)
+        self.assertEqual(len(diffs), 1)
+        self.assertTrue("Tags do not match" in diffs[0],
+                        msg="tag1 should not match taga")
+        root1 = ET.fromstring("<tag1>item1</tag1>")
+        root2 = ET.fromstring("<tag1>item2</tag1>")
+        diffs = self.xml_diff(root1, root2)
+        self.assertTrue(diffs)
+        self.assertEqual(len(diffs), 1)
+        self.assertTrue("does not match" in diffs[0],
+                        msg="item1 should not match item2")
+        root1 = ET.fromstring('<tag1 attrib1="hi" attrib2="hi">item1</tag1>')
+        root2 = ET.fromstring('<tag1 attrib1="mom" attrib3="low">item1</tag1>')
+        diffs = self.xml_diff(root1, root2)
+        self.assertTrue(diffs)
+        self.assertEqual(len(diffs), 3)
+        self.assertTrue("Attributes for" in diffs[0] and "do not match" in diffs[0],
+                        msg="attrib1 values should not match")
+        self.assertTrue("xt1 attribute, attrib2, is missing in xt2" in diffs[1],
+                        msg=f"attrib2 is missing in root2")
+        self.assertTrue("xt2 attribute, attrib3, is missing in xt1" in diffs[2],
+                        msg=f"attrib3 is missing in root1")
+        root1 = ET.fromstring('<tag1 attrib1="hi"><subtag attrib2="hi"></subtag></tag1>')
+        root2 = ET.fromstring('<tag1 attrib1="hi"><subtag attrib2="mom"></subtag></tag1>')
+        diffs = self.xml_diff(root1, root2)
+        self.assertEqual(len(diffs), 1)
+        self.assertTrue("Attributes for" in diffs[0] and "do not match" in diffs[0],
+                        msg=f"attrib2 values should not match")
 
     def test_good_v1_sdf(self):
         """Test that the parser recognizes a V1 SDF and parses it correctly
@@ -188,7 +210,7 @@ class SDFParseTestCase(unittest.TestCase):
     def test_good_v2_sdf(self):
         """Test that the parser recognizes a V1 SDF and parses it correctly
         """
-        num_tests = 1
+        num_tests = 2
         header = "Test of parsing of good V2 SDF"
         for test_num in range(num_tests):
             # Setup
