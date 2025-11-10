@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 import xml.dom.minidom
 sys.path.insert(0, os.path.dirname(__file__))
 # CCPP framework imports
-from parse_source import CCPPError
+from parse_source import CCPPError, ParseInternalError
 from parse_log import init_log, set_log_to_null
 
 # Global data
@@ -508,6 +508,28 @@ def replace_nested_suite(element, nested_suite, root, groups, default_path, logg
     return suite_name if not file else None
 
 ###############################################################################
+def find_circular_dependencies(suite_deps):
+###############################################################################
+    """
+    Build and return a list of circular dependencies (if any) from <suite_deps>.
+
+    Parameters:
+        suite_deps (dict): A dictionary with key of specified group name
+
+    Returns:
+        List of circular dependency strings (if any)
+
+    >>> find_circular_dependencies({})
+    []
+    >>> find_circular_dependencies({'a':['b', 'c'], 'b':['c','d']})
+    []
+    """
+
+    circ_deps = []
+
+    return circ_deps
+
+###############################################################################
 def expand_nested_suites(root, default_path, logger=None):
 ###############################################################################
     """
@@ -598,38 +620,61 @@ def expand_nested_suites(root, default_path, logger=None):
     expanded_suites_to_remove = list()
     # Iteratively expand nested suites until they are all gone
     keep_expanding = True
+    ## To avoid infinite recursion, keep track of suite nesting
+    suite_deps = {}
     while keep_expanding:
         keep_expanding = False
-        ## To avoid infinite recursion, keep track of suite names
-        #suite_names = []
         for suite in root.findall("suite"):
-            # To avoid infinite recursion, keep track of suite names
-            suite_names = [suite.attrib.get("name")]
             # First, search all groups for nested_suite elements
             groups = suite.findall("group")
             group_names = [x.get("name") for x in groups]
-            for group in groups:
+            for group, group_name in zip(groups, group_names):
                 nested_suites = group.findall("nested_suite")
+                group_label = suite.get("name") + ":" + group_name
+                nested_names = [x.get("name") for x in nested_suites]
+                if group_label in suite_deps:
+                    if nested_names != suite_deps[group_label]:
+                        emsg = [f"Internal error: group nested suite mismatch for {group_label}",
+                                str(nested_names), str(suite_deps[group_label])]
+                        raise ParseInternalError('\n'.join(emsg))
+                    # end if
+                else:
+                    suite_deps[group_label] = nested_names
+                # end if
                 for nested in nested_suites:
                     suite_name = replace_nested_suite(group, nested, root,
                                                       group_names, default_path, logger)
-                    suite_names.append(suite_name)
-                    if not len(suite_names) == len(set(suite_names)):
-                        raise CCPPError(f"Infinite recursion while expanding nested suites: {suite_names}")
+                    nested_name = nested.get("name")
                     expanded_suites_to_remove.append(suite_name)
                     # Trigger another pass over the root element
                     keep_expanding = True
             # Second, search all suites for nested_suite elements
             nested_suites = suite.findall("nested_suite")
+            group_label = suite.get("name") + ":" + group_name
+            nested_names = [x.get("name") for x in nested_suites]
+            if group_label in suite_deps:
+                if nested_names != suite_deps[group_label]:
+                    emsg = [f"Internal error: suite nested suite mismatch for {group_label}",
+                            str(nested_names), str(suite_deps[group_label])]
+                    raise ParseInternalError('\n'.join(emsg))
+                # end if
+            else:
+                suite_deps[group_label] = nested_names
+            # end if
             for nested in nested_suites:
                 suite_name = replace_nested_suite(suite, nested, root,
                                                   group_names, default_path, logger)
-                suite_names.append(suite_name)
-                if not len(suite_names) == len(set(suite_names)):
-                    raise CCPPError(f"Infinite recursion while expanding nested suites: {suite_names}")
                 expanded_suites_to_remove.append(suite_name)
                 # Trigger another pass over the root element
                 keep_expanding = True
+            # end for
+        # end for (suites)
+        circ_depends = find_circular_dependencies(suite_deps)
+        if circ_depends:
+            lsep = '\n'
+            raise CCPPError(f"Circular dependencies:\n{lsep.join(circ_depends)}")
+        # end if
+
     # Remove expanded suites
     expanded_suites_to_remove = list(set(expanded_suites_to_remove))
     for suite in root.findall("suite"):
