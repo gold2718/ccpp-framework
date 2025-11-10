@@ -364,6 +364,56 @@ class SDFParseTestCase(unittest.TestCase):
         fmsg = str(context.exception)
         self.assertTrue(emsg in fmsg, msg=fmsg)
 
+    # def test_bad_v2_suite_infinite_group_recursion(self):
+    #     """Test that verification system recognizes infinite recursion when
+    #     including at the group level"""
+    #     header = "Test trapping of expanded suite with infinite group recursion"
+    #     # Setup
+    #     testname = f"suite_recurse_top1"
+    #     source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+    #     compare = os.path.join(_TMP_DIR, f"{testname}_out.xml")
+    #     logger = self.get_logger()
+    #     # Exercise
+    #     _, xml_root = read_xml_file(source, logger)
+    #     schema_version = find_schema_version(xml_root)
+    #     self.assertEqual(schema_version[0], 2)
+    #     self.assertEqual(schema_version[1], 0)
+    #     res = validate_xml_file(source, 'suite', schema_version, logger,
+    #                             error_on_noxmllint=True)
+    #     self.assertTrue(res, msg="Initial suite file should be valid")
+    #     with self.assertRaises(Exception) as context:
+    #         expand_nested_suites(xml_root, _SAMPLE_FILES_DIR, logger=logger)
+    #         write_xml_file(xml_root, compare, logger)
+    #     # end with
+    #     emsg = "Nested suite v12_suite, group main_group, not found in file"
+    #     fmsg = str(context.exception)
+    #     self.assertTrue(emsg in fmsg, msg=fmsg)
+
+    def test_bad_v2_suite_infinite_suite_recursion(self):
+        """Test that verification system recognizes infinite recursion when
+        including at the imported suite level"""
+        header = "Test trapping of expanded suite with infinite suite recursion"
+        # Setup
+        testname = f"suite_recurse_top2"
+        source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+        compare = os.path.join(_TMP_DIR, f"{testname}_out.xml")
+        logger = self.get_logger()
+        # Exercise
+        _, xml_root = read_xml_file(source, logger)
+        schema_version = find_schema_version(xml_root)
+        self.assertEqual(schema_version[0], 2)
+        self.assertEqual(schema_version[1], 0)
+        res = validate_xml_file(source, 'suite', schema_version, logger,
+                                error_on_noxmllint=True)
+        self.assertTrue(res, msg="Initial suite file should be valid")
+        with self.assertRaises(Exception) as context:
+            expand_nested_suites(xml_root, _SAMPLE_FILES_DIR, logger=logger)
+            write_xml_file(xml_root, compare, logger)
+        # end with
+        emsg = "Duplicate group name, group1, from l2_suite"
+        fmsg = str(context.exception)
+        self.assertTrue(emsg in fmsg, msg=fmsg)
+
     def test_bad_schema_version(self):
         """Test that verification system recognizes a bad version entry"""
         num_tests = 4
