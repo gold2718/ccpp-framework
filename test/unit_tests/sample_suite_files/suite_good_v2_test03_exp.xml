@@ -2,8 +2,9 @@
 <suites version="2.0">
   <suite name="main_suite">
     <group name="groupp">
+      <scheme>scheme13</scheme>
       <subcycle loop="num_subcycles_for_scheme9">
-        <scheme>effr_pre</scheme>
+        <scheme>scheme23</scheme>
         <subcycle loop="2">
           <subcycle loop="2">
             <scheme>scheme9</scheme>
@@ -15,6 +16,7 @@
         <scheme>scheme6</scheme>
       </subcycle>
       <scheme>scheme1_diag</scheme>
+      <scheme>scheme43</scheme>
     </group>
     <group name="group1">
       <scheme>scheme33</scheme>

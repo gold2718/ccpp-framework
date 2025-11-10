@@ -13,7 +13,6 @@
 
   <suite name="main_suite">
     <group name="groupp">
-      <scheme>scheme13</scheme>
       <subcycle loop="num_subcycles_for_scheme9">
         <scheme>scheme23</scheme>
         <subcycle loop="2">
@@ -24,9 +23,8 @@
         <scheme>scheme3</scheme>
       </subcycle>
       <nested_suite name="v2_suite" group="main_group" file="suite_good_v2_test02.xml"/>
-      <scheme>scheme43</scheme>
     </group>
-    <nested_suite name="subsuite_v2"/>
+    <nested_suite name="subsuite_v12"/>
   </suite>
 
 </suites>
