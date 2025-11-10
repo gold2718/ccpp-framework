@@ -303,12 +303,12 @@ def load_suite_by_name(suite_name, group_name, main_root, file=None, logger=None
         >>> def validate_xml_file(file, kind, schema_version, logger=None):
         ...     return True
         >>> xml_content = '''
-        ... <ccpp>
+        ... <suites version="2.0">
         ...   <suite name="physics_suite">
         ...     <group name="dynamics"/>
         ...     <group name="physics"/>
         ...   </suite>
-        ... </ccpp>
+        ... </suites>
         ... '''
         >>> root = ET.fromstring(xml_content)
         >>> load_suite_by_name("physics_suite", None, root).tag
@@ -349,7 +349,7 @@ def load_suite_by_name(suite_name, group_name, main_root, file=None, logger=None
     raise CCPPError(emsg)
 
 ###############################################################################
-def replace_nested_suite(element, nested_suite, root, default_path, logger):
+def replace_nested_suite(element, nested_suite, root, groups, default_path, logger):
 ###############################################################################
     """
     Replace a <nested_suite> tag with the actual suite or group it references.
@@ -365,6 +365,7 @@ def replace_nested_suite(element, nested_suite, root, default_path, logger):
         element (xml.etree.ElementTree.Element): The parent element containing the nested suite.
         nested_suite (xml.etree.ElementTree.Element): The <nested_suite> element to be replaced.
         root (xml.etree.ElementTree.Element): The root XML element (used when no file is specified).
+        groups (list): List of current suite group names
         default_path (str): The default path to look for nested SDFs if file is not a absolute path.
         logger (logging.Logger or None): Logger to record debug information.
 
@@ -393,7 +394,8 @@ def replace_nested_suite(element, nested_suite, root, default_path, logger):
         >>> root = tree.getroot()
         >>> top_suite = root.find("suite[@name='top']")
         >>> nested = top_suite.find("nested_suite")
-        >>> replace_nested_suite(top_suite, nested, root, '/no/valid/path', logger)
+        >>> groups = []
+        >>> replace_nested_suite(top_suite, nested, root, groups, '/no/valid/path', logger)
         Expanded nested suite 'my_suite'
         'my_suite'
         >>> [child.tag for child in top_suite]
@@ -419,7 +421,8 @@ def replace_nested_suite(element, nested_suite, root, default_path, logger):
         >>> top_suite = root.find("suite[@name='top']")
         >>> top_group = top_suite.find("group")
         >>> nested = top_group.find("nested_suite")
-        >>> replace_nested_suite(top_group, nested, root, '/no/valid/path', logger)
+        >>> groups = ["top_group"]
+        >>> replace_nested_suite(top_group, nested, root, groups, '/no/valid/path', logger)
         Expanded nested suite 'my_suite', group 'my_group'
         'my_suite'
         >>> [child.tag for child in top_suite]
@@ -459,6 +462,22 @@ def replace_nested_suite(element, nested_suite, root, default_path, logger):
                                           file=file, logger=logger)
     imported_content = [ET.fromstring(ET.tostring(child))
                         for child in referenced_suite]
+    # Check for any duplicate group names
+    if not group_name:
+        emsg = []
+        for subgroup in [x.get("name") for x in imported_content]:
+            if subgroup in groups:
+                if file:
+                    emsg.append(f"Duplicate group name, {subgroup}, from {suite_name} in {file}")
+                else:
+                    emsg.append(f"Duplicate group name, {subgroup}, from {suite_name}")
+                # end if
+            # end if
+        # end for
+        if emsg:
+            raise CCPPError('\n'.join(emsg))
+        # end if
+    # end if
     # Swap nested suite with imported content
     for item in imported_content:
         # If the imported content comes from a separate file and has
@@ -588,10 +607,12 @@ def expand_nested_suites(root, default_path, logger=None):
             suite_names = [suite.attrib.get("name")]
             # First, search all groups for nested_suite elements
             groups = suite.findall("group")
+            group_names = [x.get("name") for x in groups]
             for group in groups:
                 nested_suites = group.findall("nested_suite")
                 for nested in nested_suites:
-                    suite_name = replace_nested_suite(group, nested, root, default_path, logger)
+                    suite_name = replace_nested_suite(group, nested, root,
+                                                      group_names, default_path, logger)
                     suite_names.append(suite_name)
                     if not len(suite_names) == len(set(suite_names)):
                         raise CCPPError(f"Infinite recursion while expanding nested suites: {suite_names}")
@@ -601,7 +622,8 @@ def expand_nested_suites(root, default_path, logger=None):
             # Second, search all suites for nested_suite elements
             nested_suites = suite.findall("nested_suite")
             for nested in nested_suites:
-                suite_name = replace_nested_suite(suite, nested, root, default_path, logger)
+                suite_name = replace_nested_suite(suite, nested, root,
+                                                  group_names, default_path, logger)
                 suite_names.append(suite_name)
                 if not len(suite_names) == len(set(suite_names)):
                     raise CCPPError(f"Infinite recursion while expanding nested suites: {suite_names}")

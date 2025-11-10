@@ -210,7 +210,7 @@ class SDFParseTestCase(unittest.TestCase):
     def test_good_v2_sdf(self):
         """Test that the parser recognizes a V1 SDF and parses it correctly
         """
-        num_tests = 2
+        num_tests = 3
         header = "Test of parsing of good V2 SDF"
         for test_num in range(num_tests):
             # Setup
@@ -225,10 +225,10 @@ class SDFParseTestCase(unittest.TestCase):
             self.assertEqual(schema_version[0], 2)
             self.assertEqual(schema_version[1], 0)
             expand_nested_suites(xml_root, _SAMPLE_FILES_DIR, logger=logger)
+            write_xml_file(xml_root, compare, logger)
             res = validate_xml_file(source, 'suite', schema_version, logger,
                                     error_on_noxmllint=True)
             self.assertTrue(res)
-            write_xml_file(xml_root, compare, logger)
             amsg = f"{compare} does not exist"
             self.assertTrue(os.path.exists(compare), msg=amsg)
             _, xml_root = read_xml_file(source_exp, logger)
@@ -266,6 +266,29 @@ class SDFParseTestCase(unittest.TestCase):
         res = validate_xml_file(source, 'suite', schema_version, logger,
                                 error_on_noxmllint=True)
         self.assertFalse(res, msg="version attribute should not be accepted on a v2 suite tag")
+
+    def test_bad_v2_suite_duplicate_group1(self):
+        """Test that verification system recognizes a duplicate group name"""
+        header = "Test trapping of expanded suite duplicate group name"
+        # Setup
+        testname = f"suite_bad_v2_duplicate_group"
+        source = os.path.join(_SAMPLE_FILES_DIR, f"{testname}.xml")
+        compare = os.path.join(_TMP_DIR, f"{testname}_out.xml")
+        logger = self.get_logger()
+        # Exercise
+        _, xml_root = read_xml_file(source, logger)
+        schema_version = find_schema_version(xml_root)
+        self.assertEqual(schema_version[0], 2)
+        self.assertEqual(schema_version[1], 0)
+        res = validate_xml_file(source, 'suite', schema_version, logger,
+                                error_on_noxmllint=True)
+        self.assertTrue(res, msg="Initial suite file should be valid")
+        with self.assertRaises(Exception) as context:
+            expand_nested_suites(xml_root, _SAMPLE_FILES_DIR, logger=logger)
+            write_xml_file(xml_root, compare, logger)
+        # end with
+        self.assertTrue("Duplicate group name, group1, from subsuite_1" in str(context.exception),
+                        msg=f"{str(context.exception)}")
 
     def test_bad_schema_version(self):
         """Test that verification system recognizes a bad version entry"""

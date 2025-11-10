@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<suites version="2.0">
+
+  <suite name="subsuite_v2">
+    <group name="group1">
+      <scheme>scheme33</scheme>
+    </group>
+    <group name="group2">
+      <nested_suite name="subsuite_1" group="group1" file="subsuite1.xml"/>
+    </group>
+  </suite>
+
+  <suite name="main_suite">
+    <group name="groupp">
+      <subcycle loop="num_subcycles_for_scheme9">
+        <scheme>effr_pre</scheme>
+        <subcycle loop="2">
+          <subcycle loop="2">
+            <scheme>scheme9</scheme>
+          </subcycle>
+        </subcycle>
+        <scheme>scheme3</scheme>
+      </subcycle>
+      <nested_suite name="v2_suite" group="main_group" file="suite_good_v2_test02.xml"/>
+    </group>
+    <nested_suite name="subsuite_v2"/>
+  </suite>
+
+</suites>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <suites version="2.0">
-  <suite name="v2_subsuite">
+  <suite name="subsuite_v2">
     <group name="group1">
       <scheme>scheme1_diag</scheme>
     </group>
@@ -11,7 +11,7 @@
       <subcycle loop="num_subcycles_for_scheme6">
         <scheme>scheme6</scheme>
       </subcycle>
-      <nested_suite name="v2_subsuite" group="group1"/>
+      <nested_suite name="subsuite_v2" group="group1"/>
     </group>
   </suite>
 </suites>

@@ -1,0 +1,26 @@
+<?xml version="1.0" ?>
+<suites version="2.0">
+  <suite name="main_suite">
+    <group name="groupp">
+      <subcycle loop="num_subcycles_for_scheme9">
+        <scheme>effr_pre</scheme>
+        <subcycle loop="2">
+          <subcycle loop="2">
+            <scheme>scheme9</scheme>
+          </subcycle>
+        </subcycle>
+        <scheme>scheme3</scheme>
+      </subcycle>
+      <subcycle loop="num_subcycles_for_scheme6">
+        <scheme>scheme6</scheme>
+      </subcycle>
+      <scheme>scheme1_diag</scheme>
+    </group>
+    <group name="group1">
+      <scheme>scheme33</scheme>
+    </group>
+    <group name="group2">
+      <scheme>scheme_subsuite1</scheme>
+    </group>
+  </suite>
+</suites>
