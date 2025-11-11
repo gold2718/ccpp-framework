@@ -625,6 +625,7 @@ def expand_nested_suites(root, default_path, logger=None):
     while keep_expanding:
         keep_expanding = False
         for suite in root.findall("suite"):
+            suite_name = XXG use this and use as tag for nested suites
             # First, search all groups for nested_suite elements
             groups = suite.findall("group")
             group_names = [x.get("name") for x in groups]
@@ -632,18 +633,14 @@ def expand_nested_suites(root, default_path, logger=None):
                 nested_suites = group.findall("nested_suite")
                 group_label = suite.get("name") + ":" + group_name
                 nested_names = [x.get("name") for x in nested_suites]
-                if group_label in suite_deps:
-                    if nested_names != suite_deps[group_label]:
-                        emsg = [f"Internal error: group nested suite mismatch for {group_label}",
-                                str(nested_names), str(suite_deps[group_label])]
-                        raise ParseInternalError('\n'.join(emsg))
-                    # end if
-                else:
+                if group_label not in suite_deps:
+                    ## Only add a suite/group once since second pass is
+                    ## really loading second-level nested groups
                     suite_deps[group_label] = nested_names
                 # end if
                 for nested in nested_suites:
-                    suite_name = replace_nested_suite(group, nested, root,
-                                                      group_names, default_path, logger)
+                    suite_name = replace_nested_suite(group, nested, root, group_names,
+                                                      suite_deps, default_path, logger)
                     nested_name = nested.get("name")
                     expanded_suites_to_remove.append(suite_name)
                     # Trigger another pass over the root element
