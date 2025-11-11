@@ -508,6 +508,35 @@ def replace_nested_suite(element, nested_suite, root, groups, default_path, logg
     return suite_name if not file else None
 
 ###############################################################################
+def add_suite_dependencies(suite, suite_deps, group, filename=None, groups=None):
+###############################################################################
+    """Add a new entry for each group in <suite> to <suite_deps>.
+    The entry key is '[<filename>:]<suite>name:<group>_name' and the value is a
+    list of the names of the nested suites in that group (if any). If
+    there is already and entry, do not bother with an overwrite as it
+    should just be a copy of an entry already in <suite_deps>.
+    If <filename> is not passed, that part of the key is left off.
+    If <groups> is not passed, all of the <suite>'s groups are used.
+    """
+    if groups is None:
+        groups = suite.findall("group")
+    # end if
+    group_names = [x.attrib.get("name") for x in groups]
+    suite_name = suite.attrib.get("name")
+    for group, group_name in zip(groups, group_names):
+        nested_suites = group.findall("nested_suite")
+        if filename:
+            deps_key = f"{filename}:{suite_name}:{group_name}"
+        else:
+            deps_key = f"{suite_name}:{group_name}"
+        # end if
+        nested_names = [x.attrib.get("name") for x in nested_suites]
+        if deps_key not in suite_deps:
+            suite_deps[deps_key] = nested_names
+        # end if
+    # end for
+
+###############################################################################
 def find_circular_dependencies(suite_deps):
 ###############################################################################
     """
@@ -625,14 +654,14 @@ def expand_nested_suites(root, default_path, logger=None):
     while keep_expanding:
         keep_expanding = False
         for suite in root.findall("suite"):
-            suite_name = XXG use this and use as tag for nested suites
+            suite_name = suite.get("name")
             # First, search all groups for nested_suite elements
             groups = suite.findall("group")
-            group_names = [x.get("name") for x in groups]
+            group_names = [x.attrib.get("name") for x in groups]
             for group, group_name in zip(groups, group_names):
                 nested_suites = group.findall("nested_suite")
-                group_label = suite.get("name") + ":" + group_name
-                nested_names = [x.get("name") for x in nested_suites]
+                group_label =  f"{suite_name}:{group_name}"
+                nested_names = [x.attrib.get("name") for x in nested_suites]
                 if group_label not in suite_deps:
                     ## Only add a suite/group once since second pass is
                     ## really loading second-level nested groups
@@ -647,16 +676,9 @@ def expand_nested_suites(root, default_path, logger=None):
                     keep_expanding = True
             # Second, search all suites for nested_suite elements
             nested_suites = suite.findall("nested_suite")
-            group_label = suite.get("name") + ":" + group_name
-            nested_names = [x.get("name") for x in nested_suites]
-            if group_label in suite_deps:
-                if nested_names != suite_deps[group_label]:
-                    emsg = [f"Internal error: suite nested suite mismatch for {group_label}",
-                            str(nested_names), str(suite_deps[group_label])]
-                    raise ParseInternalError('\n'.join(emsg))
-                # end if
-            else:
-                suite_deps[group_label] = nested_names
+            nested_names = [x.attrib.get("name") for x in nested_suites]
+            if suite_name not in suite_deps:
+                suite_deps[suite_name] = nested_names
             # end if
             for nested in nested_suites:
                 suite_name = replace_nested_suite(suite, nested, root,
